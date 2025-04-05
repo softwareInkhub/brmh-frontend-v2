@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    const namespaceId = params.id;
+    const { id: namespaceId } = await context.params;
     const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
     // Fetch accounts from the external API

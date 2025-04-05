@@ -2,7 +2,7 @@ import { logger } from '@/app/utils/logger';
 
 export interface LogOptions {
   component: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export interface AWSResponse<T> {
@@ -16,6 +16,24 @@ export interface AWSError {
   message: string;
   requestId: string;
   timestamp: string;
+}
+
+export interface ApiResponse<T = unknown> {
+  status: number;
+  data: T;
+  message?: string;
+}
+
+export interface ApiError {
+  status: number;
+  message: string;
+  errors?: unknown[];
+}
+
+export interface ApiConfig {
+  baseURL: string;
+  headers?: Record<string, string>;
+  timeout?: number;
 }
 
 export abstract class AWSService {
@@ -74,21 +92,123 @@ export abstract class AWSService {
     };
   }
 
-  protected logInfo(message: string, data?: any) {
+  protected logInfo(message: string, data?: Record<string, unknown>) {
     logger.info(`${this.serviceName}: ${message}`, {
       component: this.serviceName,
       data
     });
   }
 
-  protected logError(message: string, data?: any) {
+  protected logError(message: string, data?: Record<string, unknown>) {
     logger.error(`${this.serviceName}: ${message}`, {
       component: this.serviceName,
       data
     });
   }
 
-  protected logOperation(operation: string, data?: any) {
+  protected logOperation(operation: string, data?: Record<string, unknown>) {
     this.logInfo(`Operation: ${operation}`, data);
+  }
+}
+
+export class ApiService {
+  private config: ApiConfig;
+
+  constructor(config: ApiConfig) {
+    this.config = config;
+  }
+
+  async get<T = unknown>(endpoint: string, params?: Record<string, string>): Promise<ApiResponse<T>> {
+    const url = new URL(endpoint, this.config.baseURL);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, value);
+      });
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: this.config.headers,
+    });
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: response.statusText,
+      } as ApiError;
+    }
+
+    const data = await response.json();
+    return {
+      status: response.status,
+      data,
+    };
+  }
+
+  async post<T = unknown>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
+    const response = await fetch(new URL(endpoint, this.config.baseURL).toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: response.statusText,
+      } as ApiError;
+    }
+
+    const data = await response.json();
+    return {
+      status: response.status,
+      data,
+    };
+  }
+
+  async put<T = unknown>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
+    const response = await fetch(new URL(endpoint, this.config.baseURL).toString(), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.config.headers,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: response.statusText,
+      } as ApiError;
+    }
+
+    const data = await response.json();
+    return {
+      status: response.status,
+      data,
+    };
+  }
+
+  async delete<T = unknown>(endpoint: string): Promise<ApiResponse<T>> {
+    const response = await fetch(new URL(endpoint, this.config.baseURL).toString(), {
+      method: 'DELETE',
+      headers: this.config.headers,
+    });
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        message: response.statusText,
+      } as ApiError;
+    }
+
+    const data = await response.json();
+    return {
+      status: response.status,
+      data,
+    };
   }
 } 

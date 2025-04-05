@@ -1,159 +1,130 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Database, Globe, Users, Code } from 'react-feather';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-interface KeyValuePair {
+export interface KeyValuePair {
   key: string;
   value: string;
 }
 
-interface Namespace {
+export interface Namespace {
   'namespace-id': string;
   'namespace-name': string;
   'namespace-url': string;
-  'tags': string[];
+  tags: string[];
 }
 
-interface Account {
+export interface Account {
   'namespace-account-id': string;
   'namespace-account-name': string;
-  'namespace-account-url-override': string;
+  'namespace-account-url-override'?: string;
   'namespace-account-header': KeyValuePair[];
-  'tags': string[];
+  variables: KeyValuePair[];
+  tags: string[];
 }
 
-interface Method {
+export interface Method {
   'namespace-method-id': string;
   'namespace-method-name': string;
   'namespace-method-type': string;
-  'namespace-method-url-override': string;
+  'namespace-method-url-override'?: string;
   'namespace-method-queryParams': KeyValuePair[];
   'namespace-method-header': KeyValuePair[];
   'save-data': boolean;
-  'isInitialized': boolean;
-  'tags': string[];
+  isInitialized?: boolean;
+  tags: string[];
 }
 
-interface NamespaceDetailsProps {
+export interface NamespaceDetailsProps {
   onError?: (error: string) => void;
   className?: string;
+  namespace: Namespace;
 }
 
 const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({ 
   onError,
-  className = ''
+  className = '',
+  namespace
 }) => {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [selectedNamespaceId, setSelectedNamespaceId] = useState<string>('');
-  const [namespace, setNamespace] = useState<Namespace | null>(null);
+  const [selectedNamespaceId, setSelectedNamespaceId] = useState<string>(namespace['namespace-id']);
+  const [namespaceDetails, setNamespaceDetails] = useState<Namespace | null>(namespace);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [methods, setMethods] = useState<Method[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  const fetchNamespaces = async () => {
-    console.log('Starting fetchNamespaces function...');
+  const fetchNamespaces = useCallback(async () => {
     try {
-      console.log('Making API request to:', `${API_BASE_URL}/namespaces`);
       const response = await fetch(`${API_BASE_URL}/namespaces`);
-      console.log('API Response:', response);
-      console.log('Response Status:', response.status);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch namespaces: ${response.status} ${response.statusText}`);
       }
 
       const rawData = await response.json();
-      console.log('Raw API Response Data:', rawData);
 
-      // Ensure rawData is an array
       if (!Array.isArray(rawData)) {
         console.error('Expected array of namespaces, got:', typeof rawData);
-        console.log('Actual data received:', rawData);
         setNamespaces([]);
         setLoading(false);
         return;
       }
 
-      // Transform DynamoDB format to our Namespace interface
-      console.log('Starting data transformation...');
-      const transformedData = rawData
-        .filter((item: any) => {
-          const isValid = item && typeof item === 'object';
-          if (!isValid) console.log('Filtering out invalid item:', item);
-          return isValid;
+      const transformedData: Namespace[] = rawData
+        .filter((item): item is Record<string, unknown> => {
+          return item && typeof item === 'object';
         })
-        .map((item: any) => {
-          console.log('Processing namespace item:', item);
-          const transformed = {
-            'namespace-id': item['namespace-id'] || '',
-            'namespace-name': item['namespace-name'] || '',
-            'namespace-url': item['namespace-url'] || '',
-            'tags': Array.isArray(item.tags) ? item.tags : []
-          };
-          console.log('Transformed item:', transformed);
-          return transformed;
-        })
-        .filter(item => {
-          const hasId = Boolean(item['namespace-id']);
-          if (!hasId) console.log('Filtering out item without ID:', item);
-          return hasId;
-        });
+        .map((item) => ({
+          'namespace-id': String(item['namespace-id'] || ''),
+          'namespace-name': String(item['namespace-name'] || ''),
+          'namespace-url': String(item['namespace-url'] || ''),
+          'tags': Array.isArray(item.tags) ? item.tags : []
+        }))
+        .filter(item => Boolean(item['namespace-id']));
 
-      console.log('Final transformed namespaces:', transformedData);
       setNamespaces(transformedData);
-      setLoading(false);
     } catch (error) {
       console.error('Error in fetchNamespaces:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available');
-      onError?.('Failed to fetch namespaces');
+      onError?.(error instanceof Error ? error.message : 'Failed to fetch namespaces');
       setNamespaces([]);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [onError]);
 
-  const fetchAccounts = async (id: string) => {
+  const fetchAccounts = async (id: string): Promise<Account[]> => {
     try {
-      const accountsUrl = `${API_BASE_URL}/namespaces/${id}/accounts`;
-      console.log('Fetching accounts from:', accountsUrl);
-      
-      const response = await fetch(accountsUrl);
-      console.log('Accounts Response Status:', response.status);
+      const response = await fetch(`${API_BASE_URL}/namespaces/${id}/accounts`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch accounts');
       }
       const data = await response.json();
-      console.log('Accounts Response Data:', data);
-      return data || [];
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Error fetching accounts:', error);
-      onError?.('Failed to fetch accounts');
+      onError?.(error instanceof Error ? error.message : 'Failed to fetch accounts');
       return [];
     }
   };
 
-  const fetchMethods = async (id: string) => {
+  const fetchMethods = async (id: string): Promise<Method[]> => {
     try {
-      const methodsUrl = `${API_BASE_URL}/namespaces/${id}/methods`;
-      console.log('Fetching methods from:', methodsUrl);
-      
-      const response = await fetch(methodsUrl);
-      console.log('Methods Response Status:', response.status);
+      const response = await fetch(`${API_BASE_URL}/namespaces/${id}/methods`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch methods');
       }
       const data = await response.json();
-      console.log('Methods Response Data:', data);
-      return data || [];
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Error fetching methods:', error);
-      onError?.('Failed to fetch methods');
+      onError?.(error instanceof Error ? error.message : 'Failed to fetch methods');
       return [];
     }
   };
@@ -161,7 +132,7 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
   const handleNamespaceChange = async (id: string) => {
     setSelectedNamespaceId(id);
     if (!id) {
-      setNamespace(null);
+      setNamespaceDetails(null);
       setAccounts([]);
       setMethods([]);
       return;
@@ -177,7 +148,7 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
         throw new Error('Failed to fetch namespace details');
       }
       const namespaceData = await namespaceResponse.json();
-      setNamespace(namespaceData);
+      setNamespaceDetails(namespaceData);
 
       // Fetch accounts and methods in parallel
       const [accountsData, methodsData] = await Promise.all([
@@ -198,12 +169,8 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
   };
 
   useEffect(() => {
-    console.log('NamespaceDetails component mounted');
     fetchNamespaces();
-  }, []);
-
-  console.log('Current namespaces state:', namespaces);
-  console.log('Current loading state:', loading);
+  }, [fetchNamespaces]);
 
   if (loading && !namespaces.length) {
     return (
@@ -258,7 +225,7 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
               </button>
             </div>
           </div>
-        ) : namespace ? (
+        ) : namespaceDetails ? (
           <>
             {/* Header Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
@@ -266,15 +233,15 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <Database className="text-blue-600" size={24} />
-                    <h1 className="text-2xl font-bold text-gray-900">{namespace['namespace-name']}</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">{namespaceDetails['namespace-name']}</h1>
                   </div>
                   <div className="flex items-center gap-2 text-gray-600 mb-4">
                     <Globe size={16} />
-                    <p className="text-sm">{namespace['namespace-url']}</p>
+                    <p className="text-sm">{namespaceDetails['namespace-url']}</p>
                   </div>
-                  {namespace.tags && namespace.tags.length > 0 && (
+                  {namespaceDetails.tags && namespaceDetails.tags.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {namespace.tags.map((tag, index) => (
+                      {namespaceDetails.tags.map((tag, index) => (
                         <span key={index} className="px-3 py-1 bg-blue-50 text-blue-600 text-sm rounded-full">
                           {tag}
                         </span>

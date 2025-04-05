@@ -6,7 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Plus } from '@/app/components/ui/icons';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogContent } from '@/app/components/ui/dialog';
-import { DataTable } from '@/app/components/ui/data-table';
+import { DataTable, Column } from '@/app/components/ui/data-table';
 import { logger } from '@/app/utils/logger';
 import { DynamoDBTableItems } from '@/app/aws/dynamodb/components/DynamoDBTableItems';
 import { DynamoDBTableSchema } from '@/app/aws/dynamodb/components/DynamoDBTableSchema';
@@ -419,19 +419,16 @@ export default function DynamoDBPage() {
     }
   };
 
-  const columns = [
+  const columns: Column<TableItem>[] = [
     {
-      key: 'name',
+      accessor: (row: TableItem) => row.name,
       header: 'Table Name',
       sortable: true,
     },
     {
-      key: 'actions',
-      header: 'Actions',
-      className: 'text-right',
-      render: (table: TableItem) => (
+      accessor: (row: TableItem) => (
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedTable(table.name)}>
+          <Button variant="outline" size="sm" onClick={() => setSelectedTable(row.name)}>
             View Items
           </Button>
           <Button variant="outline" size="sm">
@@ -446,6 +443,7 @@ export default function DynamoDBPage() {
           </Button>
         </div>
       ),
+      header: 'Actions',
     },
   ];
 
@@ -481,9 +479,8 @@ export default function DynamoDBPage() {
               <DataTable
                 data={tables}
                 columns={columns}
-                keyExtractor={(table) => table.name}
-                isLoading={loading}
-                emptyMessage="No tables found. Create your first table to get started."
+                loading={loading}
+                error={error || undefined}
               />
             </CardContent>
           </Card>

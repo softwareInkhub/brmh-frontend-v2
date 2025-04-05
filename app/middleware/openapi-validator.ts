@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import fs from 'fs';
 
-let apiSpec: any;
+let apiSpec: OpenAPISchema;
 try {
   console.log('[OpenAPI] Loading API specification...');
   const specPath = path.join(process.cwd(), 'app/api/openapi.yaml');
@@ -13,15 +13,83 @@ try {
   const fileContents = fs.readFileSync(specPath, 'utf8');
   console.log('[OpenAPI] File contents loaded, parsing YAML...');
   
-  apiSpec = yaml.load(fileContents);
+  apiSpec = yaml.load(fileContents) as OpenAPISchema;
   console.log('[OpenAPI] API specification loaded successfully');
   console.log('[OpenAPI] Available paths:', Object.keys(apiSpec.paths));
 } catch (error) {
   console.error('[OpenAPI] Error loading API specification:', error);
-  apiSpec = { paths: {} }; // Provide default empty spec to prevent crashes
+  apiSpec = { 
+    openapi: '3.0.0',
+    info: {
+      title: 'API',
+      version: '1.0.0'
+    },
+    paths: {} 
+  }; // Provide default empty spec to prevent crashes
 }
 
-export async function validateOpenAPI(
+export interface OpenAPIValidationError {
+  path: string;
+  message: string;
+  code: string;
+}
+
+export interface OpenAPIValidationResult {
+  valid: boolean;
+  errors: OpenAPIValidationError[];
+}
+
+export interface OpenAPISchema {
+  openapi: string;
+  info: {
+    title: string;
+    version: string;
+    description?: string;
+  };
+  paths: Record<string, Record<string, unknown>>;
+  components?: {
+    schemas?: Record<string, unknown>;
+    securitySchemes?: Record<string, unknown>;
+  };
+}
+
+export function validateOpenAPI(schema: OpenAPISchema): OpenAPIValidationResult {
+  const errors: OpenAPIValidationError[] = [];
+
+  // Validate OpenAPI version
+  if (!schema.openapi || !schema.openapi.startsWith('3.')) {
+    errors.push({
+      path: 'openapi',
+      message: 'Invalid OpenAPI version. Must be 3.x.x',
+      code: 'INVALID_VERSION',
+    });
+  }
+
+  // Validate info object
+  if (!schema.info || !schema.info.title || !schema.info.version) {
+    errors.push({
+      path: 'info',
+      message: 'Missing required info fields',
+      code: 'MISSING_INFO',
+    });
+  }
+
+  // Validate paths
+  if (!schema.paths || Object.keys(schema.paths).length === 0) {
+    errors.push({
+      path: 'paths',
+      message: 'No paths defined',
+      code: 'NO_PATHS',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+export async function validateOpenAPIRequest(
   request: NextRequest,
   handler: (request: NextRequest) => Promise<NextResponse>
 ) {

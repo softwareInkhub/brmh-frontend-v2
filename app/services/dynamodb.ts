@@ -5,14 +5,11 @@ import {
   DeleteTableCommand, 
   DescribeTableCommand,
   ScalarAttributeType,
-  KeyType,
   BillingMode,
   AttributeDefinition,
-  KeySchemaElement,
-  Tag
+  KeySchemaElement
 } from '@aws-sdk/client-dynamodb';
 import { AWSService, AWSResponse } from './base';
-import { logger } from '@/app/utils/logger';
 
 export interface DynamoDBTableData {
   TableName: string;
@@ -46,15 +43,68 @@ export interface DynamoDBError {
 }
 
 export interface DynamoDBItem {
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+export interface DynamoDBTable {
+  TableName: string;
+  KeySchema: {
+    AttributeName: string;
+    KeyType: 'HASH' | 'RANGE';
+  }[];
+  AttributeDefinitions: {
+    AttributeName: string;
+    AttributeType: 'S' | 'N' | 'B';
+  }[];
+  ProvisionedThroughput: {
+    ReadCapacityUnits: number;
+    WriteCapacityUnits: number;
+  };
+}
+
+export interface DynamoDBQueryParams {
+  TableName: string;
+  KeyConditionExpression: string;
+  ExpressionAttributeValues: Record<string, unknown>;
+  ExpressionAttributeNames?: Record<string, string>;
+  FilterExpression?: string;
+  ProjectionExpression?: string;
+  Limit?: number;
+  ExclusiveStartKey?: Record<string, unknown>;
+}
+
+export interface DynamoDBScanParams {
+  TableName: string;
+  FilterExpression?: string;
+  ExpressionAttributeValues?: Record<string, unknown>;
+  ExpressionAttributeNames?: Record<string, string>;
+  ProjectionExpression?: string;
+  Limit?: number;
+  ExclusiveStartKey?: Record<string, unknown>;
+}
+
+export interface DynamoDBPutParams {
+  TableName: string;
+  Item: DynamoDBItem;
+  ConditionExpression?: string;
+  ExpressionAttributeValues?: Record<string, unknown>;
+  ExpressionAttributeNames?: Record<string, string>;
+}
+
+export interface DynamoDBDeleteParams {
+  TableName: string;
+  Key: Record<string, unknown>;
+  ConditionExpression?: string;
+  ExpressionAttributeValues?: Record<string, unknown>;
+  ExpressionAttributeNames?: Record<string, string>;
 }
 
 export interface DynamoDBUpdateParams {
   TableName: string;
-  Key: { [key: string]: any };
+  Key: Record<string, unknown>;
   UpdateExpression: string;
-  ExpressionAttributeNames?: { [key: string]: string };
-  ExpressionAttributeValues?: { [key: string]: any };
+  ExpressionAttributeValues: Record<string, unknown>;
+  ExpressionAttributeNames?: Record<string, string>;
   ConditionExpression?: string;
   ReturnValues?: 'NONE' | 'ALL_OLD' | 'UPDATED_OLD' | 'ALL_NEW' | 'UPDATED_NEW';
 }
@@ -304,7 +354,7 @@ export class DynamoDBService extends AWSService {
     }
   }
 
-  async deleteItem(tableName: string, key: { [key: string]: any }): Promise<void> {
+  async deleteItem(tableName: string, key: Record<string, unknown>): Promise<void> {
     this.logOperation('Delete Item', { tableName, key });
 
     try {

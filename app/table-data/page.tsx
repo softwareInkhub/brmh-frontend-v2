@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronRight, ChevronDown, RefreshCw, Search, Download, Copy, Filter, X, Clipboard, Eye, EyeOff, DollarSign, Package, Clock, AlertCircle, Loader } from 'react-feather';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ChevronRight, ChevronDown, RefreshCw, Search, Download, Copy, Filter, X,  Eye, EyeOff, DollarSign, Package, Clock, AlertCircle } from 'react-feather';
 import { redisCache as cache } from '../../utils/redis-cache';
 import dynamic from 'next/dynamic';
 
@@ -23,27 +23,20 @@ const styles = `
   }
 `;
 
+interface DynamoDBValue {
+  S?: string;
+  N?: string;
+  BOOL?: boolean;
+  L?: DynamoDBValue[];
+  M?: Record<string, DynamoDBValue>;
+}
+
 interface KeyValuePair {
   key: string;
   value: string;
 }
 
-interface Namespace {
-  'namespace-id': string;
-  'namespace-name': string;
-  'namespace-url': string;
-  'namespace-accounts': NamespaceAccount[];
-  'namespace-methods': NamespaceMethod[];
-}
-
-interface NamespaceAccount {
-  'namespace-account-id': string;
-  'namespace-account-name': string;
-  'namespace-account-url-override'?: string;
-  'namespace-account-header': KeyValuePair[];
-}
-
-interface NamespaceMethod {
+interface Method {
   'namespace-method-id': string;
   'namespace-method-name': string;
   'namespace-method-type': string;
@@ -53,32 +46,71 @@ interface NamespaceMethod {
   'save-data': boolean;
 }
 
+interface Namespace {
+  'namespace-id': string;
+  'namespace-name': string;
+  'namespace-url': string;
+  'namespace-accounts': Account[];
+  'namespace-methods': Method[];
+}
+
+interface Account {
+  'namespace-account-id': string;
+  'namespace-account-name': string;
+  'namespace-account-url-override'?: string;
+  'namespace-account-header': KeyValuePair[];
+}
+
+interface TableItem {
+  Item?: Record<string, DynamoDBValue>;
+  [key: string]: unknown;
+}
+
+interface LastEvaluatedKey {
+  id: string;
+  index: number;
+}
+
 interface LoopRequestParams {
   maxIterations?: number;
   pageSize?: number;
-  lastEvaluatedKey?: any;
+  lastEvaluatedKey?: LastEvaluatedKey;
   filterExpression?: string;
   expressionAttributeNames?: Record<string, string>;
-  expressionAttributeValues?: Record<string, any>;
+  expressionAttributeValues?: Record<string, unknown>;
 }
 
 interface LoopResponse {
-  items: any[];
+  items: TableItem[];
   count: number;
-  lastEvaluatedKey: any;
+  lastEvaluatedKey: LastEvaluatedKey | null;
   iterations: number;
 }
 
 // JSONTree component for displaying nested data
-const JSONTree = ({ data, initialExpanded = true }: { data: any; initialExpanded?: boolean }) => {
+interface JSONTreeProps {
+  data: unknown;
+  initialExpanded?: boolean;
+}
+
+// Add type guard function
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isArrayOfRecords(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every(item => isRecord(item));
+}
+
+const JSONTree = ({ data, initialExpanded = true }: JSONTreeProps) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
   
-  if (typeof data !== 'object' || data === null) {
+  if (!isRecord(data) && !Array.isArray(data)) {
     return <span className="text-gray-800">{JSON.stringify(data)}</span>;
   }
 
   const isArray = Array.isArray(data);
-  const items = isArray ? data : Object.entries(data);
+  const items = isArray ? (isArrayOfRecords(data) ? data : []) : Object.entries(data);
   const isEmpty = isArray ? data.length === 0 : Object.keys(data).length === 0;
 
   if (isEmpty) {
@@ -102,14 +134,14 @@ const JSONTree = ({ data, initialExpanded = true }: { data: any; initialExpanded
       {isExpanded && (
         <div className="pl-4 border-l border-gray-200">
           {isArray ? (
-            items.map((item: any, index: number) => (
+            (items as Record<string, unknown>[]).map((item, index) => (
               <div key={index} className="py-1">
                 <JSONTree data={item} initialExpanded={false} />
                 {index < items.length - 1 && <span className="text-gray-400">,</span>}
               </div>
             ))
           ) : (
-            items.map(([key, value]: [string, any], index: number) => (
+            (items as [string, unknown][]).map(([key, value], index) => (
               <div key={key} className="py-1">
                 <span className="text-blue-600">&quot;{key}&quot;</span>
                 <span className="text-gray-600">: </span>
@@ -129,21 +161,22 @@ const JSONTree = ({ data, initialExpanded = true }: { data: any; initialExpanded
 };
 
 // Add this helper function at the top level
-const getDynamoValue = (attribute: any): any => {
+const getDynamoValue = (attribute: DynamoDBValue | Record<string, unknown>): unknown => {
   if (!attribute) return '-';
   
   // If it's already a plain object, return as is
-  if (typeof attribute === 'object' && !attribute.S && !attribute.N && !attribute.BOOL && !attribute.L && !attribute.M) {
+  if (typeof attribute === 'object' && !('S' in attribute) && !('N' in attribute) && !('BOOL' in attribute) && !('L' in attribute) && !('M' in attribute)) {
     return attribute;
   }
 
-  if (attribute.S) return attribute.S;
-  if (attribute.N) return attribute.N;
-  if (attribute.BOOL !== undefined) return attribute.BOOL.toString();
-  if (attribute.L) return attribute.L.map(getDynamoValue);
-  if (attribute.M) {
-    const result: any = {};
-    Object.entries(attribute.M).forEach(([key, value]) => {
+  const dynamo = attribute as DynamoDBValue;
+  if (dynamo.S) return dynamo.S;
+  if (dynamo.N) return dynamo.N;
+  if (dynamo.BOOL !== undefined) return dynamo.BOOL.toString();
+  if (dynamo.L) return dynamo.L.map(getDynamoValue);
+  if (dynamo.M) {
+    const result: Record<string, unknown> = {};
+    Object.entries(dynamo.M).forEach(([key, value]) => {
       result[key] = getDynamoValue(value);
     });
     return result;
@@ -152,7 +185,7 @@ const getDynamoValue = (attribute: any): any => {
 };
 
 // Add this helper function after getDynamoValue
-const getIdentifierField = (itemData: any): { field: string; value: string } => {
+const getIdentifierField = (itemData: Record<string, unknown>): { field: string; value: string } => {
   // Common identifier fields in order of priority
   const idFields = [
     'id',
@@ -166,25 +199,31 @@ const getIdentifierField = (itemData: any): { field: string; value: string } => 
 
   for (const field of idFields) {
     if (itemData[field]) {
-      return { field, value: itemData[field] };
+      return { field, value: String(itemData[field]) };
     }
   }
 
   // If no common ID field is found, return the first field as identifier
   const firstField = Object.keys(itemData)[0];
-  return { field: firstField, value: itemData[firstField] };
+  return { field: firstField, value: String(itemData[firstField]) };
 };
 
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  data: TableItem | null;
+}
+
 // Enhanced Modal component
-const Modal = ({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: any }) => {
+const Modal = ({ isOpen, onClose, data }: ModalProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main']));
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'organized' | 'json'>('organized');
 
-  if (!isOpen) return null;
+  if (!isOpen || !data) return null;
 
-  const handleCopyField = (key: string, value: any) => {
+  const handleCopyField = (key: string, value: unknown) => {
     navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
     setCopiedField(key);
     setTimeout(() => setCopiedField(null), 2000);
@@ -238,11 +277,7 @@ const Modal = ({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void
     }
   };
 
-  const filteredData = Object.entries(data).filter(([key, value]) => {
-    const searchLower = searchTerm.toLowerCase();
-    return key.toLowerCase().includes(searchLower) || 
-           JSON.stringify(value).toLowerCase().includes(searchLower);
-  });
+  
 
   return (
     <div className="fixed inset-0 backdrop-blur-md bg-black/40 flex items-center justify-center z-50 transition-all duration-300">
@@ -364,7 +399,10 @@ const Modal = ({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void
                                 )}
                               </div>
                               <button
-                                onClick={() => handleCopyField(String(key), value)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyField(String(key), value);
+                                }}
                                 className="p-1 text-gray-400 hover:text-blue-600 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                 title="Copy value"
                               >
@@ -395,8 +433,12 @@ const Modal = ({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void
   );
 };
 
+interface AnalyticsProps {
+  data: TableItem[];
+}
+
 // Add Analytics Component
-const Analytics = ({ data }: { data: any[] }) => {
+const Analytics = ({ data }: AnalyticsProps) => {
   const stats = useMemo(() => {
     const total = data.length;
     const statusCounts: { [key: string]: number } = {};
@@ -406,14 +448,17 @@ const Analytics = ({ data }: { data: any[] }) => {
     let processingCount = 0;
 
     data.forEach(item => {
-      const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      if (!isRecord(rawItemData)) return;
+      
+      const itemData = rawItemData;
       
       // Count financial statuses
-      const financialStatus = itemData.financial_status || 'unknown';
+      const financialStatus = String(itemData.financial_status || 'unknown');
       statusCounts[financialStatus] = (statusCounts[financialStatus] || 0) + 1;
 
       // Sum total amount
-      const price = parseFloat(itemData.total_price || '0');
+      const price = parseFloat(String(itemData.total_price || '0'));
       if (!isNaN(price)) {
         totalAmount += price;
       }
@@ -501,19 +546,7 @@ const Analytics = ({ data }: { data: any[] }) => {
 };
 
 // Create a client-side only component for style injection
-const StyleInjector = () => {
-  useEffect(() => {
-    const styleSheet = document.createElement('style');
-    styleSheet.textContent = styles;
-    document.head.appendChild(styleSheet);
 
-    return () => {
-      document.head.removeChild(styleSheet);
-    };
-  }, []);
-
-  return null;
-};
 
 // Create a client-side only wrapper component
 const ClientOnly = ({ children }: { children: React.ReactNode }) => {
@@ -541,32 +574,156 @@ const TableDataContent = () => {
   const [selectedNamespace, setSelectedNamespace] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('');
-  const [tableData, setTableData] = useState<any[]>([]);
+  const [tableData, setTableData] = useState<TableItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
-  const [activeFilters, setActiveFilters] = useState<{[key: string]: string}>({});
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [selectedItem, setSelectedItem] = useState<TableItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [columns, setColumns] = useState<string[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [lastEvaluatedKey, setLastEvaluatedKey] = useState<any>(null);
-  const [totalItems, setTotalItems] = useState(0);
-  const [currentIterations, setCurrentIterations] = useState(0);
-  const [maxIterations, setMaxIterations] = useState<number | null>(null);
+  const [lastEvaluatedKey, setLastEvaluatedKey] = useState<LastEvaluatedKey | null>(null);
+  const [virtualStart, setVirtualStart] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [showColumnSelector, setShowColumnSelector] = useState(false);
-  const [virtualStart, setVirtualStart] = useState(0);
   const ROWS_PER_PAGE = 50;
 
-  // Add useEffect for fetching namespaces on mount
+  const fetchNamespaceAccounts = useCallback(async (namespaceId: string) => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const response = await fetch(`${backendUrl}/api/namespaces/${namespaceId}/accounts`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const accountsData = await response.json();
+      setNamespaces(currentNamespaces => {
+        return currentNamespaces.map(namespace => {
+          if (namespace['namespace-id'] === namespaceId) {
+            return {
+              ...namespace,
+              'namespace-accounts': accountsData
+            };
+          }
+          return namespace;
+        });
+      });
+    } catch (error) {
+      console.error(`Error fetching accounts for namespace ${namespaceId}:`, error);
+    }
+  }, []);
+
+  const fetchNamespaceMethods = useCallback(async (namespaceId: string) => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const response = await fetch(`${backendUrl}/api/namespaces/${namespaceId}/methods`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const rawData = await response.json();
+      const transformedMethods = rawData.map((method: {
+        'namespace-method-id'?: string;
+        'namespace-method-name'?: string;
+        'namespace-method-type'?: string;
+        'namespace-method-url-override'?: string;
+        'namespace-method-queryParams'?: KeyValuePair[];
+        'namespace-method-header'?: KeyValuePair[];
+        'save-data'?: boolean;
+      }) => ({
+        'namespace-method-id': method['namespace-method-id'] || '',
+        'namespace-method-name': method['namespace-method-name'] || '',
+        'namespace-method-type': method['namespace-method-type'] || 'GET',
+        'namespace-method-url-override': method['namespace-method-url-override'] || '',
+        'namespace-method-queryParams': Array.isArray(method['namespace-method-queryParams']) 
+          ? method['namespace-method-queryParams']
+          : [],
+        'namespace-method-header': Array.isArray(method['namespace-method-header'])
+          ? method['namespace-method-header']
+          : [],
+        'save-data': method['save-data'] || false
+      }))
+      .filter((method: Method) => method['namespace-method-id'] && method['namespace-method-name']);
+
+      setNamespaces(currentNamespaces => {
+        return currentNamespaces.map(namespace => {
+          if (namespace['namespace-id'] === namespaceId) {
+            return {
+              ...namespace,
+              'namespace-methods': transformedMethods
+            };
+          }
+          return namespace;
+        });
+      });
+    } catch (error) {
+      console.error(`Error fetching methods for namespace ${namespaceId}:`, error);
+    }
+  }, []);
+
+  const fetchNamespaces = useCallback(async () => {
+    try {
+      console.log('🔄 Fetching namespaces...');
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      console.log('📡 Using backend URL:', backendUrl);
+      
+      const response = await fetch(`${backendUrl}/api/namespaces`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const rawData = await response.json();
+      console.log('📥 Raw namespace data:', rawData);
+
+      if (!Array.isArray(rawData)) {
+        console.error('❌ Expected array of namespaces, got:', typeof rawData);
+        setNamespaces([]);
+        return;
+      }
+
+      const transformedNamespaces = rawData
+        .filter(item => item && item.data)
+        .map(item => {
+          const data = item.data;
+          return {
+            'namespace-id': data['namespace-id']?.S || '',
+            'namespace-name': data['namespace-name']?.S || '',
+            'namespace-url': data['namespace-url']?.S || '',
+            'namespace-accounts': [],
+            'namespace-methods': [],
+            'tags': Array.isArray(data['tags']?.L) 
+              ? data['tags'].L.map((tag: { S?: string }) => tag.S || '')
+              : []
+          };
+        })
+        .filter(namespace => namespace['namespace-id'] && namespace['namespace-name']);
+
+      console.log('✨ Transformed namespaces:', transformedNamespaces);
+
+      if (transformedNamespaces.length === 0) {
+        console.log('⚠️ No valid namespaces found after transformation');
+        setNamespaces([]);
+      } else {
+        console.log('✅ Setting namespaces:', transformedNamespaces.length);
+        setNamespaces(transformedNamespaces);
+        transformedNamespaces.forEach(namespace => {
+          fetchNamespaceAccounts(namespace['namespace-id']);
+          fetchNamespaceMethods(namespace['namespace-id']);
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error in fetchNamespaces:', error);
+      setNamespaces([]);
+    }
+  }, [fetchNamespaceAccounts, fetchNamespaceMethods]);
+
   useEffect(() => {
     fetchNamespaces();
-  }, []);
+  }, [fetchNamespaces]);
 
   useEffect(() => {
     setMounted(true);
@@ -607,127 +764,6 @@ const TableDataContent = () => {
     }
   }, [columns]);
 
-  const fetchNamespaces = async () => {
-    try {
-      console.log('🔄 Fetching namespaces...');
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-      console.log('📡 Using backend URL:', backendUrl);
-      
-      const response = await fetch(`${backendUrl}/api/namespaces`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const rawData = await response.json();
-      console.log('📥 Raw namespace data:', rawData);
-
-      if (!Array.isArray(rawData)) {
-        console.error('❌ Expected array of namespaces, got:', typeof rawData);
-        setNamespaces([]);
-        return;
-      }
-
-      const transformedNamespaces = rawData
-        .filter(item => item && item.data)
-        .map(item => {
-          const data = item.data;
-          return {
-            'namespace-id': data['namespace-id']?.S || '',
-            'namespace-name': data['namespace-name']?.S || '',
-            'namespace-url': data['namespace-url']?.S || '',
-            'namespace-accounts': [],
-            'namespace-methods': [],
-            'tags': Array.isArray(data['tags']?.L) 
-              ? data['tags'].L.map((tag: any) => tag.S || '')
-              : []
-          };
-        })
-        .filter(namespace => namespace['namespace-id'] && namespace['namespace-name']);
-
-      console.log('✨ Transformed namespaces:', transformedNamespaces);
-
-      if (transformedNamespaces.length === 0) {
-        console.log('⚠️ No valid namespaces found after transformation');
-        setNamespaces([]);
-      } else {
-        console.log('✅ Setting namespaces:', transformedNamespaces.length);
-        setNamespaces(transformedNamespaces);
-        transformedNamespaces.forEach(namespace => {
-          fetchNamespaceAccounts(namespace['namespace-id']);
-          fetchNamespaceMethods(namespace['namespace-id']);
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error in fetchNamespaces:', error);
-      setNamespaces([]);
-    }
-  };
-
-  const fetchNamespaceAccounts = async (namespaceId: string) => {
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-      const response = await fetch(`${backendUrl}/api/namespaces/${namespaceId}/accounts`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const accountsData = await response.json();
-      setNamespaces(currentNamespaces => {
-        return currentNamespaces.map(namespace => {
-          if (namespace['namespace-id'] === namespaceId) {
-            return {
-              ...namespace,
-              'namespace-accounts': accountsData
-            };
-          }
-          return namespace;
-        });
-      });
-    } catch (error) {
-      console.error(`Error fetching accounts for namespace ${namespaceId}:`, error);
-    }
-  };
-
-  const fetchNamespaceMethods = async (namespaceId: string) => {
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-      const response = await fetch(`${backendUrl}/api/namespaces/${namespaceId}/methods`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const rawData = await response.json();
-      const transformedMethods = rawData.map((method: any) => ({
-        'namespace-method-id': method['namespace-method-id'] || '',
-        'namespace-method-name': method['namespace-method-name'] || '',
-        'namespace-method-type': method['namespace-method-type'] || 'GET',
-        'namespace-method-url-override': method['namespace-method-url-override'] || '',
-        'namespace-method-queryParams': Array.isArray(method['namespace-method-queryParams']) 
-          ? method['namespace-method-queryParams']
-          : [],
-        'namespace-method-header': Array.isArray(method['namespace-method-header'])
-          ? method['namespace-method-header']
-          : [],
-        'save-data': method['save-data'] || false
-      }))
-      .filter((method: any) => method['namespace-method-id'] && method['namespace-method-name']);
-
-      setNamespaces(currentNamespaces => {
-        return currentNamespaces.map(namespace => {
-          if (namespace['namespace-id'] === namespaceId) {
-            return {
-              ...namespace,
-              'namespace-methods': transformedMethods
-            };
-          }
-          return namespace;
-        });
-      });
-    } catch (error) {
-      console.error(`Error fetching methods for namespace ${namespaceId}:`, error);
-    }
-  };
-
   const handleNamespaceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedNamespace(e.target.value);
     setSelectedAccount('');
@@ -746,7 +782,7 @@ const TableDataContent = () => {
     setTableData([]);
   };
 
-  const extractColumns = (data: any[]) => {
+  const extractColumns = (data: TableItem[]) => {
     const columnSet = new Set<string>();
     data.forEach(item => {
       const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
@@ -774,8 +810,9 @@ const TableDataContent = () => {
       const tableName = `${namespaceName}_${accountName}_${methodName}`;
 
       // Create cache key based on current chunk
-      const currentChunk = Math.floor((params.lastEvaluatedKey?.index || 0) / 100);
-      const cacheKey = `table_data:${tableName}:${currentChunk}:${params.maxIterations || maxIterations || 'inf'}`;
+      const index = params.lastEvaluatedKey?.index || 0;
+      const currentChunk = Math.floor(index / 100);
+      const cacheKey = `table_data:${tableName}:${currentChunk}:${params.maxIterations || 'inf'}`;
 
       console.log('🔍 Checking cache for key:', cacheKey);
 
@@ -800,7 +837,7 @@ const TableDataContent = () => {
       } : undefined;
 
       console.log('📝 Request parameters:', {
-        maxIterations: maxIterations || undefined,
+        maxIterations: params.maxIterations || undefined,
         pageSize: 100,
         lastEvaluatedKey: formattedLastKey,
         ...params
@@ -812,7 +849,7 @@ const TableDataContent = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          maxIterations: maxIterations || undefined,
+          maxIterations: params.maxIterations || undefined,
           pageSize: 100,
           lastEvaluatedKey: formattedLastKey,
           ...params
@@ -831,19 +868,19 @@ const TableDataContent = () => {
       const data = await response.json();
       
       // Transform the data if needed
-      const transformedData = Array.isArray(data.items) ? data.items.map((item: Record<string, any>) => {
+      const transformedData = Array.isArray(data.items) ? data.items.map((item: Record<string, DynamoDBValue>) => {
         if (item && typeof item === 'object' && !item.Item) {
           return { Item: item };
         }
         return item;
       }) : [];
 
-      const processedData = {
+      const processedData: LoopResponse = {
         items: transformedData,
         count: data.count || transformedData.length,
         lastEvaluatedKey: data.lastEvaluatedKey ? {
-          id: data.lastEvaluatedKey.id,
-          index: (params.lastEvaluatedKey?.index || 0) + transformedData.length
+          id: data.lastEvaluatedKey.id as string,
+          index: index + transformedData.length
         } : null,
         iterations: data.iterations || 1
       };
@@ -896,8 +933,6 @@ const TableDataContent = () => {
     setError(null);
     setLastEvaluatedKey(null);
     setHasMore(true);
-    setTotalItems(0);
-    setCurrentIterations(0);
     setTableData([]); // Clear existing data
 
     try {
@@ -905,7 +940,6 @@ const TableDataContent = () => {
         namespace: selectedNamespace,
         account: selectedAccount,
         method: selectedMethod,
-        maxIterations
       });
 
       const data = await fetchTableData();
@@ -924,8 +958,6 @@ const TableDataContent = () => {
       // Set the data
       setTableData(data.items);
       setLastEvaluatedKey(data.lastEvaluatedKey);
-      setTotalItems(data.count);
-      setCurrentIterations(data.iterations);
       setHasMore(!!data.lastEvaluatedKey);
       
       // Reset filters and selections
@@ -945,7 +977,7 @@ const TableDataContent = () => {
   };
 
   const loadMore = async () => {
-    if (!hasMore || isLoadingMore) return;
+    if (!hasMore || isLoadingMore || !lastEvaluatedKey) return;
 
     setIsLoadingMore(true);
     try {
@@ -957,8 +989,6 @@ const TableDataContent = () => {
 
       setTableData(prev => [...prev, ...data.items]);
       setLastEvaluatedKey(data.lastEvaluatedKey);
-      setTotalItems(prev => prev + data.count);
-      setCurrentIterations(prev => prev + data.iterations);
       setHasMore(!!data.lastEvaluatedKey);
     } catch (error) {
       console.error('Error loading more data:', error);
@@ -977,7 +1007,7 @@ const TableDataContent = () => {
   };
 
   // Function to format cell value based on type
-  const formatCellValue = (value: any) => {
+  const formatCellValue = (value: unknown) => {
     if (value === null || value === undefined) return '-';
     if (typeof value === 'boolean') return value.toString();
     if (typeof value === 'object') {
@@ -1002,7 +1032,9 @@ const TableDataContent = () => {
   // Filter and search the table data
   const filteredData = useMemo(() => {
     return tableData.filter(item => {
-      const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      if (!isRecord(rawItemData)) return false;
+      const itemData = rawItemData;
       
       // Search term filter
       const searchLower = searchTerm.toLowerCase();
@@ -1044,13 +1076,13 @@ const TableDataContent = () => {
   const downloadCSV = () => {
     const selectedData = Array.from(selectedRows).map(index => {
       const item = filteredData[index];
-      const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
-      return itemData;
+      const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      return isRecord(rawItemData) ? rawItemData : {};
     });
 
     const data = selectedData.length > 0 ? selectedData : filteredData.map(item => {
-      const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
-      return itemData;
+      const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+      return isRecord(rawItemData) ? rawItemData : {};
     });
 
     const headers = Object.keys(data[0] || {});
@@ -1083,10 +1115,12 @@ const TableDataContent = () => {
     navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
   };
 
-  const handleItemClick = (item: any) => {
-    const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
-    setSelectedItem(itemData);
-    setIsModalOpen(true);
+  const handleItemClick = (item: TableItem) => {
+    const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+    if (isRecord(rawItemData)) {
+      setSelectedItem(item);
+      setIsModalOpen(true);
+    }
   };
 
   const ColumnSelector = () => (
@@ -1139,6 +1173,8 @@ const TableDataContent = () => {
       }
     }
   };
+
+ 
 
   if (!mounted) {
     return (
@@ -1227,21 +1263,6 @@ const TableDataContent = () => {
                       </option>
                     )) || []}
                 </select>
-              </div>
-
-              {/* Max Iterations Input */}
-              <div className="flex-none w-24 sm:w-28">
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Max Iter.
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={maxIterations || ''}
-                  onChange={(e) => setMaxIterations(e.target.value ? parseInt(e.target.value) : null)}
-                  placeholder="∞"
-                  className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-center"
-                />
               </div>
 
               {/* Action Buttons */}
@@ -1414,7 +1435,9 @@ const TableDataContent = () => {
                           virtualStart + ROWS_PER_PAGE
                         ).map((item, index) => {
                           const actualIndex = virtualStart + index;
-                          const itemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+                          const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+                          if (!isRecord(rawItemData)) return null;
+                          const itemData = rawItemData;
                           const identifier = getIdentifierField(itemData);
                           
                           return (
@@ -1437,6 +1460,9 @@ const TableDataContent = () => {
                                 </div>
                               </td>
                               {Array.from(visibleColumns).map(column => {
+                                const rawItemData = item.Item ? getDynamoValue(item.Item) : getDynamoValue(item);
+                                if (!isRecord(rawItemData)) return null;
+                                const itemData = rawItemData;
                                 const cellValue = itemData[column];
                                 const isLink = typeof cellValue === 'string' && cellValue.includes('http');
                                 

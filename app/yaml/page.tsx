@@ -9,10 +9,14 @@ import { toast } from 'sonner';
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface YAMLData {
+  [key: string]: unknown;
+}
+
 interface YamlRecord {
   id: string;
   name: string;
-  content: any;
+  content: YAMLData;
   createdAt: string;
 }
 
@@ -134,7 +138,7 @@ const YamlPage = () => {
   };
 
   // View JSON content
-  const handleViewContent = (content: any) => {
+  const handleViewContent = (content: Record<string, unknown>) => {
     // You could implement a modal or dialog to show the content
     console.log(JSON.stringify(content, null, 2));
     // For now, we'll just show it in the console

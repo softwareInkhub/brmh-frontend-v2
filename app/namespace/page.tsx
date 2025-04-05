@@ -2,20 +2,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { NamespaceInput } from '../types';
 import { 
-  ChevronDown, 
-  ChevronRight, 
   Plus, 
   Trash2, 
   Edit2, 
-  Copy, 
   Globe, 
-  Tag, 
-  Clock, 
   Database, 
-  Server, 
-  CheckCircle, 
   Save, 
-  Box, 
   Key, 
   Users, 
   Search, 
@@ -24,14 +16,18 @@ import {
   Code,
   User
 } from 'react-feather';
-import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 interface KeyValuePair {
   key: string;
   value: string;
+}
+
+interface DynamoDBTable {
+  name?: string;
+  TableName?: string;
 }
 
 interface Method {
@@ -45,10 +41,10 @@ interface Method {
   'save-data': boolean;
   'isInitialized': boolean;
   'tags': string[];
-  'sample-request'?: Record<string, any>;
-  'sample-response'?: Record<string, any>;
-  'request-schema'?: Record<string, any>;
-  'response-schema'?: Record<string, any>;
+  'sample-request'?: Record<string, unknown>;
+  'sample-response'?: Record<string, unknown>;
+  'request-schema'?: Record<string, unknown>;
+  'response-schema'?: Record<string, unknown>;
 }
 
 interface Account {
@@ -106,12 +102,55 @@ interface MethodPayload {
   'tags'?: string[];
 }
 
+interface DynamoDBItem {
+  id: string;
+  data: {
+    'namespace-name': { S: string };
+    'namespace-url': { S: string };
+    tags?: { L: Array<{ S: string }> };
+  };
+}
+
+interface AccountDetails {
+  clientId: string;
+  clientSecret: string;
+  redirectUrl: string;
+  accountId: string;
+}
+
+interface ExecuteRequest {
+  method: string;
+  url: string;
+  namespaceAccountId: string;
+  queryParams?: KeyValuePair[];
+  headers?: KeyValuePair[];
+  body?: unknown;
+}
+
+interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  method: string;
+  url: string;
+  namespaceAccountId: string;
+  request: {
+    queryParams?: KeyValuePair[];
+    headers?: KeyValuePair[];
+    body?: unknown;
+  };
+  response: {
+    status: number;
+    body: unknown;
+    headers: Record<string, string>;
+  };
+}
+
 /**
  * NamespacePage Component
  * Displays a list of namespaces with their basic information and statistics
  */
 const NamespacePage = () => {
-  const router = useRouter();
+  // const router = useRouter();
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
@@ -155,14 +194,7 @@ const NamespacePage = () => {
 
   // Add new state variables after other state declarations
   const [showAccountSelector, setShowAccountSelector] = useState(false);
-  const [selectedAccountForTable, setSelectedAccountForTable] = useState<Account | null>(null);
   const [methodForTable, setMethodForTable] = useState<Method | null>(null);
-
-  // Add missing state variables
-  const [isAddingAccount, setIsAddingAccount] = useState(false);
-  const [isAddingMethod, setIsAddingMethod] = useState(false);
-  const [accountSearch, setAccountSearch] = useState('');
-  const [methodSearch, setMethodSearch] = useState('');
 
   // Filter functions
   const filteredNamespaces = namespaces.filter(namespace => {
@@ -174,7 +206,8 @@ const NamespacePage = () => {
     );
   });
 
-  const filteredAccounts = accounts.filter(account => {
+  // Update accounts list to use filteredAccounts
+  const accountsList = accounts.filter(account => {
     const searchLower = accountSearchQuery.toLowerCase();
     return (
       account['namespace-account-name'].toLowerCase().includes(searchLower) ||
@@ -183,7 +216,8 @@ const NamespacePage = () => {
     );
   });
 
-  const filteredMethods = methods.filter(method => {
+  // Update methods list to use filteredMethods
+  const methodsList = methods.filter(method => {
     const searchLower = methodSearchQuery.toLowerCase();
     return (
       method['namespace-method-name'].toLowerCase().includes(searchLower) ||
@@ -192,28 +226,108 @@ const NamespacePage = () => {
     );
   });
 
+  const saveToHistory = (requestDetails: ExecuteRequest, responseData: { status: number; body: unknown; headers: Record<string, string> }) => {
+    try {
+      console.log('Saving to history:', { requestDetails, responseData });
+      
+      const newEntry: HistoryEntry = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        method: requestDetails.method,
+        url: requestDetails.url,
+        namespaceAccountId: requestDetails.namespaceAccountId,
+        request: {
+          queryParams: requestDetails.queryParams,
+          headers: requestDetails.headers,
+          body: requestDetails.body,
+        },
+        response: {
+          status: responseData.status,
+          body: responseData.body,
+          headers: responseData.headers,
+        },
+      };
+
+      // Get existing history from localStorage
+      let history: HistoryEntry[] = [];
+      const existingHistory = localStorage.getItem('apiHistory');
+      
+      if (existingHistory) {
+        try {
+          history = JSON.parse(existingHistory);
+          if (!Array.isArray(history)) {
+            console.warn('Existing history is not an array, resetting');
+            history = [];
+          }
+        } catch (error) {
+          console.warn('Error parsing existing history, resetting:', error);
+          history = [];
+        }
+      }
+
+      // Add new entry to the beginning
+      history.unshift(newEntry);
+      
+      // Keep only the last 50 entries
+      history = history.slice(0, 50);
+
+      // Save back to localStorage
+      localStorage.setItem('apiHistory', JSON.stringify(history));
+      console.log('Successfully saved to history. Current history size:', history.length);
+      
+      // Verify the save
+      const savedHistory = localStorage.getItem('apiHistory');
+      if (savedHistory) {
+        const parsed = JSON.parse(savedHistory);
+        console.log('Verified history save. Latest entry:', parsed[0]);
+      }
+    } catch (error) {
+      console.error('Error saving to history:', error);
+    }
+  };
+
   // Fetch accounts and methods for selected namespace
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       console.log('Fetching namespace details for ID:', namespaceId);
       
-      const [accountsResponse, methodsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/accounts`),
-        fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/methods`)
-      ]);
-
-      console.log('Accounts Response Status:', accountsResponse.status);
-      console.log('Methods Response Status:', methodsResponse.status);
+      // Accounts request
+      const accountsResponse = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/accounts`);
+      const accountsData = await accountsResponse.json();
       
+      saveToHistory(
+        {
+          method: 'GET',
+          url: `${API_BASE_URL}/api/namespaces/${namespaceId}/accounts`,
+          namespaceAccountId: namespaceId,
+        },
+        {
+          status: accountsResponse.status,
+          body: accountsData,
+          headers: Object.fromEntries(accountsResponse.headers.entries()),
+        }
+      );
+
+      // Methods request
+      const methodsResponse = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/methods`);
+      const methodsData = await methodsResponse.json();
+      
+      saveToHistory(
+        {
+          method: 'GET',
+          url: `${API_BASE_URL}/api/namespaces/${namespaceId}/methods`,
+          namespaceAccountId: namespaceId,
+        },
+        {
+          status: methodsResponse.status,
+          body: methodsData,
+          headers: Object.fromEntries(methodsResponse.headers.entries()),
+        }
+      );
+
       if (!accountsResponse.ok || !methodsResponse.ok) {
         throw new Error('Failed to fetch namespace details');
       }
-
-      const accountsData = await accountsResponse.json();
-      const methodsData = await methodsResponse.json();
-
-      console.log('Accounts Response Data:', JSON.stringify(accountsData, null, 2));
-      console.log('Methods Response Data:', JSON.stringify(methodsData, null, 2));
 
       setAccounts(accountsData || []);
       setMethods(methodsData || []);
@@ -237,27 +351,43 @@ const NamespacePage = () => {
   /**
    * Fetches all namespaces from the API and transforms DynamoDB attribute values
    */
-  const fetchNamespaces = async () => {
+  const fetchNamespaces = useCallback(async () => {
     try {
-      console.log('Fetching namespaces...');
-      const response = await fetch(`${API_BASE_URL}/api/namespaces`);
-      const responseData = await response.json();
-      console.log('Fetched namespaces:', responseData);
+      console.log('🔄 Fetching namespaces...');
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      console.log('📡 Using backend URL:', backendUrl);
+      
+      const response = await fetch(`${backendUrl}/api/namespaces`);
+      const rawData = await response.json();
+      
+      saveToHistory(
+        {
+          method: 'GET',
+          url: `${backendUrl}/api/namespaces`,
+          namespaceAccountId: 'system',
+        },
+        {
+          status: response.status,
+          body: rawData,
+          headers: Object.fromEntries(response.headers.entries()),
+        }
+      );
 
       // Transform the data structure
-      const transformedData = responseData.map((item: any) => ({
+      const transformedData = rawData.map((item: DynamoDBItem) => ({
         'namespace-id': item.id,
         'namespace-name': item.data['namespace-name'].S,
         'namespace-url': item.data['namespace-url'].S,
-        'tags': Array.isArray(item.data.tags?.L) ? item.data.tags.L.map((tag: any) => tag.S) : []
+        'tags': Array.isArray(item.data.tags?.L) ? item.data.tags.L.map((tag) => tag.S) : []
       }));
 
       console.log('Transformed namespaces:', transformedData);
       setNamespaces(transformedData);
     } catch (error) {
-      console.error('Error fetching namespaces:', error);
+      console.error('❌ Error in fetchNamespaces:', error);
+      setNamespaces([]);
     }
-  };
+  }, []);
 
   /**
    * Creates a new namespace
@@ -631,7 +761,7 @@ const NamespacePage = () => {
         let errorData;
         try {
           errorData = JSON.parse(errorText);
-        } catch (e) {
+        } catch {
           console.error('Failed to parse error response as JSON');
         }
         console.error('Error response:', errorData);
@@ -729,23 +859,7 @@ const NamespacePage = () => {
     window.location.href = authUrl.toString();
   }, []);
 
-  // Add useEffect for handling OAuth code
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    
-    if (code) {
-      const storedDetails = sessionStorage.getItem('pinterestAccountDetails');
-      if (storedDetails) {
-        const accountDetails = JSON.parse(storedDetails);
-        handleFetchToken(code, accountDetails);
-        // Clear stored details
-        sessionStorage.removeItem('pinterestAccountDetails');
-      }
-    }
-  }, []);
-
-  const handleFetchToken = async (code: string, accountDetails: any) => {
+  const handleFetchToken = useCallback(async (code: string, accountDetails: AccountDetails) => {
     try {
       setTokenProcessing(accountDetails.accountId);
       
@@ -822,7 +936,22 @@ const NamespacePage = () => {
     } finally {
       setTokenProcessing(null);
     }
-  };
+  }, [selectedNamespace, accounts, setAccounts, setTokenProcessing]);
+
+  // Add useEffect for handling OAuth code
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    
+    if (code) {
+      const storedDetails = sessionStorage.getItem('pinterestAccountDetails');
+      if (storedDetails) {
+        const accountDetails = JSON.parse(storedDetails);
+        handleFetchToken(code, accountDetails);
+        sessionStorage.removeItem('pinterestAccountDetails');
+      }
+    }
+  }, [handleFetchToken]);
 
   // Add the account selection handler
   const handleInitializeTableClick = (method: Method) => {
@@ -862,7 +991,7 @@ const NamespacePage = () => {
       
       console.log('Existing tables:', existingTables);
 
-      const tableExists = existingTables.some((table: any) => {
+      const tableExists = existingTables.some((table: DynamoDBTable) => {
         const exists = table.name === tableName || table.TableName === tableName;
         console.log(`Comparing ${table.name || table.TableName} with ${tableName}: ${exists}`);
         return exists;
@@ -874,7 +1003,6 @@ const NamespacePage = () => {
           style: { background: '#F0F9FF', color: '#0369A1' }
         });
         setShowAccountSelector(false);
-        setSelectedAccountForTable(null);
         setMethodForTable(null);
         return;
       }
@@ -914,7 +1042,6 @@ const NamespacePage = () => {
       console.log('Table created successfully');
       toast.success(`Table "${tableName}" created successfully for ${account['namespace-account-name']}!`);
       setShowAccountSelector(false);
-      setSelectedAccountForTable(null);
       setMethodForTable(null);
     } catch (error) {
       console.error('Error in handleInitializeTable:', error);
@@ -1043,7 +1170,20 @@ const NamespacePage = () => {
                     />
                   </div>
                   <button
-                    onClick={() => setIsAddingAccount(true)}
+                    onClick={() => {
+                      setEditingAccount(null);
+                      setEditFormData({
+                        ...editFormData,
+                        account: {
+                          'namespace-account-name': '',
+                          'namespace-account-url-override': '',
+                          'namespace-account-header': [],
+                          'variables': [],
+                          'tags': []
+                        }
+                      });
+                      setIsEditingAccount(true);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
                   >
                     <Plus size={16} />
@@ -1053,7 +1193,7 @@ const NamespacePage = () => {
               </div>
 
               <div className="grid gap-4">
-                {accounts.map((account) => (
+                {accountsList.map((account) => (
                   <div 
                     key={account['namespace-account-id']} 
                     className="bg-white border border-gray-100 rounded-xl p-5 hover:shadow-lg transition-all duration-200"
@@ -1165,7 +1305,22 @@ const NamespacePage = () => {
                     />
                   </div>
                   <button
-                    onClick={() => setIsAddingMethod(true)}
+                    onClick={() => {
+                      setEditingMethod(null);
+                      setEditFormData({
+                        ...editFormData,
+                        method: {
+                          'namespace-method-name': '',
+                          'namespace-method-type': 'GET',
+                          'namespace-method-url-override': '',
+                          'namespace-method-queryParams': [],
+                          'namespace-method-header': [],
+                          'save-data': false,
+                          'tags': []
+                        }
+                      });
+                      setIsEditingMethod(true);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
                   >
                     <Plus size={16} />
@@ -1175,7 +1330,7 @@ const NamespacePage = () => {
               </div>
 
               <div className="grid gap-4">
-                {methods.map((method) => (
+                {methodsList.map((method) => (
                   <div 
                     key={method['namespace-method-id']} 
                     className="bg-white border border-gray-100 rounded-xl p-5 hover:shadow-lg transition-all duration-200"
@@ -1909,7 +2064,6 @@ const NamespacePage = () => {
                 <button
                   onClick={() => {
                     setShowAccountSelector(false);
-                    setSelectedAccountForTable(null);
                     setMethodForTable(null);
                   }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800"

@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layers, Settings, ChevronRight, Database, Code, Package, Server, ChevronLeft, Menu, X } from 'react-feather';
+import { 
+  LayoutDashboard, 
+  Settings, 
+  Server
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 interface SidebarProps {
-  activeNamespace?: string;
   onCollapse?: (collapsed: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -43,12 +46,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
 
   const NavLinks = () => (
     <>
-      {/* <div className={`px-4 mb-4 transition-opacity duration-300 ${
-        isCollapsed && !isMobileMenuOpen ? 'opacity-0' : 'opacity-100'
-      }`}>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Main</span>
-      </div> */}
-
       <Link 
         href="/namespace"
         className={`flex items-center gap-3 px-6 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors duration-200 ${
@@ -56,17 +53,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
         }`}
         title="Namespaces"
       >
-        <Layers size={18} className="min-w-[18px]" />
+        <LayoutDashboard size={18} className="min-w-[18px]" />
         <span className={`whitespace-nowrap transition-opacity duration-300 ${
           isCollapsed && !isMobileMenuOpen ? 'opacity-0 w-0' : 'opacity-100'
         }`}>Namespaces</span>
       </Link>
-{/* 
-      <div className={`px-4 mt-6 mb-4 transition-opacity duration-300 ${
-        isCollapsed && !isMobileMenuOpen ? 'opacity-0' : 'opacity-100'
-      }`}>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">API</span>
-      </div> */}
 
       <Link 
         href="/api-service"
@@ -142,39 +133,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
           isCollapsed && !isMobileMenuOpen ? 'opacity-0 w-0' : 'opacity-100'
         }`}>Table Data</span>
       </Link>
-      
-
-      {/* <div className={`px-4 mt-6 mb-4 transition-opacity duration-300 ${
-        isCollapsed && !isMobileMenuOpen ? 'opacity-0' : 'opacity-100'
-      }`}>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tools</span>
-      </div> */}
-
-      {/* <Link 
-        href="/api-tester"
-        className={`flex items-center gap-3 px-6 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors duration-200 ${
-          pathname === '/api-tester' ? 'bg-gray-800 text-white' : ''
-        }`}
-        title="API Tester"
-      >
-        <Code size={18} className="min-w-[18px]" />
-        <span className={`whitespace-nowrap transition-opacity duration-300 ${
-          isCollapsed && !isMobileMenuOpen ? 'opacity-0 w-0' : 'opacity-100'
-        }`}>API Tester</span>
-      </Link>
-
-      <Link 
-        href="/database"
-        className={`flex items-center gap-3 px-6 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors duration-200 ${
-          pathname === '/database' ? 'bg-gray-800 text-white' : ''
-        }`}
-        title="Database"
-      >
-        <Database size={18} className="min-w-[18px]" />
-        <span className={`whitespace-nowrap transition-opacity duration-300 ${
-          isCollapsed && !isMobileMenuOpen ? 'opacity-0 w-0' : 'opacity-100'
-        }`}>Database</span>
-      </Link> */}
     </>
   );
 
@@ -185,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         className="md:hidden fixed top-4 right-4 z-50 p-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 transition-colors duration-200"
       >
-        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        {isMobileMenuOpen ? '×' : '☰'}
       </button>
 
       {/* Mobile Menu Overlay */}
@@ -208,7 +166,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
         {/* Logo/Brand Section */}
         <div className="p-6 border-b border-gray-800 flex justify-between items-center">
           <div className="flex items-center gap-3 overflow-hidden">
-            <Package size={24} className="text-blue-400 min-w-[24px]" />
+            <LayoutDashboard size={24} className="text-blue-400 min-w-[24px]" />
             <span className={`text-xl font-semibold whitespace-nowrap transition-opacity duration-300 ${
               isCollapsed && !isMobileMenuOpen ? 'opacity-0' : 'opacity-100'
             }`}>API Client</span>
@@ -217,11 +175,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeNamespace, onCollapse }) => {
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="hidden md:block p-1 rounded-lg hover:bg-gray-800 transition-colors duration-200"
           >
-            {isCollapsed ? (
-              <ChevronRight size={20} className="text-gray-400" />
-            ) : (
-              <ChevronLeft size={20} className="text-gray-400" />
-            )}
+            {isCollapsed ? '→' : '←'}
           </button>
         </div>
 

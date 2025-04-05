@@ -6,7 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Plus } from '@/app/components/ui/icons';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogContent } from '@/app/components/ui/dialog';
-import { DataTable } from '@/app/components/ui/data-table';
+import { DataTable, Column } from '@/app/components/ui/data-table';
 import { logger } from '@/app/utils/logger';
 import { DynamoDBTableItems } from '@/app/aws/dynamodb/components/DynamoDBTableItems';
 import { DynamoDBTableSchema } from '@/app/aws/dynamodb/components/DynamoDBTableSchema';
@@ -448,19 +448,17 @@ const Page = () => {
     }
   };
 
-  const columns = [
+  const columns: Column<TableItem>[] = [
     {
-      key: 'name',
       header: 'Table Name',
+      accessor: 'name' as keyof TableItem,
       sortable: true,
     },
     {
-      key: 'actions',
       header: 'Actions',
-      className: 'text-right',
-      render: (table: TableItem) => (
+      accessor: (row: TableItem) => (
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedTable(table.name)}>
+          <Button variant="outline" size="sm" onClick={() => setSelectedTable(row.name)}>
             View Items
           </Button>
           <Button variant="outline" size="sm">
@@ -469,7 +467,7 @@ const Page = () => {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => handleDeleteTable(table.name)}
+            onClick={() => handleDeleteTable(row.name)}
           >
             Delete
           </Button>
@@ -510,9 +508,7 @@ const Page = () => {
               <DataTable
                 data={tables}
                 columns={columns}
-                keyExtractor={(table) => table.name}
-                isLoading={loading}
-                emptyMessage="No tables found. Create your first table to get started."
+                loading={loading}
               />
             </CardContent>
           </Card>

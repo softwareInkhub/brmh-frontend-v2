@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 
+interface TableData {
+  namespaceName: string;
+  accountName: string;
+  methodName: string;
+  data: Record<string, unknown>;
+}
+
+interface DynamoDBTable {
+  name: string;
+  // Add other table properties as needed
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body: TableData = await request.json();
     const { namespaceName, accountName, methodName } = body;
 
     if (!namespaceName || !accountName || !methodName) {
@@ -29,7 +41,7 @@ export async function POST(request: NextRequest) {
     const existingTables = await tablesResponse.json();
     console.log('Existing tables:', existingTables);
 
-    const tableExists = existingTables.some((table: any) => {
+    const tableExists = existingTables.some((table: DynamoDBTable) => {
       const exists = table.name === tableName;
       console.log(`Comparing ${table.name} with ${tableName}: ${exists}`);
       return exists;
@@ -73,7 +85,7 @@ export async function POST(request: NextRequest) {
       let result;
       try {
         result = JSON.parse(responseText);
-      } catch (e) {
+      } catch {
         console.error('Failed to parse response:', responseText);
         return NextResponse.json({
           error: 'Invalid response from DynamoDB API',
@@ -110,10 +122,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error initializing table:', error);
-    return NextResponse.json({ 
-      error: 'Failed to initialize table', 
-      message: error instanceof Error ? error.message : 'Unknown error',
-      details: error 
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: { message: error instanceof Error ? error.message : 'Unknown error occurred' } },
+      { status: 500 }
+    );
   }
 } 

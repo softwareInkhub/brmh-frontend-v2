@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,37 @@ interface DynamoDBTableSchemaProps {
   onSchemaUpdate?: () => void;
 }
 
+interface KeySchema {
+  KeyType: 'HASH' | 'RANGE';
+  AttributeName: string;
+}
+
+interface AttributeDefinition {
+  AttributeName: string;
+  AttributeType: string;
+}
+
+interface ProvisionedThroughput {
+  ReadCapacityUnits: number;
+  WriteCapacityUnits: number;
+}
+
+interface TableSchema {
+  TableName: string;
+  TableStatus: string;
+  CreationDateTime: string;
+  KeySchema: KeySchema[];
+  AttributeDefinitions: AttributeDefinition[];
+  ProvisionedThroughput?: ProvisionedThroughput;
+}
+
 export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTableSchemaProps) {
-  const [schema, setSchema] = useState<any>(null);
+  const [schema, setSchema] = useState<TableSchema | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editSchema, setEditSchema] = useState<any>(null);
+  const [editSchema, setEditSchema] = useState<TableSchema | null>(null);
 
-  const fetchSchema = async () => {
+  const fetchSchema = useCallback(async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/dynamodb/tables/${tableName}/schema`);
       const data = await response.json();
@@ -32,11 +56,13 @@ export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTable
     } finally {
       setLoading(false);
     }
-  };
+  }, [tableName]);
 
   useEffect(() => {
-    fetchSchema();
-  }, [tableName]);
+    if (tableName) {
+      fetchSchema();
+    }
+  }, [tableName, fetchSchema]);
 
   const handleUpdateSchema = async () => {
     try {
@@ -95,7 +121,7 @@ export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTable
         <div>
           <h3 className="font-semibold">Key Schema</h3>
           <div className="mt-2">
-            {schema.KeySchema.map((key: any, index: number) => (
+            {schema.KeySchema.map((key, index) => (
               <div key={index} className="grid grid-cols-2 gap-2">
                 <div>{key.KeyType}:</div>
                 <div>{key.AttributeName}</div>
@@ -107,7 +133,7 @@ export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTable
         <div>
           <h3 className="font-semibold">Attribute Definitions</h3>
           <div className="mt-2">
-            {schema.AttributeDefinitions.map((attr: any, index: number) => (
+            {schema.AttributeDefinitions.map((attr, index) => (
               <div key={index} className="grid grid-cols-2 gap-2">
                 <div>{attr.AttributeName}:</div>
                 <div>{attr.AttributeType}</div>
@@ -146,8 +172,8 @@ export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTable
                         onChange={(e) => setEditSchema({
                           ...editSchema,
                           ProvisionedThroughput: {
-                            ...editSchema.ProvisionedThroughput,
-                            ReadCapacityUnits: parseInt(e.target.value)
+                            ReadCapacityUnits: parseInt(e.target.value),
+                            WriteCapacityUnits: editSchema.ProvisionedThroughput?.WriteCapacityUnits || 1
                           }
                         })}
                       />
@@ -160,7 +186,7 @@ export function DynamoDBTableSchema({ tableName, onSchemaUpdate }: DynamoDBTable
                         onChange={(e) => setEditSchema({
                           ...editSchema,
                           ProvisionedThroughput: {
-                            ...editSchema.ProvisionedThroughput,
+                            ReadCapacityUnits: editSchema.ProvisionedThroughput?.ReadCapacityUnits || 1,
                             WriteCapacityUnits: parseInt(e.target.value)
                           }
                         })}

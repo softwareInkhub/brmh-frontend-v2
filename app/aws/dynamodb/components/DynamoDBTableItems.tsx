@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { JSX } from 'react';
 import {
   Table,
@@ -40,30 +40,30 @@ interface TableSchema {
 
 // Add these interfaces for JSON editor
 interface JsonEditorProps {
-  data: any;
-  onChange: (data: any) => void;
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
   readOnly?: boolean;
   requiredKeys?: string[];
 }
 
 interface JsonFormFieldProps {
   path: string[];
-  value: any;
-  onChange: (path: string[], value: any) => void;
+  value: string | number | boolean | null;
+  onChange: (path: string[], value: string | number | boolean | null) => void;
   readOnly?: boolean;
   isRequired?: boolean;
 }
 
 function JsonFormField({ path, value, onChange, readOnly, isRequired }: JsonFormFieldProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(path, e.target.value);
+    onChange(path, e.target.value as string | number | boolean | null);
   };
 
   return (
     <div className="flex items-center gap-2">
       <span className="font-medium min-w-[150px]">{path[path.length - 1]}:</span>
       <Input
-        value={value}
+        value={value as string}
         onChange={handleChange}
         disabled={readOnly}
         required={isRequired}
@@ -80,17 +80,17 @@ function JsonEditor({ data, onChange, readOnly, requiredKeys = [] }: JsonEditorP
     setJsonString(JSON.stringify(data, null, 2));
   }, [data]);
 
-  const updateValue = (path: string[], value: any) => {
+  const updateValue = (path: string[], value: string | number | boolean | null) => {
     const newData = { ...data };
     let current = newData;
     for (let i = 0; i < path.length - 1; i++) {
-      current = current[path[i]];
+      current = current[path[i]] as Record<string, unknown>;
     }
     current[path[path.length - 1]] = value;
     onChange(newData);
   };
 
-  const renderFormFields = (obj: any, path: string[] = []): JSX.Element[] => {
+  const renderFormFields = (obj: Record<string, unknown>, path: string[] = []): JSX.Element[] => {
     return Object.entries(obj).map(([key, value]) => {
       const currentPath = [...path, key];
       if (typeof value === 'object' && value !== null) {
@@ -98,7 +98,7 @@ function JsonEditor({ data, onChange, readOnly, requiredKeys = [] }: JsonEditorP
           <div key={currentPath.join('.')} className="space-y-2">
             <h4 className="font-semibold">{key}</h4>
             <div className="pl-4 space-y-2">
-              {renderFormFields(value, currentPath)}
+              {renderFormFields(value as Record<string, unknown>, currentPath)}
             </div>
           </div>
         );
@@ -107,7 +107,7 @@ function JsonEditor({ data, onChange, readOnly, requiredKeys = [] }: JsonEditorP
         <JsonFormField
           key={currentPath.join('.')}
           path={currentPath}
-          value={value}
+          value={value as string | number | boolean | null}
           onChange={updateValue}
           readOnly={readOnly || requiredKeys.includes(key)}
           isRequired={requiredKeys.includes(key)}
@@ -139,15 +139,17 @@ function JsonEditor({ data, onChange, readOnly, requiredKeys = [] }: JsonEditorP
 }
 
 export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewItemDialog, setShowNewItemDialog] = useState(false);
   const [showEditItemDialog, setShowEditItemDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
+  const [editItem, setEditItem] = useState<Record<string, unknown> | null>(null);
   const [tableSchema, setTableSchema] = useState<TableSchema | null>(null);
   const [requiredKeys, setRequiredKeys] = useState<string[]>([]);
+  const [attributes, setAttributes] = useState<AttributeEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchSchema = async () => {
+  const fetchSchema = useCallback(async () => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/dynamodb/tables/${tableName}/schema`);
       const data = await response.json();
@@ -159,31 +161,35 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
       setRequiredKeys(keys);
       
       // Initialize attributes with required keys
-      setAttributes(keys.map((key: TableSchema['KeySchema'][number]['AttributeName']) => ({ key, value: '' })));
+      setAttributes(keys.map((key: string) => ({ key, value: '' })));
     } catch (error) {
       toast.error('Failed to fetch table schema');
       console.error('Error fetching schema:', error);
     }
-  };
+  }, [tableName]);
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
+      setLoading(true);
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/dynamodb/tables/${tableName}/items`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch items');
+      }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
       setItems(data.items);
-    } catch (error) {
-      toast.error('Failed to fetch items');
-      console.error('Error fetching items:', error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, [tableName]);
 
   useEffect(() => {
-    fetchSchema();
-    fetchItems();
-  }, [tableName]);
+    if (tableName) {
+      fetchItems();
+      fetchSchema();
+    }
+  }, [tableName, fetchItems, fetchSchema]);
 
   const handleCreateItem = async () => {
     try {
@@ -233,10 +239,6 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
     }
   };
 
-  const [attributes, setAttributes] = useState<AttributeEntry[]>([
-    { key: '', value: '' }
-  ]);
-
   const addAttribute = () => {
     setAttributes([...attributes, { key: '', value: '' }]);
   };
@@ -250,7 +252,7 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
     }
     
     if (attributes.length > requiredKeys.length) {
-      setAttributes(attributes.filter((_, i) => i !== index));
+      setAttributes(attributes.filter((attr) => attr !== attributes[index]));
     }
   };
 
@@ -285,7 +287,7 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
       const updates = Object.fromEntries(
         Object.entries(editItem)
           .filter(([key]) => !tableSchema.KeySchema.some(k => k.AttributeName === key))
-          .filter(([_, value]) => value !== undefined && value !== null)
+          .filter(([, value]) => value !== undefined && value !== null)
       );
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/dynamodb/tables/${tableName}/items`, {
@@ -310,32 +312,17 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
     }
   };
 
-  const handleDeleteItem = async (item: any) => {
-    if (!tableSchema) {
-      toast.error('Table schema not loaded');
-      return;
-    }
-
-    if (!confirm('Are you sure you want to delete this item?')) return;
-
+  const handleDeleteItem = async (item: Record<string, unknown>) => {
     try {
-      // Extract primary key attributes from the item
-      const keyAttributes = tableSchema.KeySchema.reduce((acc, keyDef) => ({
-        ...acc,
-        [keyDef.AttributeName]: item[keyDef.AttributeName]
-      }), {});
-
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/dynamodb/tables/${tableName}/items`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Key: keyAttributes }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(item),
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message);
-      }
-
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
       toast.success('Item deleted successfully');
       fetchItems();
     } catch (error) {
@@ -346,6 +333,10 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
 
   if (loading) {
     return <div>Loading items...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
   }
 
   return (
@@ -437,7 +428,7 @@ export function DynamoDBTableItems({ tableName }: DynamoDBTableItemsProps) {
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => handleDeleteItem(item)}
+                      onClick={() => handleDeleteItem(item as Record<string, unknown>)}
                     >
                       Delete
                     </Button>

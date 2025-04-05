@@ -9,6 +9,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { DataTable } from '@/app/components/ui/data-table';
 import { listTopics, createTopic, deleteTopic, type SNSTopic, type CreateTopicParams } from '@/app/services/sns';
 import { logger } from '@/app/utils/logger';
+import { Column } from '@/app/components/ui/data-table';
 
 interface CreateTopicDialogProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ function CreateTopicDialog({ isOpen, onClose, onSubmit }: CreateTopicDialogProps
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Create SNS Topic">
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle>Create New Topic</DialogTitle>
@@ -130,7 +131,7 @@ function DeleteTopicDialog({ isOpen, onClose, topic, onConfirm }: DeleteTopicDia
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Delete Topic">
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogHeader>
         <DialogTitle>Delete Topic</DialogTitle>
         <DialogDescription>
@@ -178,8 +179,6 @@ export default function SNSPage() {
   const [error, setError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deleteDialogTopic, setDeleteDialogTopic] = useState<SNSTopic | null>(null);
-  const [sortColumn, setSortColumn] = useState<string>('Name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   async function loadTopics() {
     logger.info('SNSPage: Starting to load topics', {
@@ -222,38 +221,26 @@ export default function SNSPage() {
     await loadTopics();
   };
 
-  const handleSort = (column: string) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  };
-
   const sortedTopics = [...topics].sort((a, b) => {
-    const aValue = a[sortColumn as keyof SNSTopic] || '';
-    const bValue = b[sortColumn as keyof SNSTopic] || '';
+    const aValue = a.Name || '';
+    const bValue = b.Name || '';
     const comparison = String(aValue).localeCompare(String(bValue));
-    return sortDirection === 'asc' ? comparison : -comparison;
+    return comparison;
   });
 
-  const columns = [
+  const columns: Column<SNSTopic>[] = [
     {
-      key: 'Name',
+      accessor: (topic: SNSTopic) => topic.Name || topic.TopicArn.split(':').pop(),
       header: 'Name',
-      render: (topic: SNSTopic) => topic.Name || topic.TopicArn.split(':').pop(),
       sortable: true,
     },
     {
-      key: 'DisplayName',
+      accessor: (topic: SNSTopic) => topic.DisplayName,
       header: 'Display Name',
       sortable: true,
     },
     {
-      key: 'SubscriptionsConfirmed',
-      header: 'Subscriptions',
-      render: (topic: SNSTopic) => (
+      accessor: (topic: SNSTopic) => (
         <span className="inline-flex items-center">
           <span className="text-green-600 font-medium">{topic.SubscriptionsConfirmed || 0}</span>
           {typeof topic.SubscriptionsPending === 'number' && topic.SubscriptionsPending > 0 && (
@@ -263,13 +250,11 @@ export default function SNSPage() {
           )}
         </span>
       ),
+      header: 'Subscriptions',
       sortable: true,
     },
     {
-      key: 'actions',
-      header: 'Actions',
-      className: 'text-right',
-      render: (topic: SNSTopic) => (
+      accessor: (topic: SNSTopic) => (
         <div className="flex justify-end space-x-2">
           <Button variant="outline" size="sm">
             View Subscriptions
@@ -287,6 +272,7 @@ export default function SNSPage() {
           </Button>
         </div>
       ),
+      header: 'Actions',
     },
   ];
 
@@ -324,12 +310,8 @@ export default function SNSPage() {
             <DataTable
               data={sortedTopics}
               columns={columns}
-              keyExtractor={(topic) => topic.TopicArn}
-              isLoading={loading}
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              emptyMessage="No topics found. Create your first topic to get started."
+              loading={loading}
+              error={error || undefined}
             />
           </CardContent>
         </Card>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Database, Globe, Users, Code, Plus, Edit2, Trash2, CheckCircle, Download } from 'react-feather';
+import { Database, Globe, Users, Code, Plus, Edit2, Trash2, CheckCircle } from 'react-feather';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -21,10 +21,19 @@ interface Method {
   'save-data': boolean;
   'isInitialized': boolean;
   'tags': string[];
-  'sample-request'?: Record<string, any>;
-  'sample-response'?: Record<string, any>;
-  'request-schema'?: Record<string, any>;
-  'response-schema'?: Record<string, any>;
+  'sample-request'?: Record<string, unknown>;
+  'sample-response'?: Record<string, unknown>;
+  'request-schema'?: Record<string, unknown>;
+  'response-schema'?: Record<string, unknown>;
+}
+
+interface Account {
+  'namespace-account-id': string;
+  'namespace-account-name': string;
+  'namespace-account-url-override'?: string;
+  'namespace-account-header': KeyValuePair[];
+  'variables': KeyValuePair[];
+  'tags': string[];
 }
 
 interface Namespace {
@@ -33,7 +42,7 @@ interface Namespace {
   'namespace-url': string;
   'tags': string[];
   'namespace-methods': Method[];
-  'namespace-accounts': any[];
+  'namespace-accounts': Account[];
 }
 
 interface PageParams {
@@ -58,12 +67,19 @@ interface NewMethod {
   'tags': string[];
 }
 
+interface PinterestAccountDetails {
+  clientId: string;
+  clientSecret: string;
+  redirectUrl: string;
+  accountId: string;
+}
+
 const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
   const resolvedParams = React.use(params);
   const [namespace, setNamespace] = useState<Namespace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [methods, setMethods] = useState<Method[]>([]);
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const [isAddingMethod, setIsAddingMethod] = useState(false);
@@ -83,10 +99,10 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     'save-data': false,
     'tags': []
   });
-  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editingMethod, setEditingMethod] = useState<Method | null>(null);
 
-  const fetchAccounts = async (namespaceId: string) => {
+  const fetchAccounts = useCallback(async (namespaceId: string) => {
     try {
       const accountsUrl = `${API_BASE_URL}/namespaces/${namespaceId}/accounts`;
       console.log('Fetching accounts from:', accountsUrl);
@@ -104,9 +120,9 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     } catch (error) {
       console.error('Error fetching accounts:', error);
     }
-  };
+  }, []);
 
-  const fetchMethods = async (namespaceId: string) => {
+  const fetchMethods = useCallback(async (namespaceId: string) => {
     try {
       const methodsUrl = `${API_BASE_URL}/namespaces/${namespaceId}/methods`;
       console.log('Fetching methods from:', methodsUrl);
@@ -124,9 +140,9 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     } catch (error) {
       console.error('Error fetching methods:', error);
     }
-  };
+  }, []);
 
-  const fetchNamespaceDetails = async () => {
+  const fetchNamespaceDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -143,7 +159,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
       console.log('Raw namespace details response:', data);
 
       // Transform the DynamoDB format
-      const transformedData = {
+      const transformedData: Namespace = {
         'namespace-id': data['namespace-id'] || '',
         'namespace-name': data['namespace-name'] || '',
         'namespace-url': data['namespace-url'] || '',
@@ -170,15 +186,15 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [resolvedParams.id, fetchAccounts, fetchMethods]);
 
-  const handleOAuthRedirect = useCallback((account: any) => {
+  const handleOAuthRedirect = useCallback((account: Account) => {
     console.log("inside handleOAuthRedirect");
     
     const variables = account['variables'] || [];
-    const clientId = variables.find((v: any) => v.key === 'client_id')?.value;
-    const clientSecret = variables.find((v: any) => v.key === 'secret_key')?.value;
-    const redirectUrl = variables.find((v: any) => v.key === 'redirect_uri')?.value;
+    const clientId = variables.find((v) => v.key === 'client_id')?.value;
+    const clientSecret = variables.find((v) => v.key === 'secret_key')?.value;
+    const redirectUrl = variables.find((v) => v.key === 'redirect_uri')?.value;
 
     if (!clientId || !redirectUrl || !clientSecret) {
       alert('Missing client_id, secret_key, or redirect_uri in account variables');
@@ -205,23 +221,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     window.location.href = authUrl.toString();
   }, []);
 
-  // Add useEffect for handling OAuth code
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    
-    if (code) {
-      const storedDetails = sessionStorage.getItem('pinterestAccountDetails');
-      if (storedDetails) {
-        const accountDetails = JSON.parse(storedDetails);
-        fetchPinterestToken(code, accountDetails);
-        // Clear stored details
-        sessionStorage.removeItem('pinterestAccountDetails');
-      }
-    }
-  }, []);
-
-  const fetchPinterestToken = async (code: string, accountDetails: any) => {
+  const fetchPinterestToken = useCallback(async (code: string, accountDetails: PinterestAccountDetails) => {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/pinterest/token`, {
         method: 'POST',
@@ -251,7 +251,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
       }
       
       const accountsData = await accountsResponse.json();
-      const currentAccount = accountsData.find((a: any) => a['namespace-account-id'] === accountDetails.accountId);
+      const currentAccount = accountsData.find((a: Account) => a['namespace-account-id'] === accountDetails.accountId);
       
       if (currentAccount) {
         // Create updated account data with the new token
@@ -277,7 +277,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
         }
 
         // Update local state with the new accounts data
-        setAccounts(accountsData.map((acc: any) => 
+        setAccounts(accountsData.map((acc: Account) => 
           acc['namespace-account-id'] === accountDetails.accountId ? updatedAccount : acc
         ));
 
@@ -294,7 +294,29 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
       console.error('Error fetching Pinterest token:', error);
       alert('Failed to fetch Pinterest token. Please try again.');
     }
-  };
+  }, [resolvedParams.id]);
+
+  // Add useEffect for handling OAuth code
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    
+    if (code) {
+      const storedDetails = sessionStorage.getItem('pinterestAccountDetails');
+      if (storedDetails) {
+        const accountDetails = JSON.parse(storedDetails) as PinterestAccountDetails;
+        fetchPinterestToken(code, accountDetails);
+        // Clear stored details
+        sessionStorage.removeItem('pinterestAccountDetails');
+      }
+    }
+  }, [fetchPinterestToken]);
+
+  useEffect(() => {
+    if (resolvedParams.id) {
+      fetchNamespaceDetails();
+    }
+  }, [resolvedParams.id, fetchNamespaceDetails]);
 
   const handleCreateAccount = async () => {
     try {
@@ -432,7 +454,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     }
   };
 
-  const handleEditAccount = (account: any) => {
+  const handleEditAccount = (account: Account) => {
     setEditingAccount(account);
     setNewAccount({
       'namespace-account-name': account['namespace-account-name'],
@@ -551,10 +573,6 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
       alert('Failed to initialize table your table might be already created: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
-
-  useEffect(() => {
-    fetchNamespaceDetails();
-  }, [resolvedParams.id]);
 
   if (loading) {
     return (
@@ -729,7 +747,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
           </div>
           {methods.length > 0 ? (
             <div className="grid gap-4">
-              {methods.map((method, index) => (
+              {methods.map((method) => (
                 <div key={method['namespace-method-id']} className="p-4 border border-gray-100 rounded-lg">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">

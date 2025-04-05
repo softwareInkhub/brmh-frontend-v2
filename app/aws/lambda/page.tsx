@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Button } from '@/app/components/ui/button';
 import { Plus } from '@/app/components/ui/icons';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { listFunctions, createFunction, type LambdaFunction } from '@/app/services/lambda';
+import { listFunctions, type LambdaFunction } from '@/app/services/lambda';
 import { logger } from '@/app/utils/logger';
 
 export default function LambdaPage() {

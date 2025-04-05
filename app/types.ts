@@ -31,7 +31,7 @@ export interface Namespace {
   'namespace-name': string;
   'namespace-url': string;
   'namespace-accounts': NamespaceAccount[];
-  'namespace-methods': any[];
+  'namespace-methods': NamespaceMethod[];
   tags: string[];
 }
 

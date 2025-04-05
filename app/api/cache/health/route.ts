@@ -23,11 +23,13 @@ const getRedisClient = () => {
         enableOfflineQueue: false // Don't queue commands when offline
       });
 
-      redis.on('error', () => {
+      redis.on('error', (err) => {
+        console.error('Redis connection error:', err);
         redis?.disconnect();
         redis = null;
       });
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to create Redis client:', err);
       redis = null;
     }
   }
@@ -51,7 +53,8 @@ export async function GET() {
       new Promise((_, reject) => setTimeout(() => reject(new Error('Redis ping timeout')), 1000))
     ]);
     return NextResponse.json({ healthy: pong === 'PONG' });
-  } catch (error) {
+  } catch (err) {
+    console.error('Redis health check failed:', err);
     if (redis) {
       redis.disconnect();
       redis = null;

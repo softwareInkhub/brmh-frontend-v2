@@ -2,36 +2,28 @@
 
 import React, { useState, useEffect } from 'react';
 import { Send, RefreshCw, Copy, Download, Check, Clock, X, Trash2, ChevronRight, ChevronDown } from 'react-feather';
-import { useRouter } from 'next/navigation';
 
 interface KeyValuePair {
   key: string;
   value: string;
 }
 
-interface Namespace {
-  'namespace-id': string;
-  'namespace-name': string;
-  'namespace-url': string;
-  'namespace-accounts': NamespaceAccount[];
-  'namespace-methods': NamespaceMethod[];
+interface DynamoDBValue {
+  S?: string;
+  N?: string;
+  BOOL?: boolean;
+  L?: DynamoDBValue[];
+  M?: { [key: string]: DynamoDBValue };
 }
 
-interface NamespaceAccount {
-  'namespace-account-id': string;
-  'namespace-account-name': string;
-  'namespace-account-url-override'?: string;
-  'namespace-account-header': KeyValuePair[];
-}
-
-interface NamespaceMethod {
-  'namespace-method-id': string;
-  'namespace-method-name': string;
-  'namespace-method-type': string;
-  'namespace-method-url-override'?: string;
-  'namespace-method-queryParams': KeyValuePair[];
-  'namespace-method-header': KeyValuePair[];
-  'save-data': boolean;
+interface ApiResponse<T = unknown> {
+  data?: T;
+  error?: string;
+  message?: string;
+  executionId?: string;
+  body: unknown;
+  headers: Record<string, string>;
+  status: number;
 }
 
 interface ExecuteRequest {
@@ -47,7 +39,7 @@ interface ExecuteRequest {
     pageParam: string;
     defaultLimit: string;
   };
-  body?: any;
+  body?: unknown;
 }
 
 interface HistoryEntry {
@@ -59,35 +51,22 @@ interface HistoryEntry {
   request: {
     queryParams: Record<string, string>;
     headers: Record<string, string>;
-    body?: any;
+    body?: unknown;
   };
   response: {
     status: number;
-    body: any;
+    body: unknown;
     headers: Record<string, string>;
   };
 }
 
-// Add this new interface after the existing interfaces
-interface Execution {
-  'exec-id': string;
-  'child-exec-id': string;
-  data: {
-    'execution-id': string;
-    'iteration-no': number;
-    'total-items-processed': number;
-    'items-in-current-page': number;
-    'request-url': string;
-    'response-status': number;
-    'pagination-type': string;
-    'timestamp': string;
-    'status': string[];
-    'is-last': boolean;
-  };
+interface JSONTreeProps {
+  data: unknown;
+  initialExpanded?: boolean;
 }
 
 // Add JSONTree component at the top level
-const JSONTree = ({ data, initialExpanded = true }: { data: any; initialExpanded?: boolean }) => {
+const JSONTree = ({ data, initialExpanded = true }: JSONTreeProps) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
   
   if (typeof data !== 'object' || data === null) {
@@ -149,7 +128,6 @@ const JSONTree = ({ data, initialExpanded = true }: { data: any; initialExpanded
 
 
 const ApiService = () => {
-  const router = useRouter();
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [selectedNamespace, setSelectedNamespace] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -158,9 +136,7 @@ const ApiService = () => {
   const [queryParams, setQueryParams] = useState<KeyValuePair[]>([{ key: '', value: '' }]);
   const [headers, setHeaders] = useState<KeyValuePair[]>([{ key: '', value: '' }]);
   const [maxIterations, setMaxIterations] = useState<string>('');
-  const [response, setResponse] = useState<any>(null);
-  const [responseData, setResponseData] = useState<any>(null);
-  const [tableName, setTableName] = useState<string>('');
+  const [response, setResponse] = useState<ApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'schema'>('body');
@@ -172,11 +148,7 @@ const ApiService = () => {
   const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
 
   // Add this type for items
-  type ResponseItem = {
-    value?: any;
-    [key: string]: any;
-  };
-
+ 
   // Add types for namespace, account, and method
   type Method = {
     'namespace-method-id': string;
@@ -204,7 +176,6 @@ const ApiService = () => {
     [key: string]: any;
   };
 
-  type Header = KeyValuePair;
 
   useEffect(() => {
     console.log('Fetching namespaces');
@@ -218,7 +189,7 @@ const ApiService = () => {
   const fetchNamespaces = async () => {
     try {
       console.log('Starting to fetch namespaces...');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/namespaces`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -272,7 +243,7 @@ const ApiService = () => {
 
   const fetchNamespaceAccounts = async (namespaceId: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/namespaces/${namespaceId}/accounts`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/accounts`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -298,7 +269,7 @@ const ApiService = () => {
 
   const fetchNamespaceMethods = async (namespaceId: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/namespaces/${namespaceId}/methods`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/methods`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -341,14 +312,14 @@ const ApiService = () => {
   };
 
   // Helper function to extract DynamoDB values
-  const extractDynamoValue = (dynamoObj: any) => {
+  const extractDynamoValue = (dynamoObj: DynamoDBValue): unknown => {
     if (!dynamoObj) return null;
     if (dynamoObj.S) return dynamoObj.S;
     if (dynamoObj.N) return Number(dynamoObj.N);
     if (dynamoObj.BOOL !== undefined) return dynamoObj.BOOL;
     if (dynamoObj.L) return dynamoObj.L.map(extractDynamoValue);
     if (dynamoObj.M) {
-      const result: any = {};
+      const result: Record<string, unknown> = {};
       Object.entries(dynamoObj.M).forEach(([key, value]) => {
         result[key] = extractDynamoValue(value);
       });
@@ -507,12 +478,12 @@ const ApiService = () => {
     }
 
     setIsLoading(true);
-    setCurrentExecutionId(null); // Reset execution ID at start
+    setCurrentExecutionId(null);
     
     try {
-      let endpoint = isPaginated
-        ? `http://localhost:4000/execute/paginated`
-        : `https://krjgztn4q3ogcm2f7g3modjtyq0glvfm.lambda-url.us-east-1.on.aws/execute`;  
+      const endpoint = isPaginated
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/execute/paginated`
+        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/execute`;  
 
       // Get namespace and method details for table name and save-data flag
       let tableName = '';
@@ -576,30 +547,38 @@ const ApiService = () => {
       const responseData = await response.json();
       console.log('API Response:', responseData);
 
-      // Extract execution ID from metadata and set it
       if (responseData.data?.executionId) {
         console.log('Execution ID:', responseData.data.executionId);
         setCurrentExecutionId(responseData.data.executionId);
-        // Store execution ID in localStorage for the executions page to access
         localStorage.setItem('currentExecutionId', responseData.data.executionId);
       }
 
-      setResponse({
+      const responseObj: ApiResponse = {
         body: responseData,
         headers: Object.fromEntries(response.headers.entries()),
         status: response.status,
-      });
+        data: responseData.data,
+        error: responseData.error,
+        message: responseData.message,
+        executionId: responseData.data?.executionId
+      };
+
+      setResponse(responseObj);
+      saveToHistory(executeRequest, responseObj);
 
     } catch (error) {
       console.error('Error executing request:', error);
-      setResponse({
+      const errorResponse: ApiResponse = {
         body: { 
           error: 'Failed to execute request',
           details: error instanceof Error ? error.message : String(error)
         },
         headers: {},
         status: 500,
-      });
+        error: 'Failed to execute request',
+        message: error instanceof Error ? error.message : String(error)
+      };
+      setResponse(errorResponse);
     } finally {
       setIsLoading(false);
     }
@@ -613,16 +592,40 @@ const ApiService = () => {
     }
   };
 
-  const determineContentType = (body: string) => {
-    try {
-      JSON.parse(body);
-      return 'application/json';
-    } catch {
-      return 'text/plain';
+  
+
+  const generateResponseSchema = (data: unknown): Record<string, unknown> => {
+    if (data === null) return { type: 'null' };
+    if (Array.isArray(data)) {
+      const items = data.length > 0 ? generateResponseSchema(data[0]) : {};
+      return {
+        type: 'array',
+        items
+      };
     }
+    if (typeof data === 'object' && data !== null) {
+      const properties: Record<string, unknown> = {};
+      const required: string[] = [];
+      
+      Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
+        properties[key] = generateResponseSchema(value);
+        if (value !== null && value !== undefined) {
+          required.push(key);
+        }
+      });
+      
+      return {
+        type: 'object',
+        properties,
+        required
+      };
+    }
+    return { type: typeof data };
   };
 
   const handleCopyResponse = () => {
+    if (!response) return;
+    
     let contentToCopy = '';
     switch (responseTab) {
       case 'body':
@@ -641,6 +644,8 @@ const ApiService = () => {
   };
 
   const handleDownloadResponse = () => {
+    if (!response) return;
+
     let contentToDownload = '';
     let fileName = '';
     
@@ -670,36 +675,7 @@ const ApiService = () => {
     URL.revokeObjectURL(url);
   };
 
-  const generateResponseSchema = (data: any): any => {
-    if (data === null) return { type: 'null' };
-    if (Array.isArray(data)) {
-      const items = data.length > 0 ? generateResponseSchema(data[0]) : {};
-      return {
-        type: 'array',
-        items
-      };
-    }
-    if (typeof data === 'object') {
-      const properties: Record<string, any> = {};
-      const required: string[] = [];
-      
-      Object.entries(data).forEach(([key, value]) => {
-        properties[key] = generateResponseSchema(value);
-        if (value !== null && value !== undefined) {
-          required.push(key);
-        }
-      });
-      
-      return {
-        type: 'object',
-        properties,
-        required
-      };
-    }
-    return { type: typeof data };
-  };
-
-  const saveToHistory = (requestDetails: ExecuteRequest, responseData: any) => {
+  const saveToHistory = (requestDetails: ExecuteRequest, responseData: ApiResponse): void => {
     const newEntry: HistoryEntry = {
       id: Date.now().toString(),
       timestamp: new Date().toISOString(),
@@ -728,8 +704,8 @@ const ApiService = () => {
     localStorage.removeItem('apiRequestHistory');
   };
 
-  const handleDeleteHistoryEntry = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteHistoryEntry = (id: string, event: React.MouseEvent): void => {
+    event.stopPropagation();
     const updatedHistory = history.filter(entry => entry.id !== id);
     setHistory(updatedHistory);
     localStorage.setItem('apiRequestHistory', JSON.stringify(updatedHistory));
@@ -807,251 +783,27 @@ const ApiService = () => {
     setActiveTab('params');
   };
 
-  const handleHeaderKeyChange = (header: KeyValuePair, index: number) => {
+  const handleHeaderKeyChange = (header: KeyValuePair, index: number): void => {
     const newHeaders = [...headers];
-    newHeaders[index] = { ...header, key: header.key };
+    newHeaders[index] = { ...header };
     setHeaders(newHeaders);
   };
 
-  const handleHeaderValueChange = (header: KeyValuePair, index: number) => {
+  const handleHeaderValueChange = (header: KeyValuePair, index: number): void => {
     const newHeaders = [...headers];
-    newHeaders[index] = { ...header, value: header.value };
+    newHeaders[index] = { ...header };
     setHeaders(newHeaders);
   };
 
-  const handleDeleteHeader = (header: KeyValuePair, index: number) => {
+  const handleDeleteHeader = (_header: KeyValuePair, index: number): void => {
     const newHeaders = headers.filter((_, i) => i !== index);
     setHeaders(newHeaders);
   };
 
   // Helper function to extract items from response
-  const extractItemsFromResponse = (responseData: any): ResponseItem[] => {
-    const items: ResponseItem[] = [];
-    
-    // console.log('Raw response data:', JSON.stringify(responseData, null, 2));
-
-    // If it's an error response, don't treat it as an item
-    if (responseData?.error || responseData?.message === "Failed to parse response") {
-      console.log('Error response detected, skipping item extraction');
-      return [];
-    }
-
-    // For paginated responses, extract items from the data field
-    if (responseData?.data) {
-      console.log('Processing paginated response data');
-      // Return the data directly instead of recursively calling
-      const dataItems = responseData.data;
-      if (Array.isArray(dataItems)) {
-        return dataItems.map((item: any) => {
-          if (item.id) {
-            return {
-              id: item.id.toString(),
-              ...item
-            };
-          }
-          return item;
-        });
-      }
-      // If data is not an array, return it as a single item
-      return [dataItems];
-    }
-    
-    if (typeof responseData === 'string') {
-      items.push({ value: responseData });
-    } else if (typeof responseData !== 'object') {
-      items.push({ value: responseData });
-    } else if (Array.isArray(responseData)) {
-      // Handle array response
-      items.push(...responseData.map((item: any) => {
-        if (item.id) {
-          return {
-            id: item.id.toString(),
-            ...item
-          };
-        }
-        return item;
-      }));
-    } else if (responseData?.products) {
-      // Handle Shopify products response
-      items.push(...responseData.products.map((product: any) => ({
-        id: product.id.toString(),
-        ...product
-      })));
-    } else if (responseData?.orders) {
-      // Handle Shopify orders response
-      items.push(...responseData.orders.map((order: any) => ({
-        id: order.id.toString(),
-        ...order
-      })));
-    } else if (responseData?.items) {
-      // Handle generic items response
-      items.push(...responseData.items.map((item: any) => {
-        if (item.id) {
-          return {
-            id: item.id.toString(),
-            ...item
-          };
-        }
-        return item;
-      }));
-    } else if (responseData?.Item) {
-      // Handle single item response with Item wrapper
-      const item = responseData.Item;
-      if (item.id) {
-        items.push({
-          id: item.id.toString(),
-          ...item
-        });
-      } else {
-        items.push(item);
-      }
-    } else {
-      // Try to find an array property in the response
-      const arrayProp = Object.entries(responseData).find(([_, value]) => Array.isArray(value));
-      if (arrayProp) {
-        items.push(...(arrayProp[1] as any[]).map((item: any) => {
-          if (item.id) {
-            return {
-              id: item.id.toString(),
-              ...item
-            };
-          }
-          return item;
-        }));
-      } else if (responseData) {
-        // If no array found and it's not an error, try to use the response data itself
-        if (responseData.id) {
-          items.push({
-            id: responseData.id.toString(),
-            ...responseData
-          });
-        } else {
-          items.push(responseData);
-        }
-      }
-    }
-    
-    console.group('Extracted Items');
-    console.log('Number of items extracted:', items.length);
-    // console.log('Items:', JSON.stringify(items, null, 2));
-    console.groupEnd();
-    
-    return items;
-  };
-
+ 
   // Helper function to save items to DynamoDB
-  const saveItemsToDynamoDB = async (
-    items: ResponseItem[],
-    requestDetails: {
-      tableName: string;
-      method: string;
-      url: string;
-      queryParams: Record<string, string>;
-      headers: Record<string, string>;
-      body?: any;
-      status: number;
-    }
-  ) => {
-    const timestamp = new Date().toISOString();
-    const baseRequestDetails = {
-      method: requestDetails.method,
-      url: requestDetails.url,
-      queryParams: requestDetails.queryParams,
-      headers: requestDetails.headers,
-      body: requestDetails.body
-    };
-
-    console.group('DynamoDB Save Operation');
-    console.log('Saving items to table:', requestDetails.tableName);
-    console.log('Number of items to save:', items.length);
-    console.groupEnd();
-
-    const BATCH_SIZE = 5;
-    const batches = [];
-    
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      batches.push(items.slice(i, i + BATCH_SIZE));
-    }
-
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batch = batches[batchIndex];
-      console.log(`Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} items)`);
-
-      const savePromises = batch.map(async (item, index) => {
-        const cleanedItem = { ...item };
-        
-        if (typeof cleanedItem.id === 'number') {
-          cleanedItem.id = cleanedItem.id.toString();
-        }
-
-        // Remove bookmark and url fields from the item
-        const { bookmark, url, ...itemWithoutBookmark } = cleanedItem;
-
-        // Keep only essential fields and primitive values
-        const simplifiedItem = Object.entries(itemWithoutBookmark).reduce((acc, [key, value]) => {
-          if (typeof value === 'string' || 
-              typeof value === 'number' || 
-              typeof value === 'boolean' ||
-              value === null) {
-            acc[key] = value;
-          }
-          return acc;
-        }, {} as any);
-        
-        const itemData = {
-          id: cleanedItem.id || `item_${timestamp}_${batchIndex}_${index}`,
-          Item: simplifiedItem,
-          timestamp,
-          _metadata: {
-            requestDetails: baseRequestDetails,
-            status: requestDetails.status,
-            itemIndex: batchIndex * BATCH_SIZE + index,
-            totalItems: items.length,
-            originalId: item.id
-          }
-        };
-
-        console.group('DynamoDB Request Details');
-        console.log('Table Name:', requestDetails.tableName);
-        console.log('Request URL:', `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/dynamodb/tables/${requestDetails.tableName}/items`);
-        // console.log('Request Body:', JSON.stringify(itemData, null, 2));
-        console.groupEnd();
-
-        try {
-          const dbResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/dynamodb/tables/${requestDetails.tableName}/items`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify(itemData)
-          });
-
-          if (!dbResponse.ok) {
-            const errorData = await dbResponse.json();
-            console.error('Failed to save item. Response:', {
-              status: dbResponse.status,
-              statusText: dbResponse.statusText,
-              headers: Object.fromEntries(dbResponse.headers.entries()),
-              error: errorData
-            });
-            return null;
-          }
-
-          console.log(`Successfully saved item ${batchIndex * BATCH_SIZE + index + 1}/${items.length}`);
-          return index;
-        } catch (error) {
-          console.error(`Error saving item ${batchIndex * BATCH_SIZE + index + 1}:`, error);
-          return null;
-        }
-      });
-
-      await Promise.all(savePromises);
-      console.log(`Completed batch ${batchIndex + 1}/${batches.length}`);
-    }
-
-    console.log(`Completed saving ${items.length} items to DynamoDB`);
-  };
+  
 
   return (
     <div className="h-screen bg-gray-50 flex overflow-hidden">
@@ -1421,7 +1173,7 @@ const ApiService = () => {
                     ) : responseTab === 'headers' ? (
                       <div className="bg-gray-50 p-4 rounded h-full overflow-auto font-mono text-sm">
                         <div className="space-y-2">
-                          {Object.entries(response.rawHeaders || {}).map(([key, value]) => (
+                          {Object.entries(response.headers || {}).map(([key, value]) => (
                             <div key={key} className="flex">
                               <span className="text-blue-600 font-semibold min-w-[200px]">{key}:</span>
                               <span className="text-gray-700 break-all">{String(value)}</span>

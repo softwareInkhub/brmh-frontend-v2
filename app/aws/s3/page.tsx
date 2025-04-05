@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/app/components/ui2/button';
 import { Input } from '@/app/components/ui2/input';
 import { Label } from '@/app/components/ui2/label';
@@ -40,8 +40,7 @@ export default function S3Page() {
   const [isValidBucketName, setIsValidBucketName] = useState(true);
   const [bucketNameError, setBucketNameError] = useState('');
 
-  // Fetch buckets
-  const fetchBuckets = async () => {
+  const fetchBuckets = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/s3`);
@@ -57,10 +56,9 @@ export default function S3Page() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
 
-  // Fetch objects in bucket
-  const fetchObjects = async (bucketName: string, prefix: string = '') => {
+  const fetchObjects = useCallback(async (bucketName: string, prefix: string = '') => {
     try {
       setIsLoading(true);
       const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/s3/buckets/${bucketName}?prefix=${prefix}`);
@@ -78,9 +76,8 @@ export default function S3Page() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
 
-  // Validate bucket name
   const validateBucketName = (name: string) => {
     if (!name) {
       setIsValidBucketName(false);
@@ -105,14 +102,12 @@ export default function S3Page() {
     return true;
   };
 
-  // Handle bucket name change
   const handleBucketNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setNewBucketName(name);
     validateBucketName(name);
   };
 
-  // Create new bucket
   const handleCreateBucket = async () => {
     if (!validateBucketName(newBucketName)) {
       return;
@@ -150,7 +145,6 @@ export default function S3Page() {
     }
   };
 
-  // Delete bucket
   const handleDeleteBucket = async (bucketName: string) => {
     if (!confirm(`Are you sure you want to delete bucket "${bucketName}"?`)) return;
 
@@ -188,7 +182,6 @@ export default function S3Page() {
     }
   };
 
-  // Upload file
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!selectedBucket || !event.target.files?.length) return;
 
@@ -222,7 +215,6 @@ export default function S3Page() {
     }
   };
 
-  // Delete object
   const handleDeleteObject = async (key: string) => {
     if (!selectedBucket || !confirm(`Are you sure you want to delete "${key}"?`)) return;
 
@@ -253,7 +245,6 @@ export default function S3Page() {
     }
   };
 
-  // Format file size
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -264,13 +255,13 @@ export default function S3Page() {
 
   useEffect(() => {
     fetchBuckets();
-  }, []);
+  }, [fetchBuckets]);
 
   useEffect(() => {
     if (selectedBucket) {
       fetchObjects(selectedBucket);
     }
-  }, [selectedBucket]);
+  }, [selectedBucket, fetchObjects]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -330,7 +321,6 @@ export default function S3Page() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Buckets List */}
         <Card className="md:col-span-1">
           <CardHeader>
             <CardTitle>Buckets</CardTitle>
@@ -367,7 +357,6 @@ export default function S3Page() {
           </CardContent>
         </Card>
 
-        {/* Objects List */}
         <Card className="md:col-span-3">
           <CardHeader>
             <CardTitle>
