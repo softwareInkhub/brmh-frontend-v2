@@ -1,19 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Send, RefreshCw, Copy, Download, Check, Clock, X, Trash2, ChevronRight, ChevronDown } from 'react-feather';
 
 interface KeyValuePair {
   key: string;
   value: string;
-}
-
-interface DynamoDBValue {
-  S?: string;
-  N?: string;
-  BOOL?: boolean;
-  L?: DynamoDBValue[];
-  M?: { [key: string]: DynamoDBValue };
 }
 
 interface ApiResponse<T = unknown> {
@@ -65,6 +57,47 @@ interface JSONTreeProps {
   initialExpanded?: boolean;
 }
 
+interface NamespaceData {
+  'namespace-id': { S: string };
+  'namespace-name': { S: string };
+  'namespace-url': { S: string };
+  'tags': { L: { S: string }[] };
+}
+
+interface NamespaceItem {
+  data: NamespaceData;
+}
+
+interface Account {
+  'namespace-account-id': string;
+  'namespace-account-name': string;
+  'namespace-account-header': { key: string; value: string }[];
+  'namespace-account-url-override': string;
+}
+
+interface Method {
+  'namespace-method-id': string;
+  'namespace-method-name': string;
+  'namespace-method-type': string;
+  'namespace-method-url-override': string;
+  'namespace-method-queryParams': { key: string; value: string }[];
+  'namespace-method-header': { key: string; value: string }[];
+  'save-data': boolean;
+}
+
+interface TransformedNamespace {
+  'namespace-id': string;
+  'namespace-name': string;
+  'namespace-url': string;
+  'namespace-accounts': Account[];
+  'namespace-methods': Method[];
+  'tags': string[];
+}
+
+interface TagItem {
+  S: string;
+}
+
 // Add JSONTree component at the top level
 const JSONTree = ({ data, initialExpanded = true }: JSONTreeProps) => {
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
@@ -98,14 +131,14 @@ const JSONTree = ({ data, initialExpanded = true }: JSONTreeProps) => {
       {isExpanded && (
         <div className="pl-4 border-l border-gray-200">
           {isArray ? (
-            items.map((item: any, index: number) => (
+            items.map((item: unknown, index: number) => (
               <div key={index} className="py-1">
                 <JSONTree data={item} initialExpanded={false} />
                 {index < items.length - 1 && <span className="text-gray-400">,</span>}
               </div>
             ))
           ) : (
-            items.map(([key, value]: [string, any], index: number) => (
+            items.map(([key, value]: [string, unknown], index: number) => (
               <div key={key} className="py-1">
                 <span className="text-blue-600">&quot;{key}&quot;</span>
                 <span className="text-gray-600">: </span>
@@ -145,52 +178,57 @@ const ApiService = () => {
   const [copied, setCopied] = useState(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
 
   // Add this type for items
  
   // Add types for namespace, account, and method
-  type Method = {
-    'namespace-method-id': string;
-    'namespace-method-name': string;
-    'namespace-method-type': string;
-    'namespace-method-url-override'?: string;
-    'namespace-method-queryParams': KeyValuePair[];
-    'namespace-method-header': KeyValuePair[];
-    'save-data': boolean;
-    [key: string]: any;
-  };
-
-  type Account = {
-    'namespace-account-id': string;
-    'namespace-account-name': string;
-    'namespace-account-header': KeyValuePair[];
-    [key: string]: any;
-  };
-
   type Namespace = {
     'namespace-id': string;
     'namespace-name': string;
+    'namespace-url': string;
     'namespace-accounts': Account[];
     'namespace-methods': Method[];
-    [key: string]: any;
+    'tags': string[];
   };
 
-
-  useEffect(() => {
-    console.log('Fetching namespaces');
-    fetchNamespaces();
-    const savedHistory = localStorage.getItem('apiRequestHistory');
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
+  const fetchNamespaceAccounts = useCallback(async (namespaceId: string) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/accounts`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setNamespaces(prev => prev.map(ns => 
+        ns['namespace-id'] === namespaceId 
+          ? { ...ns, 'namespace-accounts': data }
+          : ns
+      ));
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
     }
   }, []);
 
-  const fetchNamespaces = async () => {
+  const fetchNamespaceMethods = useCallback(async (namespaceId: string) => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/methods`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setNamespaces(prev => prev.map(ns => 
+        ns['namespace-id'] === namespaceId 
+          ? { ...ns, 'namespace-methods': data }
+          : ns
+      ));
+    } catch (error) {
+      console.error('Error fetching methods:', error);
+    }
+  }, []);
+
+  const fetchNamespaces = useCallback(async () => {
     try {
       console.log('Starting to fetch namespaces...');
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces`);
-      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -206,8 +244,8 @@ const ApiService = () => {
 
       // Transform DynamoDB formatted data - only basic namespace data
       const transformedNamespaces = rawData
-        .filter(item => item && item.data)
-        .map(item => {
+        .filter((item: NamespaceItem) => item && item.data)
+        .map((item: NamespaceItem) => {
           const data = item.data;
           return {
             'namespace-id': data['namespace-id']?.S || '',
@@ -216,11 +254,11 @@ const ApiService = () => {
             'namespace-accounts': [], // Initialize as empty, will be fetched separately
             'namespace-methods': [], // Initialize as empty, will be fetched separately
             'tags': Array.isArray(data['tags']?.L) 
-              ? data['tags'].L.map((tag: any) => tag.S || '')
+              ? data['tags'].L.map((tag: TagItem) => tag.S || '')
               : []
           };
         })
-        .filter(namespace => namespace['namespace-id'] && namespace['namespace-name']);
+        .filter((namespace: TransformedNamespace) => namespace['namespace-id'] && namespace['namespace-name']);
 
       // console.log('Transformed namespaces:', transformedNamespaces);
       
@@ -239,94 +277,16 @@ const ApiService = () => {
       console.error('Error in fetchNamespaces:', error);
       setNamespaces([]);
     }
-  };
+  }, [fetchNamespaceAccounts, fetchNamespaceMethods]);
 
-  const fetchNamespaceAccounts = async (namespaceId: string) => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/accounts`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const accountsData = await response.json();
-      // console.log(`Accounts for namespace ${namespaceId}:`, accountsData);
-
-      setNamespaces(currentNamespaces => {
-        return currentNamespaces.map(namespace => {
-          if (namespace['namespace-id'] === namespaceId) {
-            return {
-              ...namespace,
-              'namespace-accounts': accountsData // You'll need to transform this based on your API response
-            };
-          }
-          return namespace;
-        });
-      });
-    } catch (error) {
-      console.error(`Error fetching accounts for namespace ${namespaceId}:`, error);
+  useEffect(() => {
+    console.log('Fetching namespaces');
+    fetchNamespaces();
+    const savedHistory = localStorage.getItem('apiRequestHistory');
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
     }
-  };
-
-  const fetchNamespaceMethods = async (namespaceId: string) => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces/${namespaceId}/methods`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const rawData = await response.json();
-      // console.log(`Raw methods data for namespace ${namespaceId}:`, rawData);
-
-      // Transform methods data with correct property names
-      const transformedMethods = rawData.map((method: any) => ({
-        'namespace-method-id': method['namespace-method-id'] || '',
-        'namespace-method-name': method['namespace-method-name'] || '',
-        'namespace-method-type': method['namespace-method-type'] || 'GET',
-        'namespace-method-url-override': method['namespace-method-url-override'] || '',
-        'namespace-method-queryParams': Array.isArray(method['namespace-method-queryParams']) 
-          ? method['namespace-method-queryParams']
-          : [],
-        'namespace-method-header': Array.isArray(method['namespace-method-header'])
-          ? method['namespace-method-header']
-          : [],
-        'save-data': method['save-data'] || false
-      }))
-      .filter((method: any) => method['namespace-method-id'] && method['namespace-method-name']);
-
-      // console.log(`Transformed methods for namespace ${namespaceId}:`, transformedMethods);
-
-      setNamespaces(currentNamespaces => {
-        return currentNamespaces.map(namespace => {
-          if (namespace['namespace-id'] === namespaceId) {
-            return {
-              ...namespace,
-              'namespace-methods': transformedMethods
-            };
-          }
-          return namespace;
-        });
-      });
-    } catch (error) {
-      console.error(`Error fetching methods for namespace ${namespaceId}:`, error);
-    }
-  };
-
-  // Helper function to extract DynamoDB values
-  const extractDynamoValue = (dynamoObj: DynamoDBValue): unknown => {
-    if (!dynamoObj) return null;
-    if (dynamoObj.S) return dynamoObj.S;
-    if (dynamoObj.N) return Number(dynamoObj.N);
-    if (dynamoObj.BOOL !== undefined) return dynamoObj.BOOL;
-    if (dynamoObj.L) return dynamoObj.L.map(extractDynamoValue);
-    if (dynamoObj.M) {
-      const result: Record<string, unknown> = {};
-      Object.entries(dynamoObj.M).forEach(([key, value]) => {
-        result[key] = extractDynamoValue(value);
-      });
-      return result;
-    }
-    return null;
-  };
+  }, [fetchNamespaces]);
 
   // Add a debug effect to log namespace state changes
   useEffect(() => {
@@ -478,7 +438,6 @@ const ApiService = () => {
     }
 
     setIsLoading(true);
-    setCurrentExecutionId(null);
     
     try {
       const endpoint = isPaginated
@@ -549,7 +508,6 @@ const ApiService = () => {
 
       if (responseData.data?.executionId) {
         console.log('Execution ID:', responseData.data.executionId);
-        setCurrentExecutionId(responseData.data.executionId);
         localStorage.setItem('currentExecutionId', responseData.data.executionId);
       }
 
@@ -847,7 +805,7 @@ const ApiService = () => {
                 >
                   <option key="namespace-default" value="">Select Namespace</option>
                   {Array.isArray(namespaces) && namespaces.length > 0 ? (
-                    namespaces.map((namespace, index) => (
+                    namespaces.map((namespace) => (
                       <option 
                         key={`namespace-${namespace['namespace-id']}`}
                         value={namespace['namespace-id']}
@@ -1057,14 +1015,14 @@ const ApiService = () => {
                         <input
                           type="text"
                           value={header.key}
-                          onChange={(e) => handleHeaderKeyChange(header, index)}
+                          onChange={() => handleHeaderKeyChange(header, index)}
                           className="flex-1 p-2 border border-gray-200 rounded"
                           placeholder="Key"
                         />
                         <input
                           type="text"
                           value={header.value}
-                          onChange={(e) => handleHeaderValueChange(header, index)}
+                          onChange={() => handleHeaderValueChange(header, index)}
                           className="flex-1 p-2 border border-gray-200 rounded"
                           placeholder="Value"
                         />

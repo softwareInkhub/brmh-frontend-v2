@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { ChevronDown, ChevronRight } from 'react-feather';
 import { useSearchParams } from 'next/navigation';
 
@@ -117,7 +117,7 @@ const ExecutionsContent = () => {
   };
 
   // Function to clear execution ID from URL and localStorage
-  const clearExecutionId = () => {
+  const clearExecutionId = useCallback(() => {
     // Clear from localStorage
     localStorage.removeItem('currentExecutionId');
     // Clear from URL
@@ -126,10 +126,10 @@ const ExecutionsContent = () => {
     window.history.replaceState({}, '', url);
     // Clear from state
     setCurrentExecutionId(null);
-  };
+  }, []);
 
   // Function to fetch execution logs for a specific execution
-  const fetchExecutionLogs = async () => {
+  const fetchExecutionLogs = useCallback(async () => {
     if (!currentExecutionId) return;
 
     try {
@@ -192,7 +192,7 @@ const ExecutionsContent = () => {
       setIsPolling(false);
       clearExecutionId(); // Clear execution ID on error
     }
-  };
+  }, [currentExecutionId, retryCount, clearExecutionId, MAX_RETRIES]);
 
   // Polling effect
   useEffect(() => {
@@ -211,7 +211,7 @@ const ExecutionsContent = () => {
       // Reset retry counter when polling stops
       setRetryCount(0);
     };
-  }, [isPolling, currentExecutionId]);
+  }, [isPolling, currentExecutionId, fetchExecutionLogs]);
 
   // Function to get status color
   const getStatusColor = (status?: string) => {
