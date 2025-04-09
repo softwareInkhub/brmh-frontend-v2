@@ -223,7 +223,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
 
   const fetchPinterestToken = useCallback(async (code: string, accountDetails: PinterestAccountDetails) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/pinterest/token`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/pinterest/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -663,6 +663,20 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Add test button functionality
+                          const baseUrl = account['namespace-account-url-override'] || 
+                            (namespace ? namespace['namespace-url'] : '');
+                          const url = `${baseUrl}${account['namespace-account-url-override'] ? '' : account['namespace-account-name']}`;
+                          window.open(url, '_blank');
+                        }}
+                        className="p-1.5 text-gray-600 hover:text-green-600 rounded-lg hover:bg-green-50"
+                        title="Test Account"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                      </button>
+                      <button
                         onClick={() => handleOAuthRedirect(account)}
                         className="p-1.5 text-gray-600 hover:text-blue-600 rounded-lg hover:bg-blue-50 flex items-center gap-1"
                         title="Fetch Token"
@@ -766,6 +780,20 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
                       <p className="text-sm text-gray-600 mt-1">ID: {method['namespace-method-id']}</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Add test button functionality
+                          const baseUrl = method['namespace-method-url-override'] || 
+                            (namespace ? namespace['namespace-url'] : '');
+                          const url = `${baseUrl}${method['namespace-method-url-override'] ? '' : method['namespace-method-name']}`;
+                          window.open(url, '_blank');
+                        }}
+                        className="p-1.5 text-gray-600 hover:text-green-600 rounded-lg hover:bg-green-50"
+                        title="Test Method"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                      </button>
                       <button
                         onClick={() => handleEditMethod(method)}
                         className="p-1.5 text-gray-600 hover:text-blue-600 rounded-lg hover:bg-blue-50"

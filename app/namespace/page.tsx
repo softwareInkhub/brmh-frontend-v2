@@ -1,22 +1,22 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, MouseEvent, SetStateAction, useMemo } from 'react';
 import { NamespaceInput } from '../types';
 import { 
   Plus, 
   Trash2, 
   Edit2, 
-  Globe, 
   Database, 
   Save, 
   Key, 
   Users, 
   Search, 
-  Shield,
-  Settings,
   Code,
-  User
+  User,
+  Play
 } from 'react-feather';
-import { toast } from 'react-hot-toast';
+import { toast, Toaster } from 'react-hot-toast';
+import MethodTestModal from '../components/MethodTestModal';
+import { log } from 'console';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
@@ -195,6 +195,9 @@ const NamespacePage = () => {
   // Add new state variables after other state declarations
   const [showAccountSelector, setShowAccountSelector] = useState(false);
   const [methodForTable, setMethodForTable] = useState<Method | null>(null);
+
+  const [isMethodTestModalOpen, setIsMethodTestModalOpen] = useState(false);
+  const [testingMethod, setTestingMethod] = useState<any>(null);
 
   // Filter functions
   const filteredNamespaces = namespaces.filter(namespace => {
@@ -588,8 +591,6 @@ const NamespacePage = () => {
 
   const handleUpdateAccount = async () => {
     try {
-      if (!editingAccount) return;
-
       // Validate required fields
       if (!editFormData.account['namespace-account-name']) {
         alert('Account name is required');
@@ -604,7 +605,7 @@ const NamespacePage = () => {
           value: header.value.trim()
         }));
 
-      const cleanedVariables = editFormData.account['variables']
+      const cleanedVariables = editFormData.account.variables
         .filter(variable => variable.key && variable.value)
         .map(variable => ({
           key: variable.key.trim(),
@@ -623,82 +624,100 @@ const NamespacePage = () => {
         'tags': cleanedTags
       };
 
-      console.log('Current editing account:', editingAccount);
-      console.log('Edit form data:', editFormData.account);
-      console.log('Cleaned payload for update:', payload);
-      console.log('Account ID:', editingAccount['namespace-account-id']);
+      const isCreating = !editingAccount;
+      const url = isCreating 
+        ? `${API_BASE_URL}/api/namespaces/${selectedNamespace?.['namespace-id']}/accounts`
+        : `${API_BASE_URL}/api/accounts/${editingAccount?.['namespace-account-id']}`;
 
-      const response = await fetch(`${API_BASE_URL}/api/accounts/${editingAccount['namespace-account-id']}`, {
-        method: 'PUT',
+      console.log(`[Account ${isCreating ? 'Create' : 'Update'}] Request to: ${url}`);
+      
+      // Create a copy of the account with our updated values
+      let updatedLocalAccount: Account;
+      
+      if (isCreating) {
+        // For new accounts, we'll get the ID from the response
+        updatedLocalAccount = {
+          'namespace-id': selectedNamespace?.['namespace-id'] || '',
+          'namespace-account-id': '', // Will be filled by server
+          'namespace-account-name': payload['namespace-account-name'],
+          'namespace-account-url-override': payload['namespace-account-url-override'] || '',
+          'namespace-account-header': payload['namespace-account-header'],
+          'variables': payload['variables'],
+          'tags': payload['tags']
+        };
+      } else if (editingAccount) {
+        // For existing accounts, update local fields while preserving ID
+        updatedLocalAccount = {
+          ...editingAccount,
+          'namespace-account-name': payload['namespace-account-name'],
+          'namespace-account-url-override': payload['namespace-account-url-override'] || editingAccount['namespace-account-url-override'] || '',
+          'namespace-account-header': payload['namespace-account-header'],
+          'variables': payload['variables'],
+          'tags': payload['tags']
+        };
+      } else {
+        throw new Error("Invalid state: Missing editing account");
+      }
+
+      // Make the API request
+      const response = await fetch(url, {
+        method: isCreating ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      console.log('Update account response status:', response.status);
-
-      if (response.status === 404) {
-        throw new Error('Account not found');
-      }
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error('Error response:', errorData);
-        if (response.status === 500) {
-          throw new Error('Server error occurred while updating account');
+        const errorText = await response.text();
+        throw new Error(`Failed to ${isCreating ? 'create' : 'update'} account (${response.status}): ${errorText}`);
+      }
+
+      // If creating, try to get ID from response
+      if (isCreating) {
+        try {
+          const data = await response.json();
+          if (data && data['namespace-account-id']) {
+            updatedLocalAccount['namespace-account-id'] = data['namespace-account-id'];
+          }
+        } catch (e) {
+          console.warn("Could not parse account ID from creation response");
         }
-        throw new Error(errorData?.message || `Failed to update account (${response.status})`);
       }
 
-      const updatedAccount = await response.json();
-      console.log('Updated account data:', updatedAccount);
-
-      // Verify the update was successful by comparing sent and received data
-      const fieldsToCompare = ['namespace-account-name', 'namespace-account-url-override', 'tags'] as const;
-      type FieldsToCompare = typeof fieldsToCompare[number];
-      
-      const differences = fieldsToCompare.filter(field => 
-        JSON.stringify(payload[field]) !== JSON.stringify(updatedAccount[field])
-      );
-      
-      if (differences.length > 0) {
-        console.warn('Differences detected between sent and received data:', {
-          fields: differences,
-          sent: differences.map(field => ({ [field]: payload[field as FieldsToCompare] })),
-          received: differences.map(field => ({ [field]: updatedAccount[field] }))
-        });
+      // Update state with our local copy (optimistic update)
+      if (isCreating) {
+        if (updatedLocalAccount['namespace-account-id']) {
+          // Only add to list if we have an ID
+          setAccounts(prev => [...prev, updatedLocalAccount]);
+        }
+      } else {
+        setAccounts(prev => prev.map(acc => 
+          acc['namespace-account-id'] === editingAccount?.['namespace-account-id'] 
+            ? updatedLocalAccount 
+            : acc
+        ));
       }
 
-      // Update the accounts list with the updated account
-      setAccounts(accounts.map(acc => 
-        acc['namespace-account-id'] === editingAccount['namespace-account-id'] ? updatedAccount : acc
-      ));
+      // Reset form state
       setIsEditingAccount(false);
       setEditingAccount(null);
       
-      // Refresh accounts list
+      toast.success(`Account ${isCreating ? 'created' : 'updated'} successfully!`);
+      
+      // Refresh the data from server to ensure consistency
       if (selectedNamespace) {
-        await fetchNamespaceDetails(selectedNamespace['namespace-id']);
-        
-        // Verify the account was updated in the fetched data
-        const fetchedAccount = accounts.find(acc => acc['namespace-account-id'] === editingAccount['namespace-account-id']);
-        if (fetchedAccount) {
-          console.log('Account after refresh:', fetchedAccount);
-        } else {
-          console.warn('Updated account not found in refreshed data');
-        }
+        console.log("Refreshing namespace details");
+        fetchNamespaceDetails(selectedNamespace['namespace-id']);
       }
     } catch (error) {
-      console.error('Error updating account:', error);
-      alert('Failed to update account: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Error handling account:', error);
+      toast.error(`Failed to ${editingAccount ? 'update' : 'create'} account: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   const handleUpdateMethod = async () => {
     try {
-      if (!editingMethod) return;
-
       // Validate required fields
       if (!editFormData.method['namespace-method-name'] || !editFormData.method['namespace-method-type']) {
         alert('Method name and type are required');
@@ -731,97 +750,109 @@ const NamespacePage = () => {
         'namespace-method-queryParams': cleanedQueryParams,
         'namespace-method-header': cleanedHeaders,
         'save-data': editFormData.method['save-data'],
-        'isInitialized': editingMethod.isInitialized || false,
+        'isInitialized': editingMethod?.isInitialized || false,
         'tags': cleanedTags.length > 0 ? cleanedTags : undefined
       };
 
-      console.log('Current editing method:', editingMethod);
-      console.log('Edit form data:', editFormData.method);
-      console.log('Cleaned payload for update:', payload);
-      console.log('Method ID:', editingMethod['namespace-method-id']);
+      const isCreating = !editingMethod;
+      const url = isCreating 
+        ? `${API_BASE_URL}/api/namespaces/${selectedNamespace?.['namespace-id']}/methods`
+        : `${API_BASE_URL}/api/methods/${editingMethod?.['namespace-method-id']}`;
 
-      const response = await fetch(`${API_BASE_URL}/api/methods/${editingMethod['namespace-method-id']}`, {
-        method: 'PUT',
+      console.log(`[Method ${isCreating ? 'Create' : 'Update'}] Request to: ${url}`);
+      
+      // Create a copy of the method with our updated values
+      let updatedLocalMethod: Method;
+      
+      if (isCreating) {
+        // For new methods, we'll get the ID from the response
+        updatedLocalMethod = {
+          'namespace-id': selectedNamespace?.['namespace-id'] || '',
+          'namespace-method-id': '', // Will be filled by server
+          'namespace-method-name': payload['namespace-method-name'],
+          'namespace-method-type': payload['namespace-method-type'],
+          'namespace-method-url-override': payload['namespace-method-url-override'] || '',
+          'namespace-method-queryParams': payload['namespace-method-queryParams'],
+          'namespace-method-header': payload['namespace-method-header'],
+          'save-data': payload['save-data'],
+          'isInitialized': payload['isInitialized'],
+          'tags': payload['tags'] || [],
+          'sample-request': {},
+          'sample-response': {},
+          'request-schema': {},
+          'response-schema': {}
+        };
+      } else if (editingMethod) {
+        // For existing methods, update fields while preserving ID and other data
+        updatedLocalMethod = {
+          ...editingMethod,
+          'namespace-method-name': payload['namespace-method-name'],
+          'namespace-method-type': payload['namespace-method-type'],
+          'namespace-method-url-override': payload['namespace-method-url-override'] || editingMethod['namespace-method-url-override'],
+          'namespace-method-queryParams': payload['namespace-method-queryParams'],
+          'namespace-method-header': payload['namespace-method-header'],
+          'save-data': payload['save-data'],
+          'isInitialized': payload['isInitialized'],
+          'tags': payload['tags'] || editingMethod['tags']
+        };
+      } else {
+        throw new Error("Invalid state: Missing editing method");
+      }
+
+      // Make the API request
+      const response = await fetch(url, {
+        method: isCreating ? 'POST' : 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      console.log('Update method response status:', response.status);
-      console.log('Request payload:', JSON.stringify(payload, null, 2));
-
-      if (response.status === 404) {
-        throw new Error('Method not found');
-      }
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response text:', errorText);
-        let errorData;
+        throw new Error(`Failed to ${isCreating ? 'create' : 'update'} method (${response.status}): ${errorText}`);
+      }
+
+      // If creating, try to get ID from response
+      if (isCreating) {
         try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          console.error('Failed to parse error response as JSON');
+          const data = await response.json();
+          if (data && data['namespace-method-id']) {
+            updatedLocalMethod['namespace-method-id'] = data['namespace-method-id'];
+          }
+        } catch (e) {
+          console.warn("Could not parse method ID from creation response");
         }
-        console.error('Error response:', errorData);
-        
-        if (response.status === 400) {
-          throw new Error(`Bad request: ${errorText || 'Invalid method data'}`);
-        }
-        if (response.status === 500) {
-          throw new Error('Server error occurred while updating method');
-        }
-        throw new Error(errorData?.message || `Failed to update method (${response.status})`);
       }
 
-      const updatedMethod = await response.json();
-      console.log('Updated method:', updatedMethod);
-
-      // Verify the update was successful by comparing sent and received data
-      const fieldsToCompare = [
-        'namespace-method-name',
-        'namespace-method-type',
-        'namespace-method-url-override',
-        'save-data',
-        'isInitialized'
-      ] as const;
-      
-      const differences = fieldsToCompare.filter(field => 
-        JSON.stringify(payload[field]) !== JSON.stringify(updatedMethod[field])
-      );
-      
-      if (differences.length > 0) {
-        console.warn('Differences detected between sent and received data:', {
-          fields: differences,
-          sent: differences.map(field => ({ [field]: payload[field] })),
-          received: differences.map(field => ({ [field]: updatedMethod[field] }))
-        });
+      // Update state with our local copy (optimistic update)
+      if (isCreating) {
+        if (updatedLocalMethod['namespace-method-id']) {
+          // Only add to list if we have an ID
+          setMethods(prev => [...prev, updatedLocalMethod]);
+        }
+      } else {
+        setMethods(prev => prev.map(m => 
+          m['namespace-method-id'] === editingMethod?.['namespace-method-id'] 
+            ? updatedLocalMethod 
+            : m
+        ));
       }
 
-      // Update the methods list with the updated method
-      setMethods(methods.map(m => 
-        m['namespace-method-id'] === editingMethod['namespace-method-id'] 
-          ? updatedMethod : m
-      ));
+      // Reset form state
       setIsEditingMethod(false);
       setEditingMethod(null);
-
-      // Refresh methods list
+      
+      toast.success(`Method ${isCreating ? 'created' : 'updated'} successfully!`);
+      
+      // Refresh the data from server to ensure consistency
       if (selectedNamespace) {
-        await fetchNamespaceDetails(selectedNamespace['namespace-id']);
-        
-        // Verify the method was updated in the fetched data
-        const fetchedMethod = methods.find(m => m['namespace-method-id'] === editingMethod['namespace-method-id']);
-        if (fetchedMethod) {
-          console.log('Method after refresh:', fetchedMethod);
-        } else {
-          console.warn('Updated method not found in refreshed data');
-        }
+        console.log("Refreshing namespace details");
+        fetchNamespaceDetails(selectedNamespace['namespace-id']);
       }
     } catch (error) {
-      console.error('Error updating method:', error);
-      alert('Failed to update method: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Error handling method:', error);
+      toast.error(`Failed to ${editingMethod ? 'update' : 'create'} method: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -863,7 +894,8 @@ const NamespacePage = () => {
     try {
       setTokenProcessing(accountDetails.accountId);
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_AWS_URL}/api/pinterest/token`, {
+      // Use the correct API base URL
+      const response = await fetch(`${API_BASE_URL}/pinterest/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -877,66 +909,74 @@ const NamespacePage = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch token');
+        let errorMessage = 'Failed to fetch token';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = `${errorMessage}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
+      // Parse the token response
       const token = await response.json();
       console.log('Pinterest OAuth Token:', token);
-      
-      // Fetch current accounts and get the data directly
-      const accountsResponse = await fetch(`${API_BASE_URL}/namespaces/${selectedNamespace?.['namespace-id']}/accounts`);
-      if (!accountsResponse.ok) {
-        throw new Error('Failed to fetch accounts');
+
+      // Get the current account data
+      const accountResponse = await fetch(`${API_BASE_URL}/api/accounts/${accountDetails.accountId}`);
+      if (!accountResponse.ok) {
+        const errorText = await accountResponse.text();
+        throw new Error(`Failed to fetch account: ${errorText}`);
       }
-      
-      const accountsData = await accountsResponse.json();
-      const currentAccount = accountsData.find((a: Account) => a['namespace-account-id'] === accountDetails.accountId);
-      
-      if (currentAccount) {
-        // Create updated account data with the new token
-        const updatedAccount = {
-          ...currentAccount,
-          'namespace-account-header': [
-            ...(currentAccount['namespace-account-header'] || []).filter((h: KeyValuePair) => h.key !== 'Authorization'),
-            { key: 'Authorization', value: `Bearer ${token}` }
-          ]
-        };
+      const currentAccount = await accountResponse.json();
+      console.log('Current account data:', currentAccount);
 
-        // Update the account on the backend
-        const updateResponse = await fetch(`${API_BASE_URL}/accounts/${accountDetails.accountId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(updatedAccount)
-        });
+      // Create updated account data with the new token
+      const updatedAccount = {
+        ...currentAccount,
+        'namespace-account-header': [
+          ...(currentAccount['namespace-account-header'] || []).filter((h: KeyValuePair) => h.key !== 'Authorization'),
+          { key: 'Authorization', value: `Bearer ${token}` }
+        ]
+      };
 
-        if (!updateResponse.ok) {
-          throw new Error('Failed to update account with token');
-        }
+      console.log('Updating account with:', updatedAccount);
 
-        // Update local state with the new accounts data
-        setAccounts(accounts.map((acc) => 
+      // Update the account on the backend
+      const updateResponse = await fetch(`${API_BASE_URL}/api/accounts/${accountDetails.accountId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedAccount)
+      });
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        throw new Error(`Failed to update account with token: ${errorText}`);
+      }
+
+      // Update local state
+      setAccounts(prevAccounts => 
+        prevAccounts.map(acc => 
           acc['namespace-account-id'] === accountDetails.accountId ? updatedAccount : acc
-        ));
+        )
+      );
 
-        // Remove code from URL
-        const url = new URL(window.location.href);
-        url.searchParams.delete('code');
-        window.history.replaceState({}, '', url.toString());
+      // Remove code from URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      window.history.replaceState({}, '', url.toString());
 
-        alert('Pinterest token saved successfully!');
-      } else {
-        throw new Error('Account not found');
-      }
+      toast.success('Pinterest token saved successfully!');
     } catch (error) {
       console.error('Error fetching Pinterest token:', error);
-      alert('Failed to fetch Pinterest token. Please try again.');
+      toast.error(`Failed to fetch Pinterest token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setTokenProcessing(null);
     }
-  }, [selectedNamespace, accounts, setAccounts, setTokenProcessing]);
+  }, [setAccounts]);
 
   // Add useEffect for handling OAuth code
   useEffect(() => {
@@ -1056,12 +1096,39 @@ const NamespacePage = () => {
     fetchNamespaces();
   }, [fetchNamespaces]);
 
+  // Add the new view functions after other handler functions
+  const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+  const [viewingMethod, setViewingMethod] = useState<Method | null>(null);
+  
+  const handleViewAccount = (account: Account) => {
+    setViewingAccount(account);
+  };
+  
+  const handleViewMethod = (method: Method) => {
+    setViewingMethod(method);
+  };
+
+  // Add this new function at the component level to handle outside clicks
+  const handleOutsideClick = (e: React.MouseEvent, closeFunction: () => void) => {
+    // Only close if the click was directly on the backdrop (the outer div)
+    if (e.target === e.currentTarget) {
+      closeFunction();
+    }
+  };
+
+  // Function to handle testing a method
+  const handleTestMethod = (method: any) => {
+    setTestingMethod(method);
+    setIsMethodTestModalOpen(true);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Toaster position="top-right" />
       <div className="p-6 md:p-8 max-w-[1920px] mx-auto">
         {/* Header Section */}
-        <div className="flex items-center gap-4 mb-8">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
+          <div className="flex-1 w-full sm:w-auto">
             <div className="relative">
               <input
                 type="text"
@@ -1098,7 +1165,7 @@ const NamespacePage = () => {
               });
               setIsAddingNamespace(true);
             }}
-            className="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm hover:shadow-md flex items-center justify-center"
+            className="w-full sm:w-auto p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm hover:shadow-md flex items-center justify-center"
             title="Create Namespace"
           >
             <Plus size={20} />
@@ -1106,7 +1173,7 @@ const NamespacePage = () => {
         </div>
 
         {/* Namespaces Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3 mb-6 sm:mb-8">
           {filteredNamespaces.length > 0 ? (
             filteredNamespaces.map((namespace) => (
               <div 
@@ -1115,34 +1182,34 @@ const NamespacePage = () => {
                   selectedNamespace?.['namespace-id'] === namespace['namespace-id']
                     ? 'border-blue-500'
                     : 'border-gray-100'
-                } px-3 py-2.5 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative`}
+                } p-2 sm:p-2.5 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative`}
                 onClick={(e) => handleNamespaceClick(namespace, e)}
               >
-                <h2 className="text-sm font-medium text-gray-800 truncate pr-14 group-hover:text-blue-600 transition-colors">
+                <h2 className="text-sm font-medium text-gray-800 truncate pr-12 group-hover:text-blue-600 transition-colors">
                   {namespace['namespace-name'] || 'Unnamed Namespace'}
                 </h2>
                 <div 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1"
                 >
                   <button
                     onClick={(e) => handleEditClick(namespace, e)}
                     className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
                     title="Edit Namespace"
                   >
-                    <Edit2 size={14} />
+                    <Edit2 size={12} />
                   </button>
                   <button
                     onClick={(e) => handleDeleteNamespace(namespace['namespace-id'], e)}
                     className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
                     title="Delete Namespace"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </div>
             ))
           ) : (
-            <div className="col-span-full flex items-center justify-center py-12 text-gray-500">
+            <div className="col-span-full flex items-center justify-center py-8 sm:py-12 text-gray-500">
               <p className="text-center">No namespaces found</p>
             </div>
           )}
@@ -1150,21 +1217,21 @@ const NamespacePage = () => {
 
         {/* Accounts and Methods Section */}
         {selectedNamespace && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
             {/* Accounts Section */}
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <Users className="text-blue-600" size={24} />
-                  <h2 className="text-xl font-semibold text-gray-900">Accounts</h2>
+            <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 md:p-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Users className="text-blue-600" size={20} />
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Accounts</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-none">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="text"
                       placeholder="Search accounts..."
-                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-56"
                       value={accountSearchQuery}
                       onChange={(e) => setAccountSearchQuery(e.target.value)}
                     />
@@ -1172,8 +1239,8 @@ const NamespacePage = () => {
                   <button
                     onClick={() => {
                       setEditingAccount(null);
-                      setEditFormData({
-                        ...editFormData,
+                      setEditFormData(prevState => ({
+                        ...prevState,
                         account: {
                           'namespace-account-name': '',
                           'namespace-account-url-override': '',
@@ -1181,125 +1248,80 @@ const NamespacePage = () => {
                           'variables': [],
                           'tags': []
                         }
-                      });
-                      setIsEditingAccount(true);
+                      }));
+                      setTimeout(() => {
+                        setIsEditingAccount(true);
+                      }, 0);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
                   >
                     <Plus size={16} />
-                    Create Account
                   </button>
                 </div>
               </div>
 
-              <div className="grid gap-4">
+              {/* Accounts Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3">
                 {accountsList.map((account) => (
                   <div 
                     key={account['namespace-account-id']} 
-                    className="bg-white border border-gray-100 rounded-xl p-5 hover:shadow-lg transition-all duration-200"
+                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 sm:p-3 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
+                    onClick={() => handleViewAccount(account)}
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                            <User className="text-blue-600" size={16} />
-                          </div>
-                          <h3 className="text-lg font-semibold text-gray-900">{account['namespace-account-name']}</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 font-mono">{account['namespace-account-id']}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleOAuthRedirect(account)}
-                          className={`p-2 rounded-lg transition-all flex items-center gap-2 ${
-                            tokenProcessing === account['namespace-account-id']
-                              ? 'bg-blue-50 text-blue-600 cursor-wait'
-                              : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
-                          }`}
-                          disabled={tokenProcessing === account['namespace-account-id']}
-                          title="Fetch Token"
-                        >
-                          <Key size={16} />
-                          <span className="text-sm font-medium">
-                            {tokenProcessing === account['namespace-account-id'] ? 'Fetching...' : 'Fetch Token'}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => handleEditAccount(account)}
-                          className="p-2 text-gray-600 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-all"
-                          title="Edit Account"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAccount(account['namespace-account-id'])}
-                          className="p-2 text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-all"
-                          title="Delete Account"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mb-1.5">
+                      <User className="text-blue-600" size={12} />
                     </div>
-
-                    {account['namespace-account-url-override'] && (
-                      <div className="flex items-center gap-2 text-gray-600 mb-3 p-2 bg-gray-50 rounded-lg">
-                        <Globe size={14} />
-                        <p className="text-sm font-medium">{account['namespace-account-url-override']}</p>
-                      </div>
-                    )}
-
-                    {account['namespace-account-header'] && account['namespace-account-header'].length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Shield className="text-gray-400" size={14} />
-                          <h4 className="text-sm font-medium text-gray-700">Headers</h4>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-                          {account['namespace-account-header'].map((header, headerIndex) => (
-                            <div key={headerIndex} className="flex items-center gap-2 text-sm">
-                              <span className="font-medium text-gray-700">{header.key}:</span>
-                              <span className="text-gray-600 font-mono">{header.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {account['variables'] && account['variables'].length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Settings className="text-gray-400" size={14} />
-                          <h4 className="text-sm font-medium text-gray-700">Variables</h4>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-                          {account['variables'].map((variable, variableIndex) => (
-                            <div key={variableIndex} className="flex items-center gap-2 text-sm">
-                              <span className="font-medium text-gray-700">{variable.key}:</span>
-                              <span className="text-gray-600 font-mono">{variable.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <h3 className="text-sm font-medium text-gray-800 truncate pr-12 mb-0.5">
+                      {account['namespace-account-name']}
+                    </h3>
+                    
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditAccount(account);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
+                        title="Edit Account"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          handleDeleteAccount(account['namespace-account-id']);
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
+                        title="Delete Account"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
                 ))}
+                
+                {accountsList.length === 0 && (
+                  <div className="col-span-full flex items-center justify-center py-6 sm:py-8 text-gray-500">
+                    <p className="text-center">No accounts found</p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Methods Section */}
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <Code className="text-blue-600" size={24} />
-                  <h2 className="text-xl font-semibold text-gray-900">Methods</h2>
+            <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 md:p-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Code className="text-blue-600" size={20} />
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Methods</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-none">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="text"
                       placeholder="Search methods..."
-                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-56"
                       value={methodSearchQuery}
                       onChange={(e) => setMethodSearchQuery(e.target.value)}
                     />
@@ -1307,8 +1329,8 @@ const NamespacePage = () => {
                   <button
                     onClick={() => {
                       setEditingMethod(null);
-                      setEditFormData({
-                        ...editFormData,
+                      setEditFormData(prevState => ({
+                        ...prevState,
                         method: {
                           'namespace-method-name': '',
                           'namespace-method-type': 'GET',
@@ -1318,125 +1340,79 @@ const NamespacePage = () => {
                           'save-data': false,
                           'tags': []
                         }
-                      });
-                      setIsEditingMethod(true);
+                      }));
+                      setTimeout(() => {
+                        setIsEditingMethod(true);
+                      }, 0);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
                   >
                     <Plus size={16} />
-                    Create Method
                   </button>
                 </div>
               </div>
 
-              <div className="grid gap-4">
+              {/* Methods Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3">
                 {methodsList.map((method) => (
                   <div 
                     key={method['namespace-method-id']} 
-                    className="bg-white border border-gray-100 rounded-xl p-5 hover:shadow-lg transition-all duration-200"
+                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 sm:p-3 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
+                    onClick={() => handleViewMethod(method)}
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className={`px-3 py-1 text-xs rounded-full font-medium ${
-                            method['namespace-method-type'] === 'GET' ? 'bg-green-100 text-green-700' :
-                            method['namespace-method-type'] === 'POST' ? 'bg-blue-100 text-blue-700' :
-                            method['namespace-method-type'] === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
-                            method['namespace-method-type'] === 'DELETE' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {method['namespace-method-type']}
-                          </div>
-                          <h3 className="text-lg font-semibold text-gray-900">{method['namespace-method-name']}</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 font-mono">{method['namespace-method-id']}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleInitializeTableClick(method)}
-                          disabled={initializingTable === method['namespace-method-id']}
-                          className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium ${
-                            initializingTable === method['namespace-method-id']
-                              ? 'bg-blue-100 text-blue-700 cursor-wait'
-                              : 'bg-blue-600 text-white hover:bg-blue-700'
-                          } transition-all`}
-                        >
-                          <Database size={14} />
-                          {initializingTable === method['namespace-method-id'] ? 'Initializing...' : 'Initialize Table'}
-                        </button>
-                        <button
-                          onClick={() => handleEditMethod(method)}
-                          className="p-2 text-gray-600 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-all"
-                          title="Edit Method"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMethod(method['namespace-method-id'])}
-                          className="p-2 text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-all"
-                          title="Delete Method"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                    <div className={`inline-block px-1.5 py-0.5 text-[10px] rounded-full font-medium mb-1.5 ${
+                      method['namespace-method-type'] === 'GET' ? 'bg-green-100 text-green-700' :
+                      method['namespace-method-type'] === 'POST' ? 'bg-blue-100 text-blue-700' :
+                      method['namespace-method-type'] === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
+                      method['namespace-method-type'] === 'DELETE' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {method['namespace-method-type']}
                     </div>
-
-                    {method['namespace-method-url-override'] && (
-                      <div className="flex items-center gap-2 text-gray-600 mb-3 p-2 bg-gray-50 rounded-lg">
-                        <Globe size={14} />
-                        <p className="text-sm font-medium">{method['namespace-method-url-override']}</p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      {method['namespace-method-queryParams'] && method['namespace-method-queryParams'].length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Search className="text-gray-400" size={14} />
-                            <h4 className="text-sm font-medium text-gray-700">Query Parameters</h4>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-                            {method['namespace-method-queryParams'].map((param, paramIndex) => (
-                              <div key={paramIndex} className="flex items-center gap-2 text-sm">
-                                <span className="font-medium text-gray-700">{param.key}:</span>
-                                <span className="text-gray-600 font-mono">{param.value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {method['namespace-method-header'] && method['namespace-method-header'].length > 0 && (
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Shield className="text-gray-400" size={14} />
-                            <h4 className="text-sm font-medium text-gray-700">Headers</h4>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-                            {method['namespace-method-header'].map((header, headerIndex) => (
-                              <div key={headerIndex} className="flex items-center gap-2 text-sm">
-                                <span className="font-medium text-gray-700">{header.key}:</span>
-                                <span className="text-gray-600 font-mono">{header.value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <Save className="text-gray-400" size={14} />
-                        <span className="text-sm text-gray-600">Save Data:</span>
-                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                          method['save-data'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {method['save-data'] ? 'Yes' : 'No'}
-                        </span>
-                      </div>
+                    <h3 className="text-sm font-medium text-gray-800 truncate pr-12 mb-0.5">
+                      {method['namespace-method-name']}
+                    </h3>
+                    
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTestMethod(method);
+                        }}
+                        className="p-1 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 transition-all"
+                        title="Test Method"
+                      >
+                        <Play size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditMethod(method);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
+                        title="Edit Method"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMethod(method['namespace-method-id']);
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
+                        title="Delete Method"
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
                   </div>
                 ))}
+                
+                {methodsList.length === 0 && (
+                  <div className="col-span-full flex items-center justify-center py-6 sm:py-8 text-gray-500">
+                    <p className="text-center">No methods found</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1444,8 +1420,19 @@ const NamespacePage = () => {
 
         {/* Namespace Modal */}
         {isAddingNamespace && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={(e) => handleOutsideClick(e, () => {
+              setIsAddingNamespace(false);
+              setEditingNamespace(null);
+              setNewNamespace({
+                'namespace-name': '',
+                'namespace-url': '',
+                tags: []
+              });
+            })}
+          >
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   {editingNamespace ? 'Edit Namespace' : 'Create New Namespace'}
@@ -1528,11 +1515,20 @@ const NamespacePage = () => {
           </div>
         )}
 
-        {/* Edit Account Modal */}
-        {isEditingAccount && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4">
-              <h3 className="text-xl font-semibold mb-4">Edit Account</h3>
+        {/* Create Account Modal */}
+        {isEditingAccount && !editingAccount && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            key="create-account-modal"
+            onClick={(e) => handleOutsideClick(e, () => {
+              setIsEditingAccount(false);
+              setEditingAccount(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-semibold mb-4">
+                Create Account
+              </h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1753,6 +1749,247 @@ const NamespacePage = () => {
                   onClick={handleUpdateAccount}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
+                  Create Account
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Account Modal */}
+        {isEditingAccount && editingAccount && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            key={`edit-account-${editingAccount['namespace-account-id']}`}
+            onClick={(e) => handleOutsideClick(e, () => {
+              setIsEditingAccount(false);
+              setEditingAccount(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-semibold mb-4">
+                Edit Account
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Account Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.account['namespace-account-name']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      account: {
+                        ...editFormData.account,
+                        'namespace-account-name': e.target.value
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL Override
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.account['namespace-account-url-override']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      account: {
+                        ...editFormData.account,
+                        'namespace-account-url-override': e.target.value
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Headers
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({
+                        ...editFormData,
+                        account: {
+                          ...editFormData.account,
+                          'namespace-account-header': [...editFormData.account['namespace-account-header'], { key: '', value: '' }]
+                        }
+                      })}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      + Add Header
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {editFormData.account['namespace-account-header'].map((header, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key"
+                          value={header.key}
+                          onChange={(e) => {
+                            const updatedHeaders = [...editFormData.account['namespace-account-header']];
+                            updatedHeaders[index] = { ...header, key: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'namespace-account-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={header.value}
+                          onChange={(e) => {
+                            const updatedHeaders = [...editFormData.account['namespace-account-header']];
+                            updatedHeaders[index] = { ...header, value: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'namespace-account-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedHeaders = editFormData.account['namespace-account-header'].filter((_, i) => i !== index);
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'namespace-account-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Variables
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({
+                        ...editFormData,
+                        account: {
+                          ...editFormData.account,
+                          'variables': [...editFormData.account['variables'], { key: '', value: '' }]
+                        }
+                      })}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      + Add Variable
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {editFormData.account['variables'].map((variable, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key"
+                          value={variable.key}
+                          onChange={(e) => {
+                            const updatedVariables = [...editFormData.account['variables']];
+                            updatedVariables[index] = { ...variable, key: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'variables': updatedVariables
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={variable.value}
+                          onChange={(e) => {
+                            const updatedVariables = [...editFormData.account['variables']];
+                            updatedVariables[index] = { ...variable, value: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'variables': updatedVariables
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedVariables = editFormData.account['variables'].filter((_, i) => i !== index);
+                            setEditFormData({
+                              ...editFormData,
+                              account: {
+                                ...editFormData.account,
+                                'variables': updatedVariables
+                              }
+                            });
+                          }}
+                          className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tags (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.account.tags.join(', ')}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      account: {
+                        ...editFormData.account,
+                        'tags': e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setIsEditingAccount(false);
+                    setEditingAccount(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateAccount}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
                   Update Account
                 </button>
               </div>
@@ -1760,11 +1997,20 @@ const NamespacePage = () => {
           </div>
         )}
 
-        {/* Edit Method Modal */}
-        {isEditingMethod && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4">
-              <h3 className="text-xl font-semibold mb-4">Edit Method</h3>
+        {/* Create Method Modal */}
+        {isEditingMethod && !editingMethod && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            key="create-method-modal"
+            onClick={(e) => handleOutsideClick(e, () => {
+              setIsEditingMethod(false);
+              setEditingMethod(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-semibold mb-4">
+                Create Method
+              </h3>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1995,7 +2241,7 @@ const NamespacePage = () => {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id="save-data"
+                    id="save-data-create"
                     checked={editFormData.method['save-data']}
                     onChange={(e) => setEditFormData({
                       ...editFormData,
@@ -2006,7 +2252,7 @@ const NamespacePage = () => {
                     })}
                     className="rounded text-blue-600 focus:ring-blue-500"
                   />
-                  <label htmlFor="save-data" className="text-sm text-gray-700">
+                  <label htmlFor="save-data-create" className="text-sm text-gray-700">
                     Save Data
                   </label>
                 </div>
@@ -2025,6 +2271,287 @@ const NamespacePage = () => {
                   onClick={handleUpdateMethod}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
+                  Create Method
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Method Modal */}
+        {isEditingMethod && editingMethod && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            key={`edit-method-${editingMethod['namespace-method-id']}`}
+            onClick={(e) => handleOutsideClick(e, () => {
+              setIsEditingMethod(false);
+              setEditingMethod(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-semibold mb-4">
+                Edit Method
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Method Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.method['namespace-method-name']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      method: {
+                        ...editFormData.method,
+                        'namespace-method-name': e.target.value
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Method Type *
+                  </label>
+                  <select
+                    value={editFormData.method['namespace-method-type']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      method: {
+                        ...editFormData.method,
+                        'namespace-method-type': e.target.value
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    URL Override
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.method['namespace-method-url-override']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      method: {
+                        ...editFormData.method,
+                        'namespace-method-url-override': e.target.value
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Query Parameters
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({
+                        ...editFormData,
+                        method: {
+                          ...editFormData.method,
+                          'namespace-method-queryParams': [...editFormData.method['namespace-method-queryParams'], { key: '', value: '' }]
+                        }
+                      })}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      + Add Query Parameter
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {editFormData.method['namespace-method-queryParams'].map((param, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key"
+                          value={param.key}
+                          onChange={(e) => {
+                            const updatedParams = [...editFormData.method['namespace-method-queryParams']];
+                            updatedParams[index] = { ...param, key: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-queryParams': updatedParams
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={param.value}
+                          onChange={(e) => {
+                            const updatedParams = [...editFormData.method['namespace-method-queryParams']];
+                            updatedParams[index] = { ...param, value: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-queryParams': updatedParams
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedParams = editFormData.method['namespace-method-queryParams'].filter((_, i) => i !== index);
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-queryParams': updatedParams
+                              }
+                            });
+                          }}
+                          className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Headers
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({
+                        ...editFormData,
+                        method: {
+                          ...editFormData.method,
+                          'namespace-method-header': [...editFormData.method['namespace-method-header'], { key: '', value: '' }]
+                        }
+                      })}
+                      className="text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      + Add Header
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {editFormData.method['namespace-method-header'].map((header, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Key"
+                          value={header.key}
+                          onChange={(e) => {
+                            const updatedHeaders = [...editFormData.method['namespace-method-header']];
+                            updatedHeaders[index] = { ...header, key: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={header.value}
+                          onChange={(e) => {
+                            const updatedHeaders = [...editFormData.method['namespace-method-header']];
+                            updatedHeaders[index] = { ...header, value: e.target.value };
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedHeaders = editFormData.method['namespace-method-header'].filter((_, i) => i !== index);
+                            setEditFormData({
+                              ...editFormData,
+                              method: {
+                                ...editFormData.method,
+                                'namespace-method-header': updatedHeaders
+                              }
+                            });
+                          }}
+                          className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tags (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.method.tags.join(', ')}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      method: {
+                        ...editFormData.method,
+                        'tags': e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
+                      }
+                    })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="save-data-edit"
+                    checked={editFormData.method['save-data']}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      method: {
+                        ...editFormData.method,
+                        'save-data': e.target.checked
+                      }
+                    })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="save-data-edit" className="text-sm text-gray-700">
+                    Save Data
+                  </label>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setIsEditingMethod(false);
+                    setEditingMethod(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateMethod}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
                   Update Method
                 </button>
               </div>
@@ -2034,8 +2561,14 @@ const NamespacePage = () => {
 
         {/* Account Selection Modal */}
         {showAccountSelector && methodForTable && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4">
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={(e) => handleOutsideClick(e, () => {
+              setShowAccountSelector(false);
+              setMethodForTable(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-xl font-semibold mb-4">Select Account for Table Initialization</h3>
               <div className="max-h-[60vh] overflow-y-auto">
                 {accounts.map((account) => (
@@ -2074,7 +2607,267 @@ const NamespacePage = () => {
             </div>
           </div>
         )}
+
+        {/* View Account Modal */}
+        {viewingAccount && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={(e) => handleOutsideClick(e, () => setViewingAccount(null))}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <User className="text-blue-600" size={18} />
+                  </div>
+                  <h3 className="text-xl font-semibold">{viewingAccount['namespace-account-name']}</h3>
+                </div>
+                <button
+                  onClick={() => setViewingAccount(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-500 mb-1">ID</p>
+                  <p className="text-sm font-mono">{viewingAccount['namespace-account-id']}</p>
+                </div>
+                
+                {viewingAccount['namespace-account-url-override'] && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-500 mb-1">URL Override</p>
+                    <p className="text-sm font-mono">{viewingAccount['namespace-account-url-override']}</p>
+                  </div>
+                )}
+              </div>
+              
+              {viewingAccount['namespace-account-header'] && viewingAccount['namespace-account-header'].length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Headers</h4>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    {viewingAccount['namespace-account-header'].map((header, index) => (
+                      <div key={index} className="grid grid-cols-2 gap-2">
+                        <div className="text-sm font-medium text-gray-700">{header.key}</div>
+                        <div className="text-sm text-gray-600 font-mono truncate">{header.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {viewingAccount['variables'] && viewingAccount['variables'].length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Variables</h4>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                    {viewingAccount['variables'].map((variable, index) => (
+                      <div key={index} className="grid grid-cols-2 gap-2">
+                        <div className="text-sm font-medium text-gray-700">{variable.key}</div>
+                        <div className="text-sm text-gray-600 font-mono truncate">{variable.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {viewingAccount.tags && viewingAccount.tags.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Tags</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {viewingAccount.tags.map((tag, index) => (
+                      <span key={index} className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => handleOAuthRedirect(viewingAccount)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                >
+                  <Key size={16} />
+                  Fetch Token
+                </button>
+                <button
+                  onClick={() => {
+                    handleEditAccount(viewingAccount);
+                    setViewingAccount(null);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Edit Account
+                </button>
+                <button
+                  onClick={() => {
+                    handleDeleteAccount(viewingAccount['namespace-account-id']);
+                    setViewingAccount(null);
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* View Method Modal */}
+        {viewingMethod && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={(e) => handleOutsideClick(e, () => setViewingMethod(null))}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`px-3 py-1 text-xs rounded-full font-medium ${
+                    viewingMethod['namespace-method-type'] === 'GET' ? 'bg-green-100 text-green-700' :
+                    viewingMethod['namespace-method-type'] === 'POST' ? 'bg-blue-100 text-blue-700' :
+                    viewingMethod['namespace-method-type'] === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
+                    viewingMethod['namespace-method-type'] === 'DELETE' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {viewingMethod['namespace-method-type']}
+                  </div>
+                  <h3 className="text-xl font-semibold">{viewingMethod['namespace-method-name']}</h3>
+                </div>
+                <button
+                  onClick={() => setViewingMethod(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm text-gray-500 mb-1">ID</p>
+                  <p className="text-sm font-mono">{viewingMethod['namespace-method-id']}</p>
+                </div>
+                
+                {viewingMethod['namespace-method-url-override'] && (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-500 mb-1">URL Override</p>
+                    <p className="text-sm font-mono">{viewingMethod['namespace-method-url-override']}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {viewingMethod['namespace-method-queryParams'] && viewingMethod['namespace-method-queryParams'].length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Query Parameters</h4>
+                    <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                      {viewingMethod['namespace-method-queryParams'].map((param, index) => (
+                        <div key={index} className="grid grid-cols-2 gap-2">
+                          <div className="text-sm font-medium text-gray-700">{param.key}</div>
+                          <div className="text-sm text-gray-600 font-mono truncate">{param.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {viewingMethod['namespace-method-header'] && viewingMethod['namespace-method-header'].length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Headers</h4>
+                    <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                      {viewingMethod['namespace-method-header'].map((header, index) => (
+                        <div key={index} className="grid grid-cols-2 gap-2">
+                          <div className="text-sm font-medium text-gray-700">{header.key}</div>
+                          <div className="text-sm text-gray-600 font-mono truncate">{header.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {viewingMethod.tags && viewingMethod.tags.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Tags</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {viewingMethod.tags.map((tag, index) => (
+                      <span key={index} className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2 mb-4">
+                <Save className="text-gray-400" size={14} />
+                <span className="text-sm text-gray-600">Save Data:</span>
+                <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                  viewingMethod['save-data'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {viewingMethod['save-data'] ? 'Yes' : 'No'}
+                </span>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    handleTestMethod(viewingMethod);
+                    setViewingMethod(null);
+                  }}
+                  className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-2"
+                >
+                  <Play size={16} />
+                  Test Method
+                </button>
+                <button
+                  onClick={() => handleInitializeTableClick(viewingMethod)}
+                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-2"
+                >
+                  <Database size={16} />
+                  Initialize Table
+                </button>
+                <button
+                  onClick={() => {
+                    handleEditMethod(viewingMethod);
+                    setViewingMethod(null);
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Edit Method
+                </button>
+                <button
+                  onClick={() => {
+                    handleDeleteMethod(viewingMethod['namespace-method-id']);
+                    setViewingMethod(null);
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Method Test Modal */}
+      {testingMethod && (
+        <MethodTestModal 
+          isOpen={isMethodTestModalOpen}
+          onClose={() => setIsMethodTestModalOpen(false)}
+          namespaceId={testingMethod['namespace-id']}
+          methodId={testingMethod['namespace-method-id']}
+          methodName={testingMethod['namespace-method-name']}
+          methodType={testingMethod['namespace-method-type']}
+        />
+      )}
     </div>
   );
 };
