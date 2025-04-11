@@ -1,6 +1,5 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { apiRequest } from '../lib/queryClient';
 import { StatusLogEntry, ApiEndpoint } from '../types/index2';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/constants';

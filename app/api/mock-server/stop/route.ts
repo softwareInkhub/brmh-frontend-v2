@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Server } from 'http';
+
+interface ServerInfo {
+  server: Server;
+  port: number;
+  lastAccessed: number;
+}
 
 // Define the global type for active servers
 declare global {
-  var activeServers: Map<string, { server: any; port: number; lastAccessed: number }>;
+  // eslint-disable-next-line no-var
+  var activeServers: Map<string, ServerInfo>;
+  // eslint-disable-next-line no-var
   var recentlyClosed: Map<string, number>; // Track recently closed server IDs
 }
 
@@ -83,7 +92,7 @@ export async function POST(request: NextRequest) {
           resolve(); // Resolve anyway to avoid hanging
         }, 5000); // 5 second timeout
         
-        server.close((err: Error) => {
+        server.close((err?: Error) => {
           clearTimeout(closeTimeout);
           if (err) {
             console.error(`Error closing server ${serverId}:`, err);
@@ -132,7 +141,10 @@ export async function POST(request: NextRequest) {
 }
 
 // GET handler to list all active servers
-export async function GET(request: NextRequest) {
+export async function GET(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _request: NextRequest
+) {
   if (!global.activeServers) {
     return NextResponse.json({ activeServers: [] });
   }

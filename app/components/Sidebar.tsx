@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Settings, 
-  Server,
   ChevronRight,
   ChevronLeft,
   Code,
@@ -13,8 +12,6 @@ import {
   Activity,
   Table,
   Braces,
-  User,
-  Database,
   Menu,
   X
 } from 'lucide-react';
@@ -79,7 +76,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
-  const [isSubmenuCollapsed, setIsSubmenuCollapsed] = useState(false);
   const pathname = usePathname();
 
   // Extract the base route for checking which menu item is active
@@ -143,7 +139,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
       setActiveSubmenu(null);
     } else {
       setActiveSubmenu(menu);
-      setIsSubmenuCollapsed(false); // Always expand submenu when opening
     }
   };
 

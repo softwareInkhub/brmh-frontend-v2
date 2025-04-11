@@ -101,6 +101,8 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
   });
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editingMethod, setEditingMethod] = useState<Method | null>(null);
+  const [showAccountSelector, setShowAccountSelector] = useState(false);
+  const [methodForTable, setMethodForTable] = useState<Method | null>(null);
 
   const fetchAccounts = useCallback(async (namespaceId: string) => {
     try {
@@ -574,6 +576,12 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
     }
   };
 
+  // Add the account selection handler
+  const handleInitializeTableClick = (method: Method) => {
+    setMethodForTable(method);
+    setShowAccountSelector(true);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -869,7 +877,7 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleInitializeTable(method, namespace!);
+                            handleInitializeTableClick(method);
                           }}
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
                         >
@@ -1350,6 +1358,55 @@ const NamespaceDetailPage = ({ params }: { params: Promise<PageParams> }) => {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   {editingMethod ? 'Update Method' : 'Create Method'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Account Selector Modal */}
+        {showAccountSelector && methodForTable && (
+          <div 
+            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => handleOutsideClick(() => {
+              setShowAccountSelector(false);
+              setMethodForTable(null);
+            })}
+          >
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-semibold mb-4">Select Account for Table Initialization</h3>
+              <div className="max-h-[60vh] overflow-y-auto">
+                {namespace?.['namespace-accounts']?.map((account) => (
+                  <div
+                    key={account['namespace-account-id']}
+                    onClick={() => handleInitializeTable(methodForTable, account)}
+                    className="p-4 border border-gray-200 rounded-lg mb-2 cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{account['namespace-account-name']}</p>
+                        <p className="text-sm text-gray-600">ID: {account['namespace-account-id']}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Select
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowAccountSelector(false);
+                    setMethodForTable(null);
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

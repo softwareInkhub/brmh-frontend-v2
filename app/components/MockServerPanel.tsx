@@ -1,7 +1,7 @@
 'use client'
 import { FC, useState, useEffect } from "react";
 import { ApiEndpoint } from "../types/index2";
-import { Copy, Play, Square, ExternalLink, Server, Settings, Activity, AlertTriangle } from "lucide-react";
+import { Copy, Play, Square, ExternalLink, Server, Settings, Activity } from "lucide-react";
 
 interface MockServerPanelProps {
   apiSpec: string;

@@ -1,18 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
 interface Account {
   id: string;
   name: string;
   namespaceId: string;
-}
-
-interface Method {
-  id: string;
-  name: string;
-  namespaceId: string;
-  type: string;
-  endpoint?: string;
 }
 
 interface RequestData {
@@ -23,7 +15,7 @@ interface RequestData {
 
 interface Response {
   success: boolean;
-  data?: any;
+  data?: Record<string, unknown>;
   error?: string;
 }
 
@@ -52,7 +44,7 @@ export default function MethodTestModal({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch accounts for the given namespace
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
@@ -73,7 +65,7 @@ export default function MethodTestModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [namespaceId]);
 
   // Execute the method test
   const executeTest = async () => {
@@ -127,7 +119,7 @@ export default function MethodTestModal({
     if (isOpen) {
       fetchAccounts();
     }
-  }, [isOpen, namespaceId]);
+  }, [isOpen, fetchAccounts]);
 
   if (!isOpen) return null;
 

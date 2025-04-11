@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { createServer } from 'http';
+import { createServer, Server } from 'http';
+
+interface ServerInfo {
+  server: Server;
+  port: number;
+  lastAccessed: number;
+}
 
 // Define the global type for active servers
 declare global {
-  var activeServers: Map<string, { server: any; port: number; lastAccessed: number }>;
+  // eslint-disable-next-line no-var
+  var activeServers: Map<string, ServerInfo>;
 }
 
 // Initialize the global map if it doesn't exist
@@ -53,18 +60,19 @@ interface EndpointConfig {
   path: string;
   method: string;
   status?: number;
-  response?: any;
+  response?: unknown;
+}
+
+interface RequestBody {
+  apiSpec: string;
+  options: ServerOptions;
+  endpoints?: EndpointConfig[];
 }
 
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
-    const body = await request.json();
-    const { apiSpec, options, endpoints } = body as { 
-      apiSpec: string, 
-      options: ServerOptions,
-      endpoints?: EndpointConfig[] 
-    };
+    const { options, endpoints } = await request.json() as RequestBody;
     
     // Create the Express app
     const app = express();
@@ -78,7 +86,7 @@ export async function POST(request: NextRequest) {
     
     // Add response delay if specified
     if (options.delay > 0) {
-      app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+      app.use((req: Request, res: Response, next: NextFunction) => {
         setTimeout(next, options.delay);
       });
     }
@@ -105,7 +113,7 @@ export async function POST(request: NextRequest) {
       try {
         actualPort = port + attempt;
         await new Promise<void>((resolve, reject) => {
-          server.on('error', (err: any) => {
+          server.on('error', (err: NodeJS.ErrnoException) => {
             if (err.code === 'EADDRINUSE') {
               // Port is in use, will try next one if useAvailablePort is true
               reject(new Error(`Port ${actualPort} is already in use`));
@@ -164,16 +172,16 @@ export async function POST(request: NextRequest) {
 }
 
 // Generate routes based on endpoint configurations
-function generateSimpleRoutes(app: any, endpoints: EndpointConfig[]) {
+function generateSimpleRoutes(app: express.Application, endpoints: EndpointConfig[]) {
   // Create default test routes
-  app.get('/api/test', (req: any, res: any) => {
+  app.get('/api/test', (_req: Request, res: Response) => {
     res.status(200).json({ 
       message: 'Test successful', 
       timestamp: new Date().toISOString() 
     });
   });
   
-  app.post('/api/echo', (req: any, res: any) => {
+  app.post('/api/echo', (req: Request, res: Response) => {
     res.status(201).json({ 
       message: 'Echo successful', 
       body: req.body, 
@@ -185,7 +193,7 @@ function generateSimpleRoutes(app: any, endpoints: EndpointConfig[]) {
   endpoints.forEach(endpoint => {
     const method = endpoint.method.toLowerCase();
     if (['get', 'post', 'put', 'delete', 'patch', 'options', 'head'].includes(method)) {
-      app[method](endpoint.path, (req: any, res: any) => {
+      const routeHandler = (_req: Request, res: Response) => {
         const status = endpoint.status || 200;
         const response = endpoint.response || { 
           message: 'Success',
@@ -194,12 +202,36 @@ function generateSimpleRoutes(app: any, endpoints: EndpointConfig[]) {
           timestamp: new Date().toISOString()
         };
         res.status(status).json(response);
-      });
+      };
+
+      switch (method) {
+        case 'get':
+          app.get(endpoint.path, routeHandler);
+          break;
+        case 'post':
+          app.post(endpoint.path, routeHandler);
+          break;
+        case 'put':
+          app.put(endpoint.path, routeHandler);
+          break;
+        case 'delete':
+          app.delete(endpoint.path, routeHandler);
+          break;
+        case 'patch':
+          app.patch(endpoint.path, routeHandler);
+          break;
+        case 'options':
+          app.options(endpoint.path, routeHandler);
+          break;
+        case 'head':
+          app.head(endpoint.path, routeHandler);
+          break;
+      }
     }
   });
   
   // Add fallback route
-  app.use((req: any, res: any) => {
+  app.use((req: Request, res: Response) => {
     res.status(404).json({ 
       error: 'Not Found', 
       message: `Route ${req.path} not found`,
@@ -240,7 +272,7 @@ export async function GET(request: NextRequest) {
       // Server might be in a bad state, remove it
       try {
         serverInfo.server.close();
-      } catch (closeErr) {
+      } catch {
         // Ignore close errors
       }
       global.activeServers.delete(serverId);

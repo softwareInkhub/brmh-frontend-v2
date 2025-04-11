@@ -1,5 +1,4 @@
 "use client"
-import Header from "../components/Header";
 import InputPanel from "../components/InputPanel";
 import OutputPanel from "../components/OutputPanel";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -13,7 +12,6 @@ export default function ApiGenerator() {
   const {
     logs,
     addLog,
-    isConnected,
     swaggerUrl
   } = useWebSocket();
   

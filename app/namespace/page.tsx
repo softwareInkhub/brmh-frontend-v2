@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback, MouseEvent, SetStateAction, useMemo } from 'react';
+import React, { useState, useEffect, useCallback} from 'react';
 import { NamespaceInput } from '../types';
 import { 
   Plus, 
@@ -12,11 +12,12 @@ import {
   Search, 
   Code,
   User,
-  Play
+  Play,
+  Bell,
+  Edit
 } from 'react-feather';
 import { toast, Toaster } from 'react-hot-toast';
 import MethodTestModal from '../components/MethodTestModal';
-import { log } from 'console';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
@@ -145,6 +146,15 @@ interface HistoryEntry {
   };
 }
 
+// Add this interface with the other interfaces at the top
+interface WebhookData {
+  id: string;
+  methodId: string;
+  route: string;
+  tableName: string;
+  createdAt: string;
+}
+
 /**
  * NamespacePage Component
  * Displays a list of namespaces with their basic information and statistics
@@ -197,7 +207,12 @@ const NamespacePage = () => {
   const [methodForTable, setMethodForTable] = useState<Method | null>(null);
 
   const [isMethodTestModalOpen, setIsMethodTestModalOpen] = useState(false);
-  const [testingMethod, setTestingMethod] = useState<any>(null);
+  const [testingMethod, setTestingMethod] = useState<Method | null>(null);
+
+  const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [allWebhooks, setAllWebhooks] = useState<WebhookData[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookData[]>([]);
+  const [webhookForm, setWebhookForm] = useState({ route: '', tableName: '' });
 
   // Filter functions
   const filteredNamespaces = namespaces.filter(namespace => {
@@ -343,12 +358,9 @@ const NamespacePage = () => {
   /**
    * Handles namespace selection
    */
-  const handleNamespaceClick = (namespace: Namespace, event: React.MouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (!target.closest('button')) {
-      setSelectedNamespace(namespace);
-      fetchNamespaceDetails(namespace['namespace-id']);
-    }
+  const handleNamespaceClick = (namespace: Namespace) => {
+    setSelectedNamespace(namespace);
+    fetchNamespaceDetails(namespace['namespace-id']);
   };
 
   /**
@@ -431,10 +443,10 @@ const NamespacePage = () => {
   /**
    * Handles namespace deletion
    */
-  const handleDeleteNamespace = async (namespaceId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleDeleteNamespace = async (namespaceId: string) => {
     if (window.confirm('Are you sure you want to delete this namespace?')) {
       try {
+        setTokenProcessing(namespaceId); // Add loading state
         const response = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}`, {
           method: 'DELETE',
         });
@@ -447,6 +459,8 @@ const NamespacePage = () => {
       } catch (error) {
         console.error('Error deleting namespace:', error);
         alert('Failed to delete namespace');
+      } finally {
+        setTokenProcessing(null);
       }
     }
   };
@@ -457,6 +471,9 @@ const NamespacePage = () => {
   const handleEditNamespace = async () => {
     try {
       if (!editingNamespace) return;
+
+      // Show loading state
+      setTokenProcessing(editingNamespace['namespace-id']);
 
       const response = await fetch(`${API_BASE_URL}/api/namespaces/${editingNamespace['namespace-id']}`, {
         method: 'PUT',
@@ -488,14 +505,15 @@ const NamespacePage = () => {
     } catch (error) {
       console.error('Error updating namespace:', error);
       alert('Failed to update namespace');
+    } finally {
+      setTokenProcessing(null);
     }
   };
 
   /**
    * Opens the edit form for a namespace
    */
-  const handleEditClick = (namespace: Namespace, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleEditClick = (namespace: Namespace) => {
     setEditingNamespace(namespace);
     setNewNamespace({
       'namespace-name': namespace['namespace-name'],
@@ -531,7 +549,6 @@ const NamespacePage = () => {
    * Opens the edit form for an account
    */
   const handleEditAccount = (account: Account) => {
-    console.log('Editing account:', account);
     setEditingAccount(account);
     setEditFormData({
       ...editFormData,
@@ -572,7 +589,6 @@ const NamespacePage = () => {
    * Opens the edit form for a method
    */
   const handleEditMethod = (method: Method) => {
-    console.log('Editing method:', method);
     setEditingMethod(method);
     setEditFormData({
       ...editFormData,
@@ -595,6 +611,11 @@ const NamespacePage = () => {
       if (!editFormData.account['namespace-account-name']) {
         alert('Account name is required');
         return;
+      }
+
+      // Show loading state if editing
+      if (editingAccount) {
+        setTokenProcessing(editingAccount['namespace-account-id']);
       }
 
       // Clean up the data before sending
@@ -680,7 +701,7 @@ const NamespacePage = () => {
           if (data && data['namespace-account-id']) {
             updatedLocalAccount['namespace-account-id'] = data['namespace-account-id'];
           }
-        } catch (e) {
+        } catch {
           console.warn("Could not parse account ID from creation response");
         }
       }
@@ -713,6 +734,8 @@ const NamespacePage = () => {
     } catch (error) {
       console.error('Error handling account:', error);
       toast.error(`Failed to ${editingAccount ? 'update' : 'create'} account: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setTokenProcessing(null);
     }
   };
 
@@ -722,6 +745,11 @@ const NamespacePage = () => {
       if (!editFormData.method['namespace-method-name'] || !editFormData.method['namespace-method-type']) {
         alert('Method name and type are required');
         return;
+      }
+
+      // Show loading state if editing
+      if (editingMethod) {
+        setInitializingTable(editingMethod['namespace-method-id']);
       }
 
       // Clean up the data before sending
@@ -820,7 +848,7 @@ const NamespacePage = () => {
           if (data && data['namespace-method-id']) {
             updatedLocalMethod['namespace-method-id'] = data['namespace-method-id'];
           }
-        } catch (e) {
+        } catch {
           console.warn("Could not parse method ID from creation response");
         }
       }
@@ -853,11 +881,13 @@ const NamespacePage = () => {
     } catch (error) {
       console.error('Error handling method:', error);
       toast.error(`Failed to ${editingMethod ? 'update' : 'create'} method: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setInitializingTable(null);
     }
   };
 
   // Add OAuth redirect handler
-  const handleOAuthRedirect = useCallback(async (account: Account) => {
+  const handleOAuthRedirect = (account: Account) => {
     console.log("Handling OAuth redirect for account:", account);
     
     const variables = account['variables'] || [];
@@ -888,7 +918,7 @@ const NamespacePage = () => {
 
     // Redirect to Pinterest OAuth
     window.location.href = authUrl.toString();
-  }, []);
+  };
 
   const handleFetchToken = useCallback(async (code: string, accountDetails: AccountDetails) => {
     try {
@@ -913,7 +943,7 @@ const NamespacePage = () => {
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
-        } catch (e) {
+        } catch {
           errorMessage = `${errorMessage}: ${response.statusText}`;
         }
         throw new Error(errorMessage);
@@ -997,6 +1027,7 @@ const NamespacePage = () => {
   const handleInitializeTableClick = (method: Method) => {
     setMethodForTable(method);
     setShowAccountSelector(true);
+    setViewingMethod(null);
   };
 
   // Update the handleInitializeTable function
@@ -1106,21 +1137,143 @@ const NamespacePage = () => {
   
   const handleViewMethod = (method: Method) => {
     setViewingMethod(method);
+    // Filter webhooks for this method from allWebhooks
+    const methodWebhooks = allWebhooks.filter(webhook => webhook.methodId === method['namespace-method-id']);
+    console.log('Method ID:', method['namespace-method-id']);
+    console.log('All webhooks:', allWebhooks);
+    console.log('Filtered webhooks for method:', methodWebhooks);
+    setWebhooks(methodWebhooks);
   };
 
   // Add this new function at the component level to handle outside clicks
-  const handleOutsideClick = (e: React.MouseEvent, closeFunction: () => void) => {
-    // Only close if the click was directly on the backdrop (the outer div)
-    if (e.target === e.currentTarget) {
-      closeFunction();
-    }
+  const handleOutsideClick = (closeFunction: () => void) => {
+    closeFunction();
   };
 
   // Function to handle testing a method
-  const handleTestMethod = (method: any) => {
+  const handleTestMethod = (method: Method) => {
     setTestingMethod(method);
     setIsMethodTestModalOpen(true);
   };
+
+  const handleAddWebhook = async () => {
+    if (!webhookForm.route || !webhookForm.tableName) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      // Create webhook data
+      const webhookData: WebhookData = {
+        id: crypto.randomUUID(),
+        methodId: viewingMethod?.['namespace-method-id'] || '',
+        route: webhookForm.route,
+        tableName: webhookForm.tableName,
+        createdAt: new Date().toISOString()
+      };
+
+      // Save to DynamoDB using backend API
+      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/webhooks/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: webhookData.id,
+          methodId: webhookData.methodId,
+          route: webhookData.route,
+          tableName: webhookData.tableName,
+          createdAt: webhookData.createdAt
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save webhook');
+      }
+
+      // Update local state
+      setAllWebhooks(prev => [...prev, webhookData]);
+      setWebhooks(prev => [...prev, webhookData]);
+      setWebhookForm({ route: '', tableName: '' });
+      setShowWebhookForm(false);
+      toast.success('Webhook added successfully');
+    } catch (error) {
+      console.error('Error adding webhook:', error);
+      toast.error('Failed to add webhook: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  const handleDeleteWebhook = async (webhookId: string) => {
+    try {
+      // Delete from DynamoDB using backend API
+      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/webhooks/items/${webhookId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          Key: {
+            id: {
+              S: webhookId
+            }
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to delete webhook');
+      }
+
+      // Update local state
+      setAllWebhooks(prev => prev.filter(webhook => webhook.id !== webhookId));
+      setWebhooks(prev => prev.filter(webhook => webhook.id !== webhookId));
+      toast.success('Webhook deleted successfully');
+    } catch (error) {
+      console.error('Error deleting webhook:', error);
+      toast.error('Failed to delete webhook: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  const fetchAllWebhooks = async () => {
+    try {
+      console.log('Fetching all webhooks...');
+      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/webhooks/items`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch webhooks');
+      }
+
+      const data = await response.json();
+      console.log('Raw webhook data from API:', data);
+      
+      // Transform DynamoDB items to WebhookData, handling the DynamoDB attribute format
+      const webhooksList: WebhookData[] = (data.items || []).map((item: any) => ({
+        id: item.id.S,
+        methodId: item.methodId.S,
+        route: item.route.S,
+        tableName: item.tableName.S,
+        createdAt: item.createdAt.S
+      }));
+
+      console.log('Transformed webhooks list:', webhooksList);
+      setAllWebhooks(webhooksList);
+    } catch (error) {
+      console.error('Error fetching webhooks:', error);
+      toast.error('Failed to fetch webhooks: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Add useEffect to fetch all webhooks when component mounts
+  useEffect(() => {
+    console.log('Component mounted, fetching webhooks...');
+    fetchAllWebhooks();
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -1173,7 +1326,7 @@ const NamespacePage = () => {
         </div>
 
         {/* Namespaces Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3 mb-6 sm:mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 mb-8">
           {filteredNamespaces.length > 0 ? (
             filteredNamespaces.map((namespace) => (
               <div 
@@ -1182,25 +1335,31 @@ const NamespacePage = () => {
                   selectedNamespace?.['namespace-id'] === namespace['namespace-id']
                     ? 'border-blue-500'
                     : 'border-gray-100'
-                } p-2 sm:p-2.5 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative`}
-                onClick={(e) => handleNamespaceClick(namespace, e)}
+                } px-2.5 py-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative`}
+                onClick={() => handleNamespaceClick(namespace)}
               >
-                <h2 className="text-sm font-medium text-gray-800 truncate pr-12 group-hover:text-blue-600 transition-colors">
+                <h2 className="text-xs sm:text-sm font-medium text-gray-800 truncate pr-12 group-hover:text-blue-600 transition-colors">
                   {namespace['namespace-name'] || 'Unnamed Namespace'}
                 </h2>
                 <div 
                   className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1"
                 >
                   <button
-                    onClick={(e) => handleEditClick(namespace, e)}
-                    className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
+                    onClick={() => handleEditClick(namespace)}
+                    className={`p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all ${
+                      tokenProcessing === namespace['namespace-id'] ? 'opacity-50 cursor-wait' : ''
+                    }`}
+                    disabled={tokenProcessing === namespace['namespace-id']}
                     title="Edit Namespace"
                   >
                     <Edit2 size={12} />
                   </button>
                   <button
-                    onClick={(e) => handleDeleteNamespace(namespace['namespace-id'], e)}
-                    className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
+                    onClick={() => handleDeleteNamespace(namespace['namespace-id'])}
+                    className={`p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all ${
+                      tokenProcessing === namespace['namespace-id'] ? 'opacity-50 cursor-wait' : ''
+                    }`}
+                    disabled={tokenProcessing === namespace['namespace-id']}
                     title="Delete Namespace"
                   >
                     <Trash2 size={12} />
@@ -1209,7 +1368,7 @@ const NamespacePage = () => {
               </div>
             ))
           ) : (
-            <div className="col-span-full flex items-center justify-center py-8 sm:py-12 text-gray-500">
+            <div className="col-span-full flex items-center justify-center py-12 text-gray-500">
               <p className="text-center">No namespaces found</p>
             </div>
           )}
@@ -1217,16 +1376,16 @@ const NamespacePage = () => {
 
         {/* Accounts and Methods Section */}
         {selectedNamespace && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Accounts Section */}
-            <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 md:p-6">
+            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <Users className="text-blue-600" size={20} />
                   <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Accounts</h2>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:flex-none">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="text"
@@ -1238,7 +1397,9 @@ const NamespacePage = () => {
                   </div>
                   <button
                     onClick={() => {
+                      // First explicitly reset the editing state
                       setEditingAccount(null);
+                      // Then reset the form data
                       setEditFormData(prevState => ({
                         ...prevState,
                         account: {
@@ -1249,6 +1410,7 @@ const NamespacePage = () => {
                           'tags': []
                         }
                       }));
+                      // Finally show the modal
                       setTimeout(() => {
                         setIsEditingAccount(true);
                       }, 0);
@@ -1256,29 +1418,30 @@ const NamespacePage = () => {
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
                   >
                     <Plus size={16} />
+                    <span>Create Account</span>
                   </button>
                 </div>
               </div>
 
               {/* Accounts Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
                 {accountsList.map((account) => (
                   <div 
                     key={account['namespace-account-id']} 
-                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 sm:p-3 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
+                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
                     onClick={() => handleViewAccount(account)}
                   >
                     <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mb-1.5">
                       <User className="text-blue-600" size={12} />
                     </div>
-                    <h3 className="text-sm font-medium text-gray-800 truncate pr-12 mb-0.5">
+                    <h3 className="text-xs font-medium text-gray-800 truncate pr-12 mb-0.5">
                       {account['namespace-account-name']}
                     </h3>
                     
                     <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={(event) => {
+                          event.stopPropagation();
                           handleEditAccount(account);
                         }}
                         className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
@@ -1301,7 +1464,7 @@ const NamespacePage = () => {
                 ))}
                 
                 {accountsList.length === 0 && (
-                  <div className="col-span-full flex items-center justify-center py-6 sm:py-8 text-gray-500">
+                  <div className="col-span-full flex items-center justify-center py-8 text-gray-500">
                     <p className="text-center">No accounts found</p>
                   </div>
                 )}
@@ -1309,14 +1472,14 @@ const NamespacePage = () => {
             </div>
 
             {/* Methods Section */}
-            <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 md:p-6">
+            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <Code className="text-blue-600" size={20} />
                   <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Methods</h2>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:flex-none">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="text"
@@ -1328,7 +1491,9 @@ const NamespacePage = () => {
                   </div>
                   <button
                     onClick={() => {
+                      // First explicitly reset the editing state
                       setEditingMethod(null);
+                      // Then reset the form data
                       setEditFormData(prevState => ({
                         ...prevState,
                         method: {
@@ -1341,6 +1506,7 @@ const NamespacePage = () => {
                           'tags': []
                         }
                       }));
+                      // Finally show the modal
                       setTimeout(() => {
                         setIsEditingMethod(true);
                       }, 0);
@@ -1348,16 +1514,17 @@ const NamespacePage = () => {
                     className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
                   >
                     <Plus size={16} />
+                    <span>Create Method</span>
                   </button>
                 </div>
               </div>
 
               {/* Methods Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
                 {methodsList.map((method) => (
                   <div 
                     key={method['namespace-method-id']} 
-                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 sm:p-3 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
+                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
                     onClick={() => handleViewMethod(method)}
                   >
                     <div className={`inline-block px-1.5 py-0.5 text-[10px] rounded-full font-medium mb-1.5 ${
@@ -1369,17 +1536,20 @@ const NamespacePage = () => {
                     }`}>
                       {method['namespace-method-type']}
                     </div>
-                    <h3 className="text-sm font-medium text-gray-800 truncate pr-12 mb-0.5">
+                    <h3 className="text-xs font-medium text-gray-800 truncate pr-12 mb-0.5">
                       {method['namespace-method-name']}
                     </h3>
                     
                     <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={(event) => {
+                          event.stopPropagation();
                           handleTestMethod(method);
                         }}
-                        className="p-1 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 transition-all"
+                        className={`p-1 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 transition-all ${
+                          initializingTable === method['namespace-method-id'] ? 'opacity-50 cursor-wait' : ''
+                        }`}
+                        disabled={initializingTable === method['namespace-method-id']}
                         title="Test Method"
                       >
                         <Play size={12} />
@@ -1409,7 +1579,7 @@ const NamespacePage = () => {
                 ))}
                 
                 {methodsList.length === 0 && (
-                  <div className="col-span-full flex items-center justify-center py-6 sm:py-8 text-gray-500">
+                  <div className="col-span-full flex items-center justify-center py-8 text-gray-500">
                     <p className="text-center">No methods found</p>
                   </div>
                 )}
@@ -1422,7 +1592,7 @@ const NamespacePage = () => {
         {isAddingNamespace && (
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setIsAddingNamespace(false);
               setEditingNamespace(null);
               setNewNamespace({
@@ -1520,7 +1690,7 @@ const NamespacePage = () => {
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
             key="create-account-modal"
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setIsEditingAccount(false);
               setEditingAccount(null);
             })}
@@ -1761,7 +1931,7 @@ const NamespacePage = () => {
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
             key={`edit-account-${editingAccount['namespace-account-id']}`}
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setIsEditingAccount(false);
               setEditingAccount(null);
             })}
@@ -2002,7 +2172,7 @@ const NamespacePage = () => {
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
             key="create-method-modal"
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setIsEditingMethod(false);
               setEditingMethod(null);
             })}
@@ -2283,7 +2453,7 @@ const NamespacePage = () => {
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
             key={`edit-method-${editingMethod['namespace-method-id']}`}
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setIsEditingMethod(false);
               setEditingMethod(null);
             })}
@@ -2563,8 +2733,9 @@ const NamespacePage = () => {
         {showAccountSelector && methodForTable && (
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={(e) => handleOutsideClick(e, () => {
+            onClick={() => handleOutsideClick(() => {
               setShowAccountSelector(false);
+              
               setMethodForTable(null);
             })}
           >
@@ -2612,7 +2783,7 @@ const NamespacePage = () => {
         {viewingAccount && (
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={(e) => handleOutsideClick(e, () => setViewingAccount(null))}
+            onClick={() => handleOutsideClick(() => setViewingAccount(null))}
           >
             <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
@@ -2722,7 +2893,7 @@ const NamespacePage = () => {
         {viewingMethod && (
           <div 
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={(e) => handleOutsideClick(e, () => setViewingMethod(null))}
+            onClick={() => handleOutsideClick(() => setViewingMethod(null))}
           >
             <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
@@ -2815,41 +2986,122 @@ const NamespacePage = () => {
                 </span>
               </div>
               
-              <div className="mt-6 flex justify-end gap-3">
+              {/* Webhook Section */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-sm font-medium text-gray-700">Webhooks</h4>
+                  <button
+                    onClick={() => setShowWebhookForm(!showWebhookForm)}
+                    className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors flex items-center gap-2 text-sm"
+                  >
+                    <Bell size={14} />
+                    {showWebhookForm ? 'Cancel' : 'Register Webhook'}
+                  </button>
+                </div>
+
+                {/* Webhook Form */}
+                {showWebhookForm && (
+                  <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Route *
+                        </label>
+                        <input
+                          type="text"
+                          value={webhookForm.route}
+                          onChange={(e) => setWebhookForm({ ...webhookForm, route: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="Enter webhook route"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Table Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={webhookForm.tableName}
+                          onChange={(e) => setWebhookForm({ ...webhookForm, tableName: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="Enter table name"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleAddWebhook}
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        >
+                          Add Webhook
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Webhooks List */}
+                <div className="bg-gray-50 rounded-lg p-3">
+                  {webhooks.length > 0 ? (
+                    <div className="space-y-3">
+                      {webhooks.map((webhook) => (
+                        <div key={webhook.id} className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-100">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">{webhook.route}</p>
+                            <p className="text-xs text-gray-500">Table: {webhook.tableName}</p>
+                            <p className="text-xs text-gray-400 mt-1">Created: {new Date(webhook.createdAt).toLocaleString()}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteWebhook(webhook.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No webhooks registered for this method.</p>
+                  )}
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-2">
                 <button
                   onClick={() => {
                     handleTestMethod(viewingMethod);
                     setViewingMethod(null);
                   }}
-                  className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-2"
+                  className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center justify-center"
+                  title="Test Method"
                 >
                   <Play size={16} />
-                  Test Method
                 </button>
                 <button
                   onClick={() => handleInitializeTableClick(viewingMethod)}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-2"
+                  className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center justify-center"
+                  title="Initialize Table"
                 >
                   <Database size={16} />
-                  Initialize Table
                 </button>
                 <button
                   onClick={() => {
                     handleEditMethod(viewingMethod);
                     setViewingMethod(null);
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  title="Edit Method"
                 >
-                  Edit Method
+                  <Edit size={16} />
                 </button>
                 <button
                   onClick={() => {
                     handleDeleteMethod(viewingMethod['namespace-method-id']);
                     setViewingMethod(null);
                   }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                  title="Delete Method"
                 >
-                  Delete
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>

@@ -134,7 +134,7 @@ const SpecPanel: FC<SpecPanelProps> = ({ apiSpec }) => {
           <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 p-8">
             <FileCode size={48} className="mb-4 text-gray-400" />
             <p className="mb-2 font-medium">No API specification generated yet</p>
-            <p>Enter an API description and click "Generate"</p>
+            <p>Enter an API description and click &quot;Generate&quot;</p>
           </div>
         )}
       </div>

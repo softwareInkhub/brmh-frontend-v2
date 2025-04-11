@@ -18,6 +18,16 @@ const STORAGE_KEYS = {
   SERVER_RUNNING: 'test-suite-server-running'
 };
 
+// Add TestResult interface
+interface TestResult {
+  status: 'passed' | 'failed' | 'error';
+  responseTime?: number;
+  statusCode?: number;
+  assertions?: Array<{ name: string; result: boolean }>;
+  responseData?: unknown;
+  message?: string;
+}
+
 const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
   // Initialize state from localStorage when available
   const [mockServerUrl, setMockServerUrl] = useState<string>(() => {
@@ -42,9 +52,7 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
     return "";
   });
   
-  const [activeEndpoint, setActiveEndpoint] = useState<ApiEndpoint | null>(null);
-  
-  const [testResults, setTestResults] = useState<Record<string, any>>(() => {
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEYS.TEST_RESULTS);
       return stored ? JSON.parse(stored) : {};
@@ -166,8 +174,9 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
               }
             }
           }
-        } catch (error) {
-          console.error("Error checking server status:", error);
+        } catch {
+          // Log error without using error variable
+          console.error("Error checking server status");
         }
       }
     };
@@ -318,7 +327,7 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
   };
 
   // Run a single test against the mock server
-  const runSingleTest = async (endpoint: ApiEndpoint): Promise<any> => {
+  const runSingleTest = async (endpoint: ApiEndpoint): Promise<TestResult> => {
     try {
       const startTime = performance.now();
       
@@ -430,7 +439,7 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
         } else {
           addLog("Server verified and ready!");
         }
-      } catch (error) {
+      } catch {
         addLog("Server health check failed, proceeding with tests anyway...");
         // Add extra buffer time since health check failed
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -485,7 +494,7 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
           addLog(`✅ Test passed: ${testName}`);
         } else if (result.status === 'failed') {
           addLog(`❌ Test failed: ${testName}`);
-          const failedAssertions = result.assertions.filter((a: { result: boolean }) => !a.result);
+          const failedAssertions = result.assertions?.filter((a: { result: boolean }) => !a.result) || [];
           failedAssertions.forEach((a: { name: string }) => {
             addLog(`  - Failed assertion: ${a.name}`);
           });
@@ -604,6 +613,14 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
           >
             Clear All
           </button>
+          {isServerRunning ? (
+            <button
+              onClick={stopMockServer}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
+            >
+              Stop Server
+            </button>
+          ) : null}
           <button
             onClick={() => runTests()}
             disabled={!isServerRunning || isRunningTests}
@@ -830,7 +847,7 @@ const TestSuitePanel: FC<TestSuitePanelProps> = ({ apiSpec, endpoints }) => {
                           <div className="text-sm">
                             <p className="text-gray-500 mb-1">Assertions:</p>
                             <ul className="bg-white p-2 rounded space-y-1">
-                              {result.assertions.map((assertion: { result: boolean, name: string }, i: number) => (
+                              {result.assertions?.map((assertion: { result: boolean, name: string }, i: number) => (
                                 <li key={i} className="flex items-center">
                                   <span className={`mr-2 ${assertion.result ? 'text-green-500' : 'text-red-500'}`}>
                                     {assertion.result ? '✓' : '✗'}

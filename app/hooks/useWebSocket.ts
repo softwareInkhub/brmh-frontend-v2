@@ -23,6 +23,17 @@ export function useWebSocket() {
   const [swaggerUrl, setSwaggerUrl] = useState<string>('');
   const [newSchemaReceived, setNewSchemaReceived] = useState(false);
 
+  const addLog = useCallback((type: StatusLogEntry['type'], message: string) => {
+    setLogs(prevLogs => [
+      ...prevLogs,
+      {
+        type,
+        message,
+        timestamp: new Date().toLocaleTimeString()
+      }
+    ]);
+  }, []);
+
   useEffect(() => {
     // Setup WebSocket connection
     const ws = new WebSocket(`${WS_BASE_URL}/ws`);
@@ -67,7 +78,7 @@ export function useWebSocket() {
           case 'status':
             addLog('info', data.message);
             break;
-          
+            
           case 'schema-changed':
             // Handle schema change
             addLog('info', 'API schema has been updated');
@@ -96,18 +107,7 @@ export function useWebSocket() {
     return () => {
       ws.close();
     };
-  }, []);
-
-  const addLog = useCallback((type: StatusLogEntry['type'], message: string) => {
-    setLogs(prevLogs => [
-      ...prevLogs,
-      {
-        type,
-        message,
-        timestamp: new Date().toLocaleTimeString()
-      }
-    ]);
-  }, []);
+  }, [addLog]);
 
   return {
     socket,

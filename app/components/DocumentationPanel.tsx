@@ -1,7 +1,7 @@
 "use client"
 import { FC, useState } from "react";
 import { ApiEndpoint } from "../types/index2";
-import { FileText, Code, ArrowRight, Globe, ChevronDown, Lock, Copy } from "lucide-react";
+import { FileText, ArrowRight, Globe, ChevronDown, Lock } from "lucide-react";
 
 interface DocumentationPanelProps {
   endpoints: ApiEndpoint[];

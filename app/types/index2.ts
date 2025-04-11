@@ -17,13 +17,13 @@ export interface ApiParameter {
 export interface ApiResponse {
   status: number;
   statusText: string;
-  data: any;
+  data: unknown;
   duration: number;
 }
 
 export interface ApiResponseSpec {
   description: string;
-  content?: Record<string, any>;
+  content?: Record<string, unknown>;
 }
 
 export interface ApiInfo {
@@ -40,7 +40,7 @@ export interface ApiEndpoint {
   tag?: string;
   parameters?: ApiParameter[];
   responses: Record<string, ApiResponseSpec>;
-  requestBody?: any;
+  requestBody?: unknown;
   info?: ApiInfo;
   server?: string;
 }
@@ -51,6 +51,6 @@ export interface WebSocketMessage {
   data?: {
     endpoints?: ApiEndpoint[];
     specification?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
