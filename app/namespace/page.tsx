@@ -14,7 +14,9 @@ import {
   User,
   Play,
   Bell,
-  Edit
+  Edit,
+  X,
+  Eye
 } from 'react-feather';
 import { toast, Toaster } from 'react-hot-toast';
 import MethodTestModal from '../components/MethodTestModal';
@@ -1278,128 +1280,161 @@ const NamespacePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       <Toaster position="top-right" />
-      <div className="p-6 md:p-8 max-w-[1920px] mx-auto">
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full">
         {/* Header Section */}
-        <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
-          <div className="flex-1 w-full sm:w-auto">
-            <div className="relative">
+        <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
+          <div className="flex items-center gap-3">
+            <Database className="text-blue-600" size={20} />
+            <h2 className="text-lg font-semibold text-gray-900">Namespaces</h2>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
               <input
                 type="text"
                 placeholder="Search namespaces..."
+                className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchQuery}
-                className="w-full px-4 py-2.5 pl-10 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  className="absolute inset-y-0 right-1 flex items-center"
                   title="Clear search"
                 >
-                  <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="h-3 w-3 text-gray-400 hover:text-gray-600" />
                 </button>
               )}
             </div>
+            <button
+              onClick={() => {
+                setEditingNamespace(null);
+                setNewNamespace({
+                  'namespace-name': '',
+                  'namespace-url': '',
+                  tags: []
+                });
+                setIsAddingNamespace(true);
+              }}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Plus size={12} className="mr-1" />
+              Create Namespace
+            </button>
           </div>
-          <button
-            onClick={() => {
-              setEditingNamespace(null);
-              setNewNamespace({
-                'namespace-name': '',
-                'namespace-url': '',
-                tags: []
-              });
-              setIsAddingNamespace(true);
-            }}
-            className="w-full sm:w-auto p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm hover:shadow-md flex items-center justify-center"
-            title="Create Namespace"
-          >
-            <Plus size={20} />
-          </button>
         </div>
 
         {/* Namespaces Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 mb-8">
-          {filteredNamespaces.length > 0 ? (
-            filteredNamespaces.map((namespace) => (
-              <div 
-                key={namespace['namespace-id']} 
-                className={`bg-white rounded-lg shadow-sm border ${
-                  selectedNamespace?.['namespace-id'] === namespace['namespace-id']
-                    ? 'border-blue-500'
-                    : 'border-gray-100'
-                } px-2.5 py-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative`}
-                onClick={() => handleNamespaceClick(namespace)}
-              >
-                <h2 className="text-xs sm:text-sm font-medium text-gray-800 truncate pr-12 group-hover:text-blue-600 transition-colors">
-                  {namespace['namespace-name'] || 'Unnamed Namespace'}
-                </h2>
-                <div 
-                  className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1"
-                >
-                  <button
-                    onClick={() => handleEditClick(namespace)}
-                    className={`p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all ${
-                      tokenProcessing === namespace['namespace-id'] ? 'opacity-50 cursor-wait' : ''
-                    }`}
-                    disabled={tokenProcessing === namespace['namespace-id']}
-                    title="Edit Namespace"
+        <div className="mb-6">
+          <div className="w-full overflow-hidden">
+            <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+              {filteredNamespaces.length > 0 ? (
+                filteredNamespaces.map((namespace) => (
+                  <div 
+                    key={namespace['namespace-id']} 
+                    className={`flex-none md:flex-auto w-[160px] md:w-auto ${
+                      selectedNamespace?.['namespace-id'] === namespace['namespace-id']
+                        ? 'border-blue-500'
+                        : 'border-blue-100'
+                    } bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-sm border p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105`}
+                    onClick={() => handleNamespaceClick(namespace)}
                   >
-                    <Edit2 size={12} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteNamespace(namespace['namespace-id'])}
-                    className={`p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all ${
-                      tokenProcessing === namespace['namespace-id'] ? 'opacity-50 cursor-wait' : ''
-                    }`}
-                    disabled={tokenProcessing === namespace['namespace-id']}
-                    title="Delete Namespace"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 mb-1">
+                          <Database size={10} className="text-blue-600" />
+                          <span className="text-[10px] font-medium truncate text-blue-900">{namespace['namespace-name']}</span>
+                        </div>
+                        <span className="text-[8px] text-blue-600/70 block truncate">{namespace['namespace-url']}</span>
+                      </div>
+                      <div className="flex items-start gap-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(namespace);
+                          }}
+                          className="p-1 hover:bg-blue-100/50 rounded-full"
+                          title="Edit Namespace"
+                        >
+                          <Edit2 size={10} className="text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteNamespace(namespace['namespace-id']);
+                          }}
+                          className="p-1 hover:bg-red-100/50 rounded-full"
+                          title="Delete Namespace"
+                        >
+                          <Trash2 size={10} className="text-red-500" />
+                        </button>
+                      </div>
+                    </div>
+                    {namespace.tags && namespace.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {namespace.tags.slice(0, 2).map((tag, index) => (
+                          <span 
+                            key={index} 
+                            className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-indigo-500/10 text-[8px] font-medium text-blue-700 border border-blue-100/50"
+                          >
+                            <span className="w-1 h-1 rounded-full bg-blue-500 mr-1"></span>
+                            {tag}
+                          </span>
+                        ))}
+                        {namespace.tags.length > 2 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 text-[8px] font-medium text-blue-600">
+                            +{namespace.tags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="w-full flex items-center justify-center py-12 text-gray-500">
+                  <p className="text-center">No namespaces found</p>
                 </div>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-full flex items-center justify-center py-12 text-gray-500">
-              <p className="text-center">No namespaces found</p>
+              )}
             </div>
-          )}
+          </div>
         </div>
+
+        {/* Add this style block at the top of your component */}
+        <style jsx global>{`
+          .hide-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+          }
+          .hide-scrollbar::-webkit-scrollbar {
+            display: none;  /* Chrome, Safari and Opera */
+          }
+        `}</style>
 
         {/* Accounts and Methods Section */}
         {selectedNamespace && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
             {/* Accounts Section */}
-            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-                <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+              <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
+                <div className="flex items-center gap-3">
                   <Users className="text-blue-600" size={20} />
-                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Accounts</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Accounts</h2>
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-auto">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
                     <input
                       type="text"
                       placeholder="Search accounts..."
-                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-56"
+                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={accountSearchQuery}
                       onChange={(e) => setAccountSearchQuery(e.target.value)}
                     />
                   </div>
                   <button
                     onClick={() => {
-                      // First explicitly reset the editing state
                       setEditingAccount(null);
-                      // Then reset the form data
                       setEditFormData(prevState => ({
                         ...prevState,
                         account: {
@@ -1410,90 +1445,100 @@ const NamespacePage = () => {
                           'tags': []
                         }
                       }));
-                      // Finally show the modal
-                      setTimeout(() => {
-                        setIsEditingAccount(true);
-                      }, 0);
+                      setIsEditingAccount(true);
                     }}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
+                    className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                   >
-                    <Plus size={16} />
-                    <span>Create Account</span>
+                    <Plus size={12} className="mr-1" />
+                    Create Account
                   </button>
                 </div>
               </div>
 
               {/* Accounts Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-                {accountsList.map((account) => (
-                  <div 
-                    key={account['namespace-account-id']} 
-                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
-                    onClick={() => handleViewAccount(account)}
-                  >
-                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mb-1.5">
-                      <User className="text-blue-600" size={12} />
+              <div className="w-full overflow-hidden">
+                <div className="flex md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+                  {accounts.map((account) => (
+                    <div
+                      key={account['namespace-account-id']}
+                      onClick={() => handleViewAccount(account)}
+                      className="flex-none md:flex-auto w-[160px] md:w-auto bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-sm border border-purple-100 p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 mb-1">
+                            <User size={10} className="text-purple-600" />
+                            <span className="text-[10px] font-medium truncate text-purple-900">{account['namespace-account-name']}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditAccount(account);
+                            }}
+                            className="p-1 hover:bg-purple-100/50 rounded-full"
+                            title="Edit Account"
+                          >
+                            <Edit2 size={10} className="text-purple-600" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAccount(account['namespace-account-id']);
+                            }}
+                            className="p-1 hover:bg-red-100/50 rounded-full"
+                            title="Delete Account"
+                          >
+                            <Trash2 size={10} className="text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+                      {account.tags && account.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {account.tags.slice(0, 2).map((tag, index) => (
+                            <span 
+                              key={index} 
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-[8px] font-medium text-purple-700 border border-purple-100/50"
+                            >
+                              <span className="w-1 h-1 rounded-full bg-purple-500 mr-1"></span>
+                              {tag}
+                            </span>
+                          ))}
+                          {account.tags.length > 2 && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-purple-50 text-[8px] font-medium text-purple-600">
+                              +{account.tags.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <h3 className="text-xs font-medium text-gray-800 truncate pr-12 mb-0.5">
-                      {account['namespace-account-name']}
-                    </h3>
-                    
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleEditAccount(account);
-                        }}
-                        className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
-                        title="Edit Account"
-                      >
-                        <Edit2 size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); 
-                          handleDeleteAccount(account['namespace-account-id']);
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
-                        title="Delete Account"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                
-                {accountsList.length === 0 && (
-                  <div className="col-span-full flex items-center justify-center py-8 text-gray-500">
-                    <p className="text-center">No accounts found</p>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Methods Section */}
-            <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-                <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
+              <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
+                <div className="flex items-center gap-3">
                   <Code className="text-blue-600" size={20} />
-                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Methods</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Methods</h2>
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-auto">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
                     <input
                       type="text"
                       placeholder="Search methods..."
-                      className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-56"
+                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       value={methodSearchQuery}
                       onChange={(e) => setMethodSearchQuery(e.target.value)}
                     />
                   </div>
                   <button
                     onClick={() => {
-                      // First explicitly reset the editing state
                       setEditingMethod(null);
-                      // Then reset the form data
                       setEditFormData(prevState => ({
                         ...prevState,
                         method: {
@@ -1506,83 +1551,74 @@ const NamespacePage = () => {
                           'tags': []
                         }
                       }));
-                      // Finally show the modal
-                      setTimeout(() => {
-                        setIsEditingMethod(true);
-                      }, 0);
+                      setIsEditingMethod(true);
                     }}
-                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
+                    className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                   >
-                    <Plus size={16} />
-                    <span>Create Method</span>
+                    <Plus size={12} className="mr-1" />
+                    Create Method
                   </button>
                 </div>
               </div>
 
               {/* Methods Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-                {methodsList.map((method) => (
-                  <div 
-                    key={method['namespace-method-id']} 
-                    className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group relative"
-                    onClick={() => handleViewMethod(method)}
-                  >
-                    <div className={`inline-block px-1.5 py-0.5 text-[10px] rounded-full font-medium mb-1.5 ${
-                      method['namespace-method-type'] === 'GET' ? 'bg-green-100 text-green-700' :
-                      method['namespace-method-type'] === 'POST' ? 'bg-blue-100 text-blue-700' :
-                      method['namespace-method-type'] === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
-                      method['namespace-method-type'] === 'DELETE' ? 'bg-red-100 text-red-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {method['namespace-method-type']}
+              <div className="w-full overflow-hidden">
+                <div className="flex md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+                  {methods.map((method) => (
+                    <div
+                      key={method['namespace-method-id']}
+                      onClick={() => handleViewMethod(method)}
+                      className="flex-none md:flex-auto w-[160px] md:w-auto bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg shadow-sm border border-emerald-100 p-2.5 hover:shadow-md transition-all cursor-pointer hover:scale-105 relative"
+                    >
+                      {/* Method Type Badge */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                          {method['namespace-method-type']}
+                        </span>
+                        <div className="flex items-start gap-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTestMethod(method);
+                            }}
+                            className="p-1 hover:bg-emerald-100/50 rounded-full"
+                            title="Test Method"
+                          >
+                            <Play size={10} className="text-emerald-600" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditMethod(method);
+                            }}
+                            className="p-1 hover:bg-emerald-100/50 rounded-full"
+                            title="Edit Method"
+                          >
+                            <Edit2 size={10} className="text-emerald-600" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMethod(method['namespace-method-id']);
+                            }}
+                            className="p-1 hover:bg-red-100/50 rounded-full"
+                            title="Delete Method"
+                          >
+                            <Trash2 size={10} className="text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Method Name */}
+                      <div className="flex items-center gap-2">
+                        <Code size={12} className="text-emerald-600 flex-shrink-0" />
+                        <h3 className="text-[11px] font-medium text-emerald-900 truncate">
+                          {method['namespace-method-name']}
+                        </h3>
+                      </div>
                     </div>
-                    <h3 className="text-xs font-medium text-gray-800 truncate pr-12 mb-0.5">
-                      {method['namespace-method-name']}
-                    </h3>
-                    
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleTestMethod(method);
-                        }}
-                        className={`p-1 text-gray-400 hover:text-green-600 rounded hover:bg-green-50 transition-all ${
-                          initializingTable === method['namespace-method-id'] ? 'opacity-50 cursor-wait' : ''
-                        }`}
-                        disabled={initializingTable === method['namespace-method-id']}
-                        title="Test Method"
-                      >
-                        <Play size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditMethod(method);
-                        }}
-                        className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all"
-                        title="Edit Method"
-                      >
-                        <Edit2 size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteMethod(method['namespace-method-id']);
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-all"
-                        title="Delete Method"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                
-                {methodsList.length === 0 && (
-                  <div className="col-span-full flex items-center justify-center py-8 text-gray-500">
-                    <p className="text-center">No methods found</p>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -2785,46 +2821,44 @@ const NamespacePage = () => {
             className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => handleOutsideClick(() => setViewingAccount(null))}
           >
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-xl p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <User className="text-blue-600" size={18} />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <User className="text-blue-600" size={16} />
                   </div>
-                  <h3 className="text-xl font-semibold">{viewingAccount['namespace-account-name']}</h3>
+                  <h3 className="text-base sm:text-xl font-semibold truncate">{viewingAccount['namespace-account-name']}</h3>
                 </div>
                 <button
                   onClick={() => setViewingAccount(null)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
                 >
-                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
                 </button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-sm text-gray-500 mb-1">ID</p>
-                  <p className="text-sm font-mono">{viewingAccount['namespace-account-id']}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                  <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">ID</p>
+                  <p className="text-xs sm:text-sm font-mono break-all">{viewingAccount['namespace-account-id']}</p>
                 </div>
                 
                 {viewingAccount['namespace-account-url-override'] && (
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-sm text-gray-500 mb-1">URL Override</p>
-                    <p className="text-sm font-mono">{viewingAccount['namespace-account-url-override']}</p>
+                  <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                    <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">URL Override</p>
+                    <p className="text-xs sm:text-sm font-mono break-all">{viewingAccount['namespace-account-url-override']}</p>
                   </div>
                 )}
               </div>
               
               {viewingAccount['namespace-account-header'] && viewingAccount['namespace-account-header'].length > 0 && (
                 <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Headers</h4>
-                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Headers</h4>
+                  <div className="bg-gray-50 rounded-lg p-2 sm:p-3 space-y-1.5 sm:space-y-2">
                     {viewingAccount['namespace-account-header'].map((header, index) => (
                       <div key={index} className="grid grid-cols-2 gap-2">
-                        <div className="text-sm font-medium text-gray-700">{header.key}</div>
-                        <div className="text-sm text-gray-600 font-mono truncate">{header.value}</div>
+                        <div className="text-xs sm:text-sm font-medium text-gray-700 break-all">{header.key}</div>
+                        <div className="text-xs sm:text-sm text-gray-600 font-mono break-all">{header.value}</div>
                       </div>
                     ))}
                   </div>
@@ -2833,12 +2867,12 @@ const NamespacePage = () => {
               
               {viewingAccount['variables'] && viewingAccount['variables'].length > 0 && (
                 <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Variables</h4>
-                  <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Variables</h4>
+                  <div className="bg-gray-50 rounded-lg p-2 sm:p-3 space-y-1.5 sm:space-y-2">
                     {viewingAccount['variables'].map((variable, index) => (
                       <div key={index} className="grid grid-cols-2 gap-2">
-                        <div className="text-sm font-medium text-gray-700">{variable.key}</div>
-                        <div className="text-sm text-gray-600 font-mono truncate">{variable.value}</div>
+                        <div className="text-xs sm:text-sm font-medium text-gray-700 break-all">{variable.key}</div>
+                        <div className="text-xs sm:text-sm text-gray-600 font-mono break-all">{variable.value}</div>
                       </div>
                     ))}
                   </div>
@@ -2847,10 +2881,10 @@ const NamespacePage = () => {
               
               {viewingAccount.tags && viewingAccount.tags.length > 0 && (
                 <div className="mb-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Tags</h4>
-                  <div className="flex flex-wrap gap-2">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Tags</h4>
+                  <div className="flex flex-wrap gap-1.5">
                     {viewingAccount.tags.map((tag, index) => (
-                      <span key={index} className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
+                      <span key={index} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
                         {tag}
                       </span>
                     ))}
@@ -2858,31 +2892,33 @@ const NamespacePage = () => {
                 </div>
               )}
               
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex justify-end items-center gap-2">
                 <button
                   onClick={() => handleOAuthRedirect(viewingAccount)}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                  className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
+                  title="Fetch Token"
                 >
                   <Key size={16} />
-                  Fetch Token
                 </button>
                 <button
                   onClick={() => {
                     handleEditAccount(viewingAccount);
                     setViewingAccount(null);
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  title="Edit Account"
                 >
-                  Edit Account
+                  <Edit2 size={16} />
                 </button>
                 <button
                   onClick={() => {
                     handleDeleteAccount(viewingAccount['namespace-account-id']);
                     setViewingAccount(null);
                   }}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                  title="Delete Account"
                 >
-                  Delete
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>
@@ -3118,6 +3154,8 @@ const NamespacePage = () => {
           methodId={testingMethod['namespace-method-id']}
           methodName={testingMethod['namespace-method-name']}
           methodType={testingMethod['namespace-method-type']}
+          namespaceMethodUrlOverride={testingMethod['namespace-method-url-override']}
+          saveData={testingMethod['save-data']}
         />
       )}
     </div>
