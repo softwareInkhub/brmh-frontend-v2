@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
-  Settings, 
   ChevronLeft,
   ChevronRight,
   Code,
@@ -11,7 +10,14 @@ import {
   X,
   Box,
   ShoppingCart,
-  HelpCircle
+  HelpCircle,
+  Database,
+  Cloud,
+  Play,
+  FileCode,
+  Server,
+  Settings,
+  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -42,25 +48,31 @@ const menuItems: MenuItem[] = [
   {
     name: 'Namespace',
     path: '/namespace',
-    icon: <Code size={18} className="text-green-400" />,
+    icon: <Database size={18} className="text-green-400" />,
     submenu: [
       { name: 'Namespace', path: '/namespace' },
-      
     ]
   },
   {
     name: 'Api Service',
     path: '/api-service',
-    icon: <Code size={18} className="text-green-400" />,
+    icon: <Server size={18} className="text-purple-400" />,
     submenu: [
       { name: 'Api Service', path: '/api-service' },
-      
+    ]
+  },
+  {
+    name: 'Executions',
+    path: '/executions',
+    icon: <Play size={18} className="text-yellow-400" />,
+    submenu: [
+      { name: 'Executions', path: '/executions' },
     ]
   },
   {
     name: 'AWS Services',
     path: '/aws-services',
-    icon: <ShoppingCart size={18} className="text-orange-400" />,
+    icon: <Cloud size={18} className="text-orange-400" />,
     submenu: [
       { name: 'Lambda', path: '/aws/lambda' },
       { name: 'S3', path: '/aws/s3' },
@@ -68,21 +80,16 @@ const menuItems: MenuItem[] = [
       { name: 'IAM', path: '/aws/iam' },
       { name: 'SNS', path: '/aws/sns' },
       { name: 'SQS', path: '/aws/sqs' },
-     
     ]
   },
   {
     name: 'Ai Api Builder',
     path: '/yaml',
-    icon: <Box size={18} className="text-yellow-400" />,
+    icon: <FileCode size={18} className="text-pink-400" />,
     submenu: [
-    
       { name: 'YAML generator', path: '/ai-api-builder' }
     ]
   },
-  
-  
- 
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {

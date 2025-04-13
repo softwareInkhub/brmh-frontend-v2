@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Send, RefreshCw, Copy, Download, Check, ChevronDown } from 'lucide-react';
 
 interface AccountHeader {
@@ -20,19 +20,6 @@ interface KeyValuePair {
   value: string;
 }
 
-interface RequestData {
-  accountId: string;
-  methodId: string;
-  namespaceId: string;
-  method: string;
-  url: string;
-  queryParams: Record<string, string>;
-  headers: Record<string, string>;
-  maxIterations?: number;
-  body?: unknown;
-  saveData: boolean;
-}
-
 interface Response {
   success: boolean;
   data?: Record<string, unknown>;
@@ -47,7 +34,6 @@ interface MethodTestModalProps {
   isOpen: boolean;
   onClose: () => void;
   namespaceId: string;
-  methodId: string;
   methodName: string;
   methodType: string;
   namespaceMethodUrlOverride: string;
@@ -60,7 +46,6 @@ export default function MethodTestModal({
   isOpen,
   onClose,
   namespaceId,
-  methodId,
   methodName,
   methodType,
   namespaceMethodUrlOverride,
@@ -82,31 +67,6 @@ export default function MethodTestModal({
   const [copied, setCopied] = useState(false);
   const [activeButton, setActiveButton] = useState<'send' | 'loop' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Fetch accounts for the given namespace
-  const fetchAccounts = useCallback(async () => {
-    try {
-      setError(null);
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/accounts`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch accounts: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setAccounts(data || []);
-      
-      if (data && data.length > 0) {
-        setSelectedAccount(data[0]);
-      }
-    } catch (err) {
-      console.error('Error fetching accounts:', err);
-      setError('Network error when fetching accounts');
-    } finally {
-      setLoading(false);
-    }
-  }, [namespaceId]);
 
   // Fetch namespace details
   useEffect(() => {
@@ -396,8 +356,15 @@ export default function MethodTestModal({
               
               // Set initial URL based on account URL override and method URL override
               const baseUrl = firstAccount['namespace-account-url-override'] || '';
-              const methodUrl = namespaceMethodUrlOverride || ''; // Use the namespace-method-url-override
-              const finalUrl = `${baseUrl}${methodUrl.startsWith('') ? methodUrl : `/${methodUrl}`}`;
+              const methodUrl = namespaceMethodUrlOverride || '';
+              // Ensure we don't add an extra slash between baseUrl and methodUrl
+              const finalUrl = baseUrl && methodUrl 
+                ? baseUrl.endsWith('/') && methodUrl.startsWith('/')
+                  ? baseUrl + methodUrl.slice(1)  // Remove leading slash from methodUrl if baseUrl ends with slash
+                  : !baseUrl.endsWith('/') && !methodUrl.startsWith('/')
+                  ? baseUrl + '/' + methodUrl     // Add slash if neither has one
+                  : baseUrl + methodUrl           // Use as is if exactly one has a slash
+                : baseUrl + methodUrl;            // Simple concatenation if either is empty
               setUrl(finalUrl);
 
               // Set initial headers from account's namespace-account-header
@@ -436,8 +403,15 @@ export default function MethodTestModal({
     if (account) {
       // Set the URL with both account URL override and method URL override
       const baseUrl = account['namespace-account-url-override'] || '';
-      const methodUrl = namespaceMethodUrlOverride || ''; // Use the namespace-method-url-override
-      const finalUrl = `${baseUrl}${methodUrl.startsWith('/') ? methodUrl : `/${methodUrl}`}`;
+      const methodUrl = namespaceMethodUrlOverride || '';
+      // Ensure we don't add an extra slash between baseUrl and methodUrl
+      const finalUrl = baseUrl && methodUrl 
+        ? baseUrl.endsWith('/') && methodUrl.startsWith('/')
+          ? baseUrl + methodUrl.slice(1)  // Remove leading slash from methodUrl if baseUrl ends with slash
+          : !baseUrl.endsWith('/') && !methodUrl.startsWith('/')
+          ? baseUrl + '/' + methodUrl     // Add slash if neither has one
+          : baseUrl + methodUrl           // Use as is if exactly one has a slash
+        : baseUrl + methodUrl;            // Simple concatenation if either is empty
       setUrl(finalUrl);
 
       // Set the headers from account's namespace-account-header
