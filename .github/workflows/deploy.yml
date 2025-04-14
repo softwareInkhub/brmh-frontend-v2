@@ -65,7 +65,7 @@ jobs:
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
-          npm install
+          npm install --force
           npm run build
           # Install PM2 globally with sudo
           sudo npm install -g pm2
