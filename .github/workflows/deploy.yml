@@ -19,7 +19,7 @@ jobs:
         cache: 'npm'
     
     - name: Install dependencies
-      run: npm ci
+      run: npm install --legacy-peer-deps
     
     - name: Build application
       run: npm run build
@@ -52,4 +52,4 @@ jobs:
         scp next.config.js ec2:~/brmh-frontend/
         
         # Install dependencies and restart the application on EC2
-        ssh ec2 'cd ~/brmh-frontend && npm ci --production && pm2 restart brmh-frontend || pm2 start npm --name "brmh-frontend" -- start' 
+        ssh ec2 'cd ~/brmh-frontend && npm install --legacy-peer-deps --production && pm2 restart brmh-frontend || pm2 start npm --name "brmh-frontend" -- start' 
