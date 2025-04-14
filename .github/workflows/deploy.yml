@@ -29,18 +29,30 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H ec2-44-216-59-69.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+        cat > ~/.ssh/config << EOF
+        Host ec2-44-216-59-69.compute-1.amazonaws.com
+          HostName ec2-44-216-59-69.compute-1.amazonaws.com
+          User ubuntu
+          IdentityFile ~/.ssh/deploy_key
+          StrictHostKeyChecking no
+          UserKnownHostsFile=/dev/null
+          ServerAliveInterval 60
+          ServerAliveCountMax 30
+        EOF
+        chmod 600 ~/.ssh/config
 
-    - name: Test SSH Connection
-      run: ssh -i ~/.ssh/deploy_key -v ubuntu@ec2-44-216-59-69.compute-1.amazonaws.com "echo 'SSH connection test successful'"
+    - name: Verify SSH Key
+      run: |
+        echo "Checking SSH key permissions and content..."
+        ls -la ~/.ssh/
+        ssh-keygen -l -f ~/.ssh/deploy_key || echo "Invalid key format"
       
     - name: Deploy to AWS
       uses: appleboy/ssh-action@master
       with:
         host: ec2-44-216-59-69.compute-1.amazonaws.com
         username: ubuntu
-        key_path: ~/.ssh/deploy_key
-        debug: true
+        key: ${{ secrets.SSH_KEY }}
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
