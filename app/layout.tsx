@@ -19,7 +19,10 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body 
+        className={inter.className}
+        suppressHydrationWarning={true}
+      >
         <QueryClientProvider client={queryClient}>
         <div className="flex min-h-screen bg-gray-50">
           <Sidebar onCollapse={(collapsed) => setIsCollapsed(collapsed)} />

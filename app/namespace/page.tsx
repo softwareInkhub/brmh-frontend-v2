@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback} from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NamespaceInput } from '../types';
 import { 
   Plus, 
@@ -16,7 +16,10 @@ import {
   Bell,
   Edit,
   X,
-  Eye
+  Activity,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
 } from 'react-feather';
 import { toast, Toaster } from 'react-hot-toast';
 import MethodTestModal from '../components/MethodTestModal';
@@ -105,13 +108,56 @@ interface MethodPayload {
   'tags'?: string[];
 }
 
+interface ExecutionLog {
+  'exec-id': string;
+  'child-exec-id': string;
+  data: {
+    'execution-id': string;
+    'iteration-no': number;
+    'total-items-processed': number;
+    'items-in-current-page': number;
+    'request-url': string;
+    'response-status': number;
+    'pagination-type': string;
+    'timestamp': string;
+    'status'?: string;
+    'is-last': boolean;
+  };
+}
+
 interface DynamoDBItem {
+  'exec-id': { S: string };
+  'child-exec-id': { S: string };
+  data: {
+    M: {
+      'request-url'?: { S: string };
+      'status'?: { S: string };
+      'total-items-processed'?: { N: string };
+      'iteration-no'?: { N: string };
+      'items-in-current-page'?: { N: string };
+      'response-status'?: { N: string };
+      'pagination-type'?: { S: string };
+      'timestamp'?: { S: string };
+      'is-last'?: { BOOL: boolean };
+    };
+  };
+}
+
+interface DynamoDBNamespaceItem {
   id: string;
   data: {
     'namespace-name': { S: string };
     'namespace-url': { S: string };
-    tags?: { L: Array<{ S: string }> };
+    tags?: { L: { S: string }[] };
   };
+}
+
+interface DynamoDBWebhookItem {
+  id: { S: string };
+  methodId: { S: string };
+  route: { S: string };
+  tableName: { S: string };
+  createdAt: { S: string };
 }
 
 interface AccountDetails {
@@ -148,7 +194,6 @@ interface HistoryEntry {
   };
 }
 
-// Add this interface with the other interfaces at the top
 interface WebhookData {
   id: string;
   methodId: string;
@@ -201,10 +246,6 @@ const NamespacePage = () => {
   });
 
   // Add new state variables for token handling
-  const [tokenProcessing, setTokenProcessing] = useState<string | null>(null);
-  const [initializingTable, setInitializingTable] = useState<string | null>(null);
-
-  // Add new state variables after other state declarations
   const [showAccountSelector, setShowAccountSelector] = useState(false);
   const [methodForTable, setMethodForTable] = useState<Method | null>(null);
 
@@ -215,6 +256,16 @@ const NamespacePage = () => {
   const [allWebhooks, setAllWebhooks] = useState<WebhookData[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookData[]>([]);
   const [webhookForm, setWebhookForm] = useState({ route: '', tableName: '' });
+
+  // Add new state for logs sidebar
+  const [showLogsSidebar, setShowLogsSidebar] = useState(false);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [isPolling, setIsPolling] = useState(false);
+  const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
+  const [expandedExecutions, setExpandedExecutions] = useState<Set<string>>(new Set());
+  const [allExecutions, setAllExecutions] = useState<ExecutionLog[]>([]);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 5;  // Maximum number of empty result retries
 
   // Filter functions
   const filteredNamespaces = namespaces.filter(namespace => {
@@ -227,24 +278,10 @@ const NamespacePage = () => {
   });
 
   // Update accounts list to use filteredAccounts
-  const accountsList = accounts.filter(account => {
-    const searchLower = accountSearchQuery.toLowerCase();
-    return (
-      account['namespace-account-name'].toLowerCase().includes(searchLower) ||
-      account['namespace-account-url-override']?.toLowerCase().includes(searchLower) ||
-      account.tags?.some(tag => tag.toLowerCase().includes(searchLower))
-    );
-  });
+ 
 
   // Update methods list to use filteredMethods
-  const methodsList = methods.filter(method => {
-    const searchLower = methodSearchQuery.toLowerCase();
-    return (
-      method['namespace-method-name'].toLowerCase().includes(searchLower) ||
-      method['namespace-method-type'].toLowerCase().includes(searchLower) ||
-      method.tags?.some(tag => tag.toLowerCase().includes(searchLower))
-    );
-  });
+ 
 
   const saveToHistory = (requestDetails: ExecuteRequest, responseData: { status: number; body: unknown; headers: Record<string, string> }) => {
     try {
@@ -391,11 +428,11 @@ const NamespacePage = () => {
       );
 
       // Transform the data structure
-      const transformedData = rawData.map((item: DynamoDBItem) => ({
+      const transformedData = rawData.map((item: DynamoDBNamespaceItem) => ({
         'namespace-id': item.id,
         'namespace-name': item.data['namespace-name'].S,
         'namespace-url': item.data['namespace-url'].S,
-        'tags': Array.isArray(item.data.tags?.L) ? item.data.tags.L.map((tag) => tag.S) : []
+        'tags': Array.isArray(item.data.tags?.L) ? item.data.tags.L.map((tag: { S: string }) => tag.S) : []
       }));
 
       console.log('Transformed namespaces:', transformedData);
@@ -448,7 +485,7 @@ const NamespacePage = () => {
   const handleDeleteNamespace = async (namespaceId: string) => {
     if (window.confirm('Are you sure you want to delete this namespace?')) {
       try {
-        setTokenProcessing(namespaceId); // Add loading state
+        // setTokenProcessing(namespaceId); // Add loading state
         const response = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}`, {
           method: 'DELETE',
         });
@@ -462,7 +499,7 @@ const NamespacePage = () => {
         console.error('Error deleting namespace:', error);
         alert('Failed to delete namespace');
       } finally {
-        setTokenProcessing(null);
+        // setTokenProcessing(null);
       }
     }
   };
@@ -475,7 +512,7 @@ const NamespacePage = () => {
       if (!editingNamespace) return;
 
       // Show loading state
-      setTokenProcessing(editingNamespace['namespace-id']);
+      // setTokenProcessing(editingNamespace['namespace-id']);
 
       const response = await fetch(`${API_BASE_URL}/api/namespaces/${editingNamespace['namespace-id']}`, {
         method: 'PUT',
@@ -508,7 +545,7 @@ const NamespacePage = () => {
       console.error('Error updating namespace:', error);
       alert('Failed to update namespace');
     } finally {
-      setTokenProcessing(null);
+      // setTokenProcessing(null);
     }
   };
 
@@ -617,7 +654,7 @@ const NamespacePage = () => {
 
       // Show loading state if editing
       if (editingAccount) {
-        setTokenProcessing(editingAccount['namespace-account-id']);
+        // setTokenProcessing(editingAccount['namespace-account-id']);
       }
 
       // Clean up the data before sending
@@ -737,7 +774,7 @@ const NamespacePage = () => {
       console.error('Error handling account:', error);
       toast.error(`Failed to ${editingAccount ? 'update' : 'create'} account: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setTokenProcessing(null);
+      // setTokenProcessing(null);
     }
   };
 
@@ -751,7 +788,7 @@ const NamespacePage = () => {
 
       // Show loading state if editing
       if (editingMethod) {
-        setInitializingTable(editingMethod['namespace-method-id']);
+        // setInitializingTable(editingMethod['namespace-method-id']);
       }
 
       // Clean up the data before sending
@@ -884,7 +921,7 @@ const NamespacePage = () => {
       console.error('Error handling method:', error);
       toast.error(`Failed to ${editingMethod ? 'update' : 'create'} method: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setInitializingTable(null);
+      // setInitializingTable(null);
     }
   };
 
@@ -924,7 +961,7 @@ const NamespacePage = () => {
 
   const handleFetchToken = useCallback(async (code: string, accountDetails: AccountDetails) => {
     try {
-      setTokenProcessing(accountDetails.accountId);
+      // setTokenProcessing(accountDetails.accountId);
       
       // Use the correct API base URL
       const response = await fetch(`${API_BASE_URL}/pinterest/token`, {
@@ -1006,7 +1043,7 @@ const NamespacePage = () => {
       console.error('Error fetching Pinterest token:', error);
       toast.error(`Failed to fetch Pinterest token: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setTokenProcessing(null);
+      // setTokenProcessing(null);
     }
   }, [setAccounts]);
 
@@ -1037,7 +1074,7 @@ const NamespacePage = () => {
     try {
       if (!selectedNamespace) return;
       
-      setInitializingTable(method['namespace-method-id']);
+      // setInitializingTable(method['namespace-method-id']);
 
       // Create table name from combination of namespace, account and method names
       const tableName = `${selectedNamespace['namespace-name']}_${account['namespace-account-name']}_${method['namespace-method-name']}`
@@ -1120,7 +1157,7 @@ const NamespacePage = () => {
       console.error('Error in handleInitializeTable:', error);
       toast.error('Failed to initialize table your table might be already created: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
-      setInitializingTable(null);
+      // setInitializingTable(null);
     }
   };
 
@@ -1255,7 +1292,7 @@ const NamespacePage = () => {
       console.log('Raw webhook data from API:', data);
       
       // Transform DynamoDB items to WebhookData, handling the DynamoDB attribute format
-      const webhooksList: WebhookData[] = (data.items || []).map((item: any) => ({
+      const webhooksList: WebhookData[] = (data.items || []).map((item: DynamoDBWebhookItem) => ({
         id: item.id.S,
         methodId: item.methodId.S,
         route: item.route.S,
@@ -1277,6 +1314,197 @@ const NamespacePage = () => {
     fetchAllWebhooks();
   }, []);
 
+  // Function to fetch all executions
+  const fetchAllExecutions = async () => {
+    try {
+      console.log('Fetching all executions...');
+      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/executions/items`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch executions');
+      }
+
+      const data = await response.json();
+      console.log('Received executions data:', data);
+      const logs = data.items.map((item: DynamoDBItem) => ({
+        'exec-id': item['exec-id'].S,
+        'child-exec-id': item['child-exec-id'].S,
+        data: {
+          'request-url': item.data['M']['request-url']?.S || '',
+          'status': item.data['M']['status']?.S || 'In Progress',
+          'total-items-processed': parseInt(item.data['M']['total-items-processed']?.N || '0', 10),
+          'iteration-no': parseInt(item.data['M']['iteration-no']?.N || '0', 10),
+          'items-in-current-page': parseInt(item.data['M']['items-in-current-page']?.N || '0', 10),
+          'response-status': parseInt(item.data['M']['response-status']?.N || '0', 10),
+          'pagination-type': item.data['M']['pagination-type']?.S || '',
+          'timestamp': item.data['M']['timestamp']?.S || new Date().toISOString(),
+          'is-last': item.data['M']['is-last']?.BOOL || false
+        }
+      }));
+      
+      // Sort logs by timestamp in descending order (newest first)
+      const sortedLogs = logs.sort((a: ExecutionLog, b: ExecutionLog) => {
+        const dateA = new Date(a.data.timestamp);
+        const dateB = new Date(b.data.timestamp);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      console.log('Processed logs:', sortedLogs);
+      setAllExecutions(sortedLogs);
+    } catch (error) {
+      console.error('Error fetching all executions:', error);
+    }
+  };
+
+  // Function to clear execution ID from URL and localStorage
+  const clearExecutionId = useCallback(() => {
+    // Clear from localStorage
+    localStorage.removeItem('currentExecutionId');
+    // Clear from URL
+    const url = new URL(window.location.href);
+    url.searchParams.delete('id');
+    window.history.replaceState({}, '', url.toString());
+    // Clear from state
+    setCurrentExecutionId(null);
+  }, []);
+
+  // Function to fetch execution logs for a specific execution
+  const fetchExecutionLogs = useCallback(async () => {
+    if (!currentExecutionId) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/executions/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          KeyConditionExpression: "#execId = :execId",
+          ExpressionAttributeNames: {
+            "#execId": "exec-id"
+          },
+          ExpressionAttributeValues: {
+            ":execId": currentExecutionId
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch execution logs');
+      }
+
+      const data = await response.json();
+      
+      // If no items are found, increment retry counter
+      if (!data.items || data.items.length === 0) {
+        setRetryCount(prev => prev + 1);
+        if (retryCount >= MAX_RETRIES) {
+          console.log('No execution found after maximum retries, stopping polling');
+          setIsPolling(false);
+          clearExecutionId();
+          return;
+        }
+        return;
+      }
+      
+      // Reset retry counter if we found items
+      setRetryCount(0);
+      
+      const logs = data.items as ExecutionLog[];
+      
+      // Sort logs: parent first, then children by iteration number
+      const sortedLogs = logs.sort((a, b) => {
+        if (a['exec-id'] === a['child-exec-id'] && b['exec-id'] !== b['child-exec-id']) return -1;
+        if (a['exec-id'] !== a['child-exec-id'] && b['exec-id'] === b['child-exec-id']) return 1;
+        return a.data['iteration-no'] - b.data['iteration-no'];
+      });
+
+      setExecutionLogs(sortedLogs);
+
+      // Check if we should stop polling
+      const parentLog = logs.find(log => log['exec-id'] === log['child-exec-id']);
+      if (parentLog?.data.status === 'completed' || parentLog?.data.status === 'error') {
+        setIsPolling(false);
+        clearExecutionId(); // Clear execution ID when completed or error
+      }
+    } catch (error) {
+      console.error('Error fetching execution logs:', error);
+      setIsPolling(false);
+      clearExecutionId(); // Clear execution ID on error
+    }
+  }, [currentExecutionId, retryCount, clearExecutionId, MAX_RETRIES]);
+
+  // Polling effect
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (isPolling && currentExecutionId) {
+      console.log('Starting polling for execution ID:', currentExecutionId);
+      fetchExecutionLogs(); // Initial fetch
+      pollInterval = setInterval(fetchExecutionLogs, 2000); // Poll every 2 seconds instead of 1
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+      // Reset retry counter when polling stops
+      setRetryCount(0);
+    };
+  }, [isPolling, currentExecutionId, fetchExecutionLogs]);
+
+  // Function to get status color
+  const getStatusColor = (status?: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'error':
+        return 'bg-red-100 text-red-800';
+      case 'inProgress':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Function to toggle execution expansion
+  const toggleExpansion = (execId: string) => {
+    const newExpanded = new Set(expandedExecutions);
+    if (newExpanded.has(execId)) {
+      newExpanded.delete(execId);
+    } else {
+      newExpanded.add(execId);
+    }
+    setExpandedExecutions(newExpanded);
+  };
+
+  // Effect to fetch all executions when logs sidebar is opened
+  useEffect(() => {
+    if (showLogsSidebar) {
+      fetchAllExecutions();
+    }
+  }, [showLogsSidebar]);
+
+  // Effect to read execution ID from URL and localStorage
+  useEffect(() => {
+    const id = localStorage.getItem('currentExecutionId');
+    if (id) {
+      console.log('Setting execution ID:', id);
+      setCurrentExecutionId(id);
+      setIsPolling(true);
+      setExecutionLogs([]); // Clear previous logs
+      setExpandedExecutions(new Set()); // Reset expanded state
+      setShowLogsSidebar(true); // Open the sidebar
+    }
+  }, []);
+
+
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       <Toaster position="top-right" />
@@ -1287,40 +1515,46 @@ const NamespacePage = () => {
             <Database className="text-blue-600" size={20} />
             <h2 className="text-lg font-semibold text-gray-900">Namespaces</h2>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:w-64">
+          <div className="flex items-center gap-3">
+            <div className="relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
               <input
                 type="text"
                 placeholder="Search namespaces..."
-                className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-64 pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-1 flex items-center"
-                  title="Clear search"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  <X className="h-3 w-3 text-gray-400 hover:text-gray-600" />
+                  <X size={12} />
                 </button>
               )}
             </div>
             <button
+              onClick={() => setShowLogsSidebar(true)}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Activity size={12} className="mr-1" />
+              Logs
+            </button>
+            <button
               onClick={() => {
+                setIsAddingNamespace(true);
                 setEditingNamespace(null);
                 setNewNamespace({
                   'namespace-name': '',
                   'namespace-url': '',
                   tags: []
                 });
-                setIsAddingNamespace(true);
               }}
               className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
               <Plus size={12} className="mr-1" />
-              Create Namespace
+               Namespace
             </button>
           </div>
         </div>
@@ -1450,19 +1684,19 @@ const NamespacePage = () => {
                     className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                   >
                     <Plus size={12} className="mr-1" />
-                    Create Account
+                  Account
                   </button>
                 </div>
               </div>
 
               {/* Accounts Grid */}
-              <div className="w-full overflow-hidden">
-                <div className="flex md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+              <div className="w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto pr-2">
                   {accounts.map((account) => (
                     <div
                       key={account['namespace-account-id']}
                       onClick={() => handleViewAccount(account)}
-                      className="flex-none md:flex-auto w-[160px] md:w-auto bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-sm border border-purple-100 p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+                      className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-sm border border-purple-100 p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105"
                     >
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
@@ -1556,19 +1790,19 @@ const NamespacePage = () => {
                     className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                   >
                     <Plus size={12} className="mr-1" />
-                    Create Method
+                     Method
                   </button>
                 </div>
               </div>
 
               {/* Methods Grid */}
-              <div className="w-full overflow-hidden">
-                <div className="flex md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+              <div className="w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto pr-2">
                   {methods.map((method) => (
                     <div
                       key={method['namespace-method-id']}
                       onClick={() => handleViewMethod(method)}
-                      className="flex-none md:flex-auto w-[160px] md:w-auto bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg shadow-sm border border-emerald-100 p-2.5 hover:shadow-md transition-all cursor-pointer hover:scale-105 relative"
+                      className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg shadow-sm border border-emerald-100 p-2.5 hover:shadow-md transition-all cursor-pointer hover:scale-105 relative"
                     >
                       {/* Method Type Badge */}
                       <div className="flex items-center justify-between mb-3">
@@ -3151,12 +3385,135 @@ const NamespacePage = () => {
           isOpen={isMethodTestModalOpen}
           onClose={() => setIsMethodTestModalOpen(false)}
           namespaceId={testingMethod['namespace-id']}
-          methodId={testingMethod['namespace-method-id']}
           methodName={testingMethod['namespace-method-name']}
           methodType={testingMethod['namespace-method-type']}
           namespaceMethodUrlOverride={testingMethod['namespace-method-url-override']}
           saveData={testingMethod['save-data']}
         />
+      )}
+
+      {/* Logs Sidebar */}
+      {showLogsSidebar && (
+        <div className="fixed inset-y-0 right-0 w-[480px] bg-white shadow-xl z-50 flex flex-col">
+          {/* Sidebar Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Execution Logs</h2>
+            <button
+              onClick={() => setShowLogsSidebar(false)}
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <X className="h-5 w-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Sidebar Content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* Current Execution Section */}
+            {currentExecutionId && (
+              <div className="mb-8">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Current Execution</h3>
+                <div className="space-y-4">
+                  {executionLogs.map((log) => (
+                    <div key={log['child-exec-id']} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium text-gray-900">
+                          {log['exec-id'] === log['child-exec-id'] ? 'Parent Execution' : `Iteration ${log.data['iteration-no']}`}
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.data.status)}`}>
+                          {log.data.status || 'In Progress'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>URL: {log.data['request-url']}</div>
+                        <div>Items Processed: {log.data['total-items-processed']}</div>
+                        <div>Response Status: {log.data['response-status']}</div>
+                        {log.data['is-last'] && <div className="text-blue-600">Final Iteration</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* All Executions Section */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">All Executions</h3>
+              <div className="space-y-4">
+                {allExecutions
+                  .filter(log => log['exec-id'] === log['child-exec-id']) // Only show parent executions
+                  .map((parentLog) => (
+                    <div key={parentLog['exec-id']} 
+                      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer"
+                      onClick={() => toggleExpansion(parentLog['exec-id'])}
+                    >
+                      {/* Parent execution header */}
+                      <div className="p-4 hover:bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {expandedExecutions.has(parentLog['exec-id']) ? (
+                              <ChevronDown className="h-4 w-4 text-gray-500" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-gray-500" />
+                            )}
+                            <div className="text-sm font-medium text-gray-900">
+                              Execution ID: {parentLog['exec-id']}
+                            </div>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(parentLog.data.status)}`}>
+                            {parentLog.data.status || 'In Progress'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div>URL: {parentLog.data['request-url']}</div>
+                          <div>Items Processed: {parentLog.data['total-items-processed']}</div>
+                          <div>Response Status: {parentLog.data['response-status']}</div>
+                          <div className="text-gray-400">{new Date(parentLog.data.timestamp).toLocaleString()}</div>
+                        </div>
+                      </div>
+
+                      {/* Child executions */}
+                      {expandedExecutions.has(parentLog['exec-id']) && (
+                        <div className="border-t border-gray-200 bg-gray-50">
+                          <div className="divide-y divide-gray-200">
+                            {allExecutions
+                              .filter(child => child['exec-id'] === parentLog['exec-id'] && child['child-exec-id'] !== parentLog['exec-id'])
+                              .sort((a, b) => a.data['iteration-no'] - b.data['iteration-no'])
+                              .map(child => (
+                                <div key={child['child-exec-id']} className="p-4 pl-8">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      Iteration {child.data['iteration-no']}
+                                    </div>
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(child.data.status)}`}>
+                                      {child.data.status || 'In Progress'}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 space-y-1">
+                                    <div>Items in Page: {child.data['items-in-current-page']}</div>
+                                    <div>Response Status: {child.data['response-status']}</div>
+                                    {child.data['is-last'] && <div className="text-blue-600">Final Iteration</div>}
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Loading State */}
+          {isPolling && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Polling for updates...</span>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
