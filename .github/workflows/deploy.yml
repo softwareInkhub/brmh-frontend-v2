@@ -28,17 +28,17 @@ jobs:
         NEXT_PUBLIC_AWS_URL: http://brmh-aws-lb-183448151.us-east-1.elb.amazonaws.com
         PERPLEXITY_API_KEY: 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
         REDIS_URL: redis-cli -u redis://default:AbijlE3ijbJC5WEfhlnlCHq8cN2ERzCa@redis-19904.crce182.ap-south-1-1.ec2.redns.redis-cloud.com:19904
-      
+
+    - name: Setup SSH Config
+      run: |
+        mkdir -p ~/.ssh/
+        echo "${{ secrets.SSH_KEY }}" > ~/.ssh/private_key.pem
+        chmod 600 ~/.ssh/private_key.pem
+        ssh-keyscan -H ec2-44-216-59-69.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+
     - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ec2-44-216-59-69.compute-1.amazonaws.com
-        username: ubuntu
-        port: 22
-        protocol: tcp
-        timeout: "30m"
-        key: ${{ secrets.SSH_KEY }}
-        script: |
+      run: |
+        ssh -i ~/.ssh/private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@ec2-44-216-59-69.compute-1.amazonaws.com '
           # Create directory if it doesn't exist
           mkdir -p /home/ubuntu/brmh-frontend-v2
           
@@ -106,4 +106,5 @@ jobs:
           sudo systemctl status pm2-ubuntu
           
           # Check PM2 status
-          pm2 status 
+          pm2 status
+        ' 
