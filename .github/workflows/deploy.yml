@@ -34,33 +34,34 @@ jobs:
       with:
         host: ec2-44-216-59-69.compute-1.amazonaws.com
         username: ubuntu
-        key: -----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAy2NODzwkNSAYn58UP/paqUsj5NqF9hUFh7FqpP4cO7rDX+qV
-d2Tl3+CTKOSfwoGINwLDZxGovFKMlJz/kHYlqKgHznYMqVPNsXT4CLBtcosxtviM
-g4BQV6Rg4+DmlsjRbmCYniYw6Chw1NQKARGuqEULXFWryTtuljts86e9dQA9lKNI
-ilp18/iT1LP05NZmPsgbXOHvikZPLObpw97aGB/i/i926blfMnf0dTm2LkME8ZQr
-NOX6bgtwTZVrv21QVtk/pktqcEZbbykzGZaZQlOmydI4IRnWTIVyaipPiW1QecyF
-9IXlWyTVl4VGLKV+w9WRDbDs4KmuX+jxSqXTFwIDAQABAoIBADtb3TFXFR4oIueb
-LvbJI2KbWnt1R3mdgwKqRfynaSgJhvHcbgjteqWPToO1zeaflViwxsSzA7MKyJqr
-A29u++iwOa8JBwL4QWUURTuL+jVe6ICFI8VRUqFxiRGY1tOVAoKbUI9/h/CJtPx4
-cf8D4RydIgatvjg5zzmrWE34W7Pke7ko9CNnbbXLrB18J5DHqp7QADor8xFYcdXz
-rRkrB9TgNoo4abD5Pr9CANNlG5vnHZMG7g4mZAYbYeHmvfowa3A9IWytvQhZsxzI
-cOuxXKbdLqvi/xofGogpEl70iCDdUrkuX4W2PJE0Y7Cos7qzr1hNKezuRu1f8keR
-HQ1+AVkCgYEA784VyuK8Dhqd4tTluJYo4rKKhAQVsVpf8snTOKL6p1meXffNnw0V
-GLJU3STJdRNl0LFwnLeW287geXFkPdNJxxd7SHg4CEI4b94oAgXCk9gpomhlznCy
-pukJU2s89hrLYoVkTkC3bvp3LpOc1qDZmFYt4EXTcQUqUVTZ9lv9HyUCgYEA2R+d
-mfiShNmCf00wh1OnUzKVsvFcuO4K6Sgt83nlDghRvutVVIRwxtJcFHivjFnTv5rq
-1Up7szvFaxkpieLl/LDl1VIJdM8+f6t1NclyxEwlQjAe1oqXAvZ9MrXdLholMa99
-jlZZAxtZQL7roR2m9YM10IbeYej6JDvTSqrXIosCgYB2ejBEI89bfIUC+8JfdzjN
-//31iXsaO5dqAZLsyYDjS6C1tmeNrE3+/KR2+eTahfHosLH9i6rqAIThG0e2T/yE
-c7KCNHsigW0WwACuNyBSIRs41TFvVDi/xCTKZRIiWUyg6VyMWOcH2pElnuJ/G8tF
-u1ZBFt6HWVD2C+EAGaSuTQKBgDWtVT8dbsudIl/qa1bpXXJ6DPxCI1QstVHS9xk8
-R15ivCLg9yV/4Imms9DzzSJ7ipfR6sB0O4SiADpr7BMEnysLaKaGM4RHQAI8FywG
-83KICKYGU3lipda7rVP+FgIxwIQ6CGZJ/pOADV6uVH5uYDpOB93Xmd7GxCB1EdVh
-yvHlAoGBAK6c0JtyJb7Zlxa8ozRCqi89NnBL4+M8lPk9GyNKgh3H+hh6RWsaeUPH
-MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
-yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
------END RSA PRIVATE KEY-----
+        key: |
+          -----BEGIN RSA PRIVATE KEY-----
+          MIIEowIBAAKCAQEAy2NODzwkNSAYn58UP/paqUsj5NqF9hUFh7FqpP4cO7rDX+qV
+          d2Tl3+CTKOSfwoGINwLDZxGovFKMlJz/kHYlqKgHznYMqVPNsXT4CLBtcosxtviM
+          g4BQV6Rg4+DmlsjRbmCYniYw6Chw1NQKARGuqEULXFWryTtuljts86e9dQA9lKNI
+          ilp18/iT1LP05NZmPsgbXOHvikZPLObpw97aGB/i/i926blfMnf0dTm2LkME8ZQr
+          NOX6bgtwTZVrv21QVtk/pktqcEZbbykzGZaZQlOmydI4IRnWTIVyaipPiW1QecyF
+          9IXlWyTVl4VGLKV+w9WRDbDs4KmuX+jxSqXTFwIDAQABAoIBADtb3TFXFR4oIueb
+          LvbJI2KbWnt1R3mdgwKqRfynaSgJhvHcbgjteqWPToO1zeaflViwxsSzA7MKyJqr
+          A29u++iwOa8JBwL4QWUURTuL+jVe6ICFI8VRUqFxiRGY1tOVAoKbUI9/h/CJtPx4
+          cf8D4RydIgatvjg5zzmrWE34W7Pke7ko9CNnbbXLrB18J5DHqp7QADor8xFYcdXz
+          rRkrB9TgNoo4abD5Pr9CANNlG5vnHZMG7g4mZAYbYeHmvfowa3A9IWytvQhZsxzI
+          cOuxXKbdLqvi/xofGogpEl70iCDdUrkuX4W2PJE0Y7Cos7qzr1hNKezuRu1f8keR
+          HQ1+AVkCgYEA784VyuK8Dhqd4tTluJYo4rKKhAQVsVpf8snTOKL6p1meXffNnw0V
+          GLJU3STJdRNl0LFwnLeW287geXFkPdNJxxd7SHg4CEI4b94oAgXCk9gpomhlznCy
+          pukJU2s89hrLYoVkTkC3bvp3LpOc1qDZmFYt4EXTcQUqUVTZ9lv9HyUCgYEA2R+d
+          mfiShNmCf00wh1OnUzKVsvFcuO4K6Sgt83nlDghRvutVVIRwxtJcFHivjFnTv5rq
+          1Up7szvFaxkpieLl/LDl1VIJdM8+f6t1NclyxEwlQjAe1oqXAvZ9MrXdLholMa99
+          jlZZAxtZQL7roR2m9YM10IbeYej6JDvTSqrXIosCgYB2ejBEI89bfIUC+8JfdzjN
+          //31iXsaO5dqAZLsyYDjS6C1tmeNrE3+/KR2+eTahfHosLH9i6rqAIThG0e2T/yE
+          c7KCNHsigW0WwACuNyBSIRs41TFvVDi/xCTKZRIiWUyg6VyMWOcH2pElnuJ/G8tF
+          u1ZBFt6HWVD2C+EAGaSuTQKBgDWtVT8dbsudIl/qa1bpXXJ6DPxCI1QstVHS9xk8
+          R15ivCLg9yV/4Imms9DzzSJ7ipfR6sB0O4SiADpr7BMEnysLaKaGM4RHQAI8FywG
+          83KICKYGU3lipda7rVP+FgIxwIQ6CGZJ/pOADV6uVH5uYDpOB93Xmd7GxCB1EdVh
+          yvHlAoGBAK6c0JtyJb7Zlxa8ozRCqi89NnBL4+M8lPk9GyNKgh3H+hh6RWsaeUPH
+          MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
+          yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
+          -----END RSA PRIVATE KEY-----
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
