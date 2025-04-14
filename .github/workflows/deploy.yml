@@ -29,48 +29,21 @@ jobs:
       with:
         host: ec2-3-87-151-205.compute-1.amazonaws.com
         username: ubuntu
-        key: |
-        -----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA235PBy8CcYdCi8RPGQDJ2duYVEGkSBfcsys1yolY2nHDSNBJ
-s8gvN++XdqUdbaTKGLd6jVq/1c1rD77fuv4C/rUx4Ha/s6dZ2LP0anTEL44+m2g/
-PFdidwL87F+iOtgN89YzLJXJwJX6X+7dP//+7r3WhhhZhYSNvLzaV6uWQkZtuDL9
-jqBnc2Yk2I9k9s/xd6/F4i+qpuFSFCDwSnaLqTW/N8KvPb542pSvY8Jnh9Vnz/eD
-428pZ/kun+2yc5rNdCfBYP/pd2anVRrkJFm32G9tJdfJm1A3+WnDJbmlErxejmlO
-Q4Rcn4T2jb4rGqb3hGwIqazza4+uTyyNBwK0twIDAQABAoIBAQDZDUbJK8uWyNMd
-s7skVotFTMqOR3tVb4NoCkrfRoL/QZCD6LV5e3R2NA/r28wGKPdRCd+++QbLPp+o
-qnBEUfxUNIpmFgfseIl4qjwBKgb3oAp5U9V0rlVIq0PB27Bp0E272w4wAM/KCoXV
-aDiSmWxYWpJReLLOPg6LnZWtLJkiXv43d61jXnK1EXaJRTyiYqqSBwqnlc7lCMHK
-xklg6Oju+4mSNX5Uz/TSyhO0EBWK0zz8nZmv1CJUjV4H0DAh64jWYeoHfDZrnnP/
-nIP2YcaH8WSNO5rBWuaZM8RLf7hV4OLXLM9qs5+VcQdZBiDRFcpXTkUHfxLTBMPl
-nZ9cjbbBAoGBAO+Zz/rGc/5Rgy9Nh3/e3P8P87z0xycN6s6sTs969WtZ5ntwHlcA
-tIX0kWGRxX9yNo7YEghcYDFmR0zuwRivdEdtpdCMELUHKMrFdEnvUeD4tLoY0a/m
-dqDqdLZgwN9fY0NQ++mQcsWLX40QO+IrG0/c6yqRUvLJ6AXs9vHC1wpDAoGBAOqE
-Lpjf9DM1BTNP9B703+dLcfmjTU/CtZPrP8yIpVVue3DaEa6gZjemyJhf3JKHaanq
-PAtiudO51dVY41FsURRJJK849WgrhZDaSlhGpC6PXj+mOZwy+p0Dyu+Cf7mjcqs2
-yt/yCZ4fG/neB0lRa2Bv4hY6NjB3mHZBRm4hpGZ9AoGAGH61EIIxYZKbwr4+WAhE
-t5694Fd19LwrgS2EcRm09WCfe4ce0u4zhm5WXo80ja7zfO8CCPDItMQsDeVqwEdP
-r+25wfRP0PIGbZR6KwTYbhN/Bnd7GGyLPDA79lk13qA12a/x0RL/aMqy3g0G0jxt
-8mA3eoaY4FFb8x8ir9ynd1kCgYEA2GujlPEYKymC4xel8euJtamqRPavIixN5XP0
-LIzuBykuQbb9Gmpr6m/ALt5Ib/EHUgcX4mn5k6qr63dcUIflSxM1B39I+hkv6b2J
-Xm3SliU4lQSRpdRl8wDNBrsno+lyqQ6nqoNy3LlY1/5OOxsoPJcDzf9qgs/bo0YZ
-+QiS7wECgYA8NKTzNjjRaFaRxR6ktkgn4OLmeIPcbxJIzTzeQgQxvQWN4MurzU1G
-NIL4XAlzJW/jt3pV+7ZijZ+RYW74m8Qrm3gu/zU0uvtyaXRDRIt7nWwrtzG4XhXL
-E1pY+1UOqnisdGsYEv5CLetBngS6aZEU3pf3xFVd4/5ml2N+wftqyA==
------END RSA PRIVATE KEY-----
+        key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
           npm install --legacy-peer-deps
           npm run build
           # Install PM2 globally with sudo
-          sudo npm install -g pm2
+          sudo npm install -g pm2@latest
           # Stop any existing instances
-          pm2 stop brmh-frontend || true
-          pm2 delete brmh-frontend || true
+          sudo pm2 stop brmh-frontend || true
+          sudo pm2 delete brmh-frontend || true
           # Start the application as a system service
-          pm2 start npm --name "brmh-frontend" -- start
+          sudo pm2 start npm --name "brmh-frontend" -- start
           # Save PM2 process list
-          pm2 save
+          sudo pm2 save
           # Remove any existing startup script
           sudo pm2 unstartup systemd || true
           # Generate new startup script
@@ -83,4 +56,4 @@ E1pY+1UOqnisdGsYEv5CLetBngS6aZEU3pf3xFVd4/5ml2N+wftqyA==
           # Verify the service is running
           sudo systemctl status pm2-ubuntu
           # Check PM2 status
-          pm2 status 
+          pm2 status
