@@ -62,6 +62,8 @@ jobs:
           MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
           yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
           -----END RSA PRIVATE KEY-----
+        script_stop: true
+        command_timeout: "30m"
         script: |
           # Create directory if it doesn't exist
           mkdir -p /home/ubuntu/brmh-frontend-v2
@@ -80,22 +82,38 @@ jobs:
           git pull origin main
           
           # Install dependencies and build
+          echo "Installing dependencies..."
           npm install --legacy-peer-deps
+          
+          echo "Building application..."
+          # Create a temporary next.config.js without serverOptions
+          cp next.config.js next.config.js.bak
+          grep -v "serverOptions" next.config.js > next.config.js.tmp
+          mv next.config.js.tmp next.config.js
+          
           npm run build
           
+          # Restore original config
+          mv next.config.js.bak next.config.js
+          
+          echo "Installing PM2..."
           # Install PM2 globally with sudo
           sudo npm install -g pm2
           
+          echo "Stopping existing instances..."
           # Stop any existing instances
           pm2 stop brmh-frontend || true
           pm2 delete brmh-frontend || true
           
+          echo "Starting application..."
           # Start the application as a system service
           pm2 start npm --name "brmh-frontend" -- start
           
+          echo "Saving PM2 process list..."
           # Save PM2 process list
           pm2 save
           
+          echo "Setting up systemd service..."
           # Remove any existing startup script
           sudo pm2 unstartup systemd || true
           
@@ -109,6 +127,7 @@ jobs:
           sudo systemctl enable pm2-ubuntu
           sudo systemctl start pm2-ubuntu
           
+          echo "Verifying service status..."
           # Verify the service is running
           sudo systemctl status pm2-ubuntu
           
