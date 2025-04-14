@@ -32,36 +32,36 @@ jobs:
     - name: Deploy to EC2
       uses: appleboy/ssh-action@master
       with:
-        host: ec2-44-216-59-69.compute-1.amazonaws.com
+        host: ec2-3-87-151-205.compute-1.amazonaws.com
         username: ubuntu
         key: |
-          -----BEGIN RSA PRIVATE KEY-----
-          MIIEowIBAAKCAQEAy2NODzwkNSAYn58UP/paqUsj5NqF9hUFh7FqpP4cO7rDX+qV
-          d2Tl3+CTKOSfwoGINwLDZxGovFKMlJz/kHYlqKgHznYMqVPNsXT4CLBtcosxtviM
-          g4BQV6Rg4+DmlsjRbmCYniYw6Chw1NQKARGuqEULXFWryTtuljts86e9dQA9lKNI
-          ilp18/iT1LP05NZmPsgbXOHvikZPLObpw97aGB/i/i926blfMnf0dTm2LkME8ZQr
-          NOX6bgtwTZVrv21QVtk/pktqcEZbbykzGZaZQlOmydI4IRnWTIVyaipPiW1QecyF
-          9IXlWyTVl4VGLKV+w9WRDbDs4KmuX+jxSqXTFwIDAQABAoIBADtb3TFXFR4oIueb
-          LvbJI2KbWnt1R3mdgwKqRfynaSgJhvHcbgjteqWPToO1zeaflViwxsSzA7MKyJqr
-          A29u++iwOa8JBwL4QWUURTuL+jVe6ICFI8VRUqFxiRGY1tOVAoKbUI9/h/CJtPx4
-          cf8D4RydIgatvjg5zzmrWE34W7Pke7ko9CNnbbXLrB18J5DHqp7QADor8xFYcdXz
-          rRkrB9TgNoo4abD5Pr9CANNlG5vnHZMG7g4mZAYbYeHmvfowa3A9IWytvQhZsxzI
-          cOuxXKbdLqvi/xofGogpEl70iCDdUrkuX4W2PJE0Y7Cos7qzr1hNKezuRu1f8keR
-          HQ1+AVkCgYEA784VyuK8Dhqd4tTluJYo4rKKhAQVsVpf8snTOKL6p1meXffNnw0V
-          GLJU3STJdRNl0LFwnLeW287geXFkPdNJxxd7SHg4CEI4b94oAgXCk9gpomhlznCy
-          pukJU2s89hrLYoVkTkC3bvp3LpOc1qDZmFYt4EXTcQUqUVTZ9lv9HyUCgYEA2R+d
-          mfiShNmCf00wh1OnUzKVsvFcuO4K6Sgt83nlDghRvutVVIRwxtJcFHivjFnTv5rq
-          1Up7szvFaxkpieLl/LDl1VIJdM8+f6t1NclyxEwlQjAe1oqXAvZ9MrXdLholMa99
-          jlZZAxtZQL7roR2m9YM10IbeYej6JDvTSqrXIosCgYB2ejBEI89bfIUC+8JfdzjN
-          //31iXsaO5dqAZLsyYDjS6C1tmeNrE3+/KR2+eTahfHosLH9i6rqAIThG0e2T/yE
-          c7KCNHsigW0WwACuNyBSIRs41TFvVDi/xCTKZRIiWUyg6VyMWOcH2pElnuJ/G8tF
-          u1ZBFt6HWVD2C+EAGaSuTQKBgDWtVT8dbsudIl/qa1bpXXJ6DPxCI1QstVHS9xk8
-          R15ivCLg9yV/4Imms9DzzSJ7ipfR6sB0O4SiADpr7BMEnysLaKaGM4RHQAI8FywG
-          83KICKYGU3lipda7rVP+FgIxwIQ6CGZJ/pOADV6uVH5uYDpOB93Xmd7GxCB1EdVh
-          yvHlAoGBAK6c0JtyJb7Zlxa8ozRCqi89NnBL4+M8lPk9GyNKgh3H+hh6RWsaeUPH
-          MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
-          yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
-          -----END RSA PRIVATE KEY-----
+         -----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA235PBy8CcYdCi8RPGQDJ2duYVEGkSBfcsys1yolY2nHDSNBJ
+s8gvN++XdqUdbaTKGLd6jVq/1c1rD77fuv4C/rUx4Ha/s6dZ2LP0anTEL44+m2g/
+PFdidwL87F+iOtgN89YzLJXJwJX6X+7dP//+7r3WhhhZhYSNvLzaV6uWQkZtuDL9
+jqBnc2Yk2I9k9s/xd6/F4i+qpuFSFCDwSnaLqTW/N8KvPb542pSvY8Jnh9Vnz/eD
+428pZ/kun+2yc5rNdCfBYP/pd2anVRrkJFm32G9tJdfJm1A3+WnDJbmlErxejmlO
+Q4Rcn4T2jb4rGqb3hGwIqazza4+uTyyNBwK0twIDAQABAoIBAQDZDUbJK8uWyNMd
+s7skVotFTMqOR3tVb4NoCkrfRoL/QZCD6LV5e3R2NA/r28wGKPdRCd+++QbLPp+o
+qnBEUfxUNIpmFgfseIl4qjwBKgb3oAp5U9V0rlVIq0PB27Bp0E272w4wAM/KCoXV
+aDiSmWxYWpJReLLOPg6LnZWtLJkiXv43d61jXnK1EXaJRTyiYqqSBwqnlc7lCMHK
+xklg6Oju+4mSNX5Uz/TSyhO0EBWK0zz8nZmv1CJUjV4H0DAh64jWYeoHfDZrnnP/
+nIP2YcaH8WSNO5rBWuaZM8RLf7hV4OLXLM9qs5+VcQdZBiDRFcpXTkUHfxLTBMPl
+nZ9cjbbBAoGBAO+Zz/rGc/5Rgy9Nh3/e3P8P87z0xycN6s6sTs969WtZ5ntwHlcA
+tIX0kWGRxX9yNo7YEghcYDFmR0zuwRivdEdtpdCMELUHKMrFdEnvUeD4tLoY0a/m
+dqDqdLZgwN9fY0NQ++mQcsWLX40QO+IrG0/c6yqRUvLJ6AXs9vHC1wpDAoGBAOqE
+Lpjf9DM1BTNP9B703+dLcfmjTU/CtZPrP8yIpVVue3DaEa6gZjemyJhf3JKHaanq
+PAtiudO51dVY41FsURRJJK849WgrhZDaSlhGpC6PXj+mOZwy+p0Dyu+Cf7mjcqs2
+yt/yCZ4fG/neB0lRa2Bv4hY6NjB3mHZBRm4hpGZ9AoGAGH61EIIxYZKbwr4+WAhE
+t5694Fd19LwrgS2EcRm09WCfe4ce0u4zhm5WXo80ja7zfO8CCPDItMQsDeVqwEdP
+r+25wfRP0PIGbZR6KwTYbhN/Bnd7GGyLPDA79lk13qA12a/x0RL/aMqy3g0G0jxt
+8mA3eoaY4FFb8x8ir9ynd1kCgYEA2GujlPEYKymC4xel8euJtamqRPavIixN5XP0
+LIzuBykuQbb9Gmpr6m/ALt5Ib/EHUgcX4mn5k6qr63dcUIflSxM1B39I+hkv6b2J
+Xm3SliU4lQSRpdRl8wDNBrsno+lyqQ6nqoNy3LlY1/5OOxsoPJcDzf9qgs/bo0YZ
++QiS7wECgYA8NKTzNjjRaFaRxR6ktkgn4OLmeIPcbxJIzTzeQgQxvQWN4MurzU1G
+NIL4XAlzJW/jt3pV+7ZijZ+RYW74m8Qrm3gu/zU0uvtyaXRDRIt7nWwrtzG4XhXL
+E1pY+1UOqnisdGsYEv5CLetBngS6aZEU3pf3xFVd4/5ml2N+wftqyA==
+-----END RSA PRIVATE KEY-----
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
