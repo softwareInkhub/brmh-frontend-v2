@@ -63,29 +63,54 @@ jobs:
           yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
           -----END RSA PRIVATE KEY-----
         script: |
+          # Create directory if it doesn't exist
+          mkdir -p /home/ubuntu/brmh-frontend-v2
+          
+          # Check if repository exists
+          if [ ! -d "/home/ubuntu/brmh-frontend-v2/.git" ]; then
+            # Clone repository if it doesn't exist
+            cd /home/ubuntu
+            git clone https://github.com/softwareInkhub/brmh-frontend-v2.git
+          fi
+          
+          # Update repository
           cd /home/ubuntu/brmh-frontend-v2
+          git fetch origin
+          git reset --hard origin/main
           git pull origin main
+          
+          # Install dependencies and build
           npm install --legacy-peer-deps
           npm run build
+          
           # Install PM2 globally with sudo
           sudo npm install -g pm2
+          
           # Stop any existing instances
           pm2 stop brmh-frontend || true
           pm2 delete brmh-frontend || true
+          
           # Start the application as a system service
           pm2 start npm --name "brmh-frontend" -- start
+          
           # Save PM2 process list
           pm2 save
+          
           # Remove any existing startup script
           sudo pm2 unstartup systemd || true
+          
           # Generate new startup script
           sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+          
           # Reload systemd daemon
           sudo systemctl daemon-reload
+          
           # Enable and start the PM2 service
           sudo systemctl enable pm2-ubuntu
           sudo systemctl start pm2-ubuntu
+          
           # Verify the service is running
           sudo systemctl status pm2-ubuntu
+          
           # Check PM2 status
           pm2 status 
