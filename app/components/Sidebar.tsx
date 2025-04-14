@@ -5,19 +5,14 @@ import {
   LayoutDashboard, 
   ChevronLeft,
   ChevronRight,
-  Code,
   Menu,
   X,
-  Box,
-  ShoppingCart,
   HelpCircle,
   Database,
   Cloud,
   Play,
   FileCode,
   Server,
-  Settings,
-  MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
