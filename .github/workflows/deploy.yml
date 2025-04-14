@@ -19,7 +19,7 @@ jobs:
         node-version: '18'
         
     - name: Install dependencies
-      run: npm install
+      run: npm install --legacy-peer-deps
       
     - name: Build application
       run: npm run build
@@ -65,7 +65,7 @@ jobs:
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
-          npm install --force
+          npm install --legacy-peer-deps
           npm run build
           # Install PM2 globally with sudo
           sudo npm install -g pm2
