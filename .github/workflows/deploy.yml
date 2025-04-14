@@ -23,13 +23,24 @@ jobs:
       
     - name: Build application
       run: npm run build
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ec2-44-216-59-69.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+
+    - name: Test SSH Connection
+      run: ssh -i ~/.ssh/deploy_key -v ubuntu@ec2-44-216-59-69.compute-1.amazonaws.com "echo 'SSH connection test successful'"
       
     - name: Deploy to AWS
       uses: appleboy/ssh-action@master
       with:
         host: ec2-44-216-59-69.compute-1.amazonaws.com
         username: ubuntu
-        key: ${{ secrets.SSH_KEY }}
+        key_path: ~/.ssh/deploy_key
+        debug: true
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
