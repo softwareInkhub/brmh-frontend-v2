@@ -42,14 +42,14 @@ jobs:
     - name: Deploy to EC2
       run: |
         # Create deployment directory if it doesn't exist
-        ssh ec2 'mkdir -p ~/brmh-frontend'
+        ssh ec2 'mkdir -p ~/brmh-frontend-v2'
         
         # Copy build files to EC2
-        scp -r .next ec2:~/brmh-frontend/
-        scp -r public ec2:~/brmh-frontend/
-        scp package.json ec2:~/brmh-frontend/
-        scp package-lock.json ec2:~/brmh-frontend/
-        scp next.config.js ec2:~/brmh-frontend/
+        scp -r .next ec2:~/brmh-frontend-v2/
+        scp -r public ec2:~/brmh-frontend-v2/
+        scp package.json ec2:~/brmh-frontend-v2/
+        scp package-lock.json ec2:~/brmh-frontend-v2/
+        scp next.config.js ec2:~/brmh-frontend-v2/
         
         # Install dependencies and restart the application on EC2
-        ssh ec2 'cd ~/brmh-frontend && npm install --legacy-peer-deps --production && pm2 restart brmh-frontend || pm2 start npm --name "brmh-frontend" -- start' 
+        ssh ec2 'cd ~/brmh-frontend-v2 && npm install --legacy-peer-deps --production && pm2 restart brmh-frontend-v2 || pm2 start npm --name "brmh-frontend-v2" -- start' 
