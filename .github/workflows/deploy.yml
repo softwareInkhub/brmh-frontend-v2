@@ -62,8 +62,7 @@ jobs:
           MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
           yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
           -----END RSA PRIVATE KEY-----
-        script_stop: true
-        command_timeout: "30m"
+        timeout: "30m"
         script: |
           # Create directory if it doesn't exist
           mkdir -p /home/ubuntu/brmh-frontend-v2
