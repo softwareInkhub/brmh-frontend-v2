@@ -1,38 +1,90 @@
-name: Deploy to EC2
+name: Deploy Frontend to EC2
 
 on:
   push:
-    branches:
-      - main  # or your default branch name
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      EC2_HOST: ec2-44-203-5-200.compute-1.amazonaws.com
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Configure SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          SSH_USER: ${{ secrets.EC2_USER }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
-
-      - name: Deploy to EC2
-        env:
-          SSH_USER: ${{ secrets.EC2_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          ssh $SSH_USER@$EC2_HOST '\
-            cd $DEPLOY_PATH && \
-            git pull origin main && \
-            npm install && \
-            npm run build && \
-            pm2 restart brmh-frontend' 
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Build application
+      run: npm run build
+      env:
+        NEXT_PUBLIC_BACKEND_URL: http://brmh.in
+        NEXT_PUBLIC_AWS_URL: http://brmh-aws-lb-183448151.us-east-1.elb.amazonaws.com
+        PERPLEXITY_API_KEY: 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
+        REDIS_URL: redis-cli -u redis://default:AbijlE3ijbJC5WEfhlnlCHq8cN2ERzCa@redis-19904.crce182.ap-south-1-1.ec2.redns.redis-cloud.com:19904
+      
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ec2-44-216-59-69.compute-1.amazonaws.com
+        username: ubuntu
+        key: -----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAy2NODzwkNSAYn58UP/paqUsj5NqF9hUFh7FqpP4cO7rDX+qV
+d2Tl3+CTKOSfwoGINwLDZxGovFKMlJz/kHYlqKgHznYMqVPNsXT4CLBtcosxtviM
+g4BQV6Rg4+DmlsjRbmCYniYw6Chw1NQKARGuqEULXFWryTtuljts86e9dQA9lKNI
+ilp18/iT1LP05NZmPsgbXOHvikZPLObpw97aGB/i/i926blfMnf0dTm2LkME8ZQr
+NOX6bgtwTZVrv21QVtk/pktqcEZbbykzGZaZQlOmydI4IRnWTIVyaipPiW1QecyF
+9IXlWyTVl4VGLKV+w9WRDbDs4KmuX+jxSqXTFwIDAQABAoIBADtb3TFXFR4oIueb
+LvbJI2KbWnt1R3mdgwKqRfynaSgJhvHcbgjteqWPToO1zeaflViwxsSzA7MKyJqr
+A29u++iwOa8JBwL4QWUURTuL+jVe6ICFI8VRUqFxiRGY1tOVAoKbUI9/h/CJtPx4
+cf8D4RydIgatvjg5zzmrWE34W7Pke7ko9CNnbbXLrB18J5DHqp7QADor8xFYcdXz
+rRkrB9TgNoo4abD5Pr9CANNlG5vnHZMG7g4mZAYbYeHmvfowa3A9IWytvQhZsxzI
+cOuxXKbdLqvi/xofGogpEl70iCDdUrkuX4W2PJE0Y7Cos7qzr1hNKezuRu1f8keR
+HQ1+AVkCgYEA784VyuK8Dhqd4tTluJYo4rKKhAQVsVpf8snTOKL6p1meXffNnw0V
+GLJU3STJdRNl0LFwnLeW287geXFkPdNJxxd7SHg4CEI4b94oAgXCk9gpomhlznCy
+pukJU2s89hrLYoVkTkC3bvp3LpOc1qDZmFYt4EXTcQUqUVTZ9lv9HyUCgYEA2R+d
+mfiShNmCf00wh1OnUzKVsvFcuO4K6Sgt83nlDghRvutVVIRwxtJcFHivjFnTv5rq
+1Up7szvFaxkpieLl/LDl1VIJdM8+f6t1NclyxEwlQjAe1oqXAvZ9MrXdLholMa99
+jlZZAxtZQL7roR2m9YM10IbeYej6JDvTSqrXIosCgYB2ejBEI89bfIUC+8JfdzjN
+//31iXsaO5dqAZLsyYDjS6C1tmeNrE3+/KR2+eTahfHosLH9i6rqAIThG0e2T/yE
+c7KCNHsigW0WwACuNyBSIRs41TFvVDi/xCTKZRIiWUyg6VyMWOcH2pElnuJ/G8tF
+u1ZBFt6HWVD2C+EAGaSuTQKBgDWtVT8dbsudIl/qa1bpXXJ6DPxCI1QstVHS9xk8
+R15ivCLg9yV/4Imms9DzzSJ7ipfR6sB0O4SiADpr7BMEnysLaKaGM4RHQAI8FywG
+83KICKYGU3lipda7rVP+FgIxwIQ6CGZJ/pOADV6uVH5uYDpOB93Xmd7GxCB1EdVh
+yvHlAoGBAK6c0JtyJb7Zlxa8ozRCqi89NnBL4+M8lPk9GyNKgh3H+hh6RWsaeUPH
+MsfmzX4J2zEGNG1qiHdszzTgD3qNf5rhXuheN13X3Lzdf5ATakTn4btRZdqIMnXc
+yZ/vbFXanaeEHKM93IE8JQkP2vK3q0gWQL8LGS0X9EP34fZs1DjF
+-----END RSA PRIVATE KEY-----
+        script: |
+          cd /home/ubuntu/brmh-frontend-v2
+          git pull origin main
+          npm install
+          npm run build
+          # Install PM2 globally with sudo
+          sudo npm install -g pm2
+          # Stop any existing instances
+          pm2 stop brmh-frontend || true
+          pm2 delete brmh-frontend || true
+          # Start the application as a system service
+          pm2 start npm --name "brmh-frontend" -- start
+          # Save PM2 process list
+          pm2 save
+          # Remove any existing startup script
+          sudo pm2 unstartup systemd || true
+          # Generate new startup script
+          sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+          # Reload systemd daemon
+          sudo systemctl daemon-reload
+          # Enable and start the PM2 service
+          sudo systemctl enable pm2-ubuntu
+          sudo systemctl start pm2-ubuntu
+          # Verify the service is running
+          sudo systemctl status pm2-ubuntu
+          # Check PM2 status
+          pm2 status 
