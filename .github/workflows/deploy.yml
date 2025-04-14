@@ -1,10 +1,9 @@
-name: Deploy Frontend to EC2
+name: Deploy to EC2
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -17,75 +16,40 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        
+        cache: 'npm'
+    
     - name: Install dependencies
-      run: npm install --legacy-peer-deps
-      
+      run: npm ci
+    
     - name: Build application
       run: npm run build
       env:
-        NEXT_PUBLIC_BACKEND_URL: http://brmh.in
-        NEXT_PUBLIC_AWS_URL: http://brmh-aws-lb-183448151.us-east-1.elb.amazonaws.com
-        PERPLEXITY_API_KEY: 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
-        REDIS_URL: redis-cli -u redis://default:AbijlE3ijbJC5WEfhlnlCHq8cN2ERzCa@redis-19904.crce182.ap-south-1-1.ec2.redns.redis-cloud.com:19904
-      
+        NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+    
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh/
+        echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        cat >>~/.ssh/config <<END
+        Host ec2
+          HostName ec2-44-216-59-69.compute-1.amazonaws.com
+          User ubuntu
+          IdentityFile ~/.ssh/deploy_key
+          StrictHostKeyChecking no
+        END
+    
     - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ec2-3-87-151-205.compute-1.amazonaws.com
-        username: ubuntu
-        key: |
-         -----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA235PBy8CcYdCi8RPGQDJ2duYVEGkSBfcsys1yolY2nHDSNBJ
-s8gvN++XdqUdbaTKGLd6jVq/1c1rD77fuv4C/rUx4Ha/s6dZ2LP0anTEL44+m2g/
-PFdidwL87F+iOtgN89YzLJXJwJX6X+7dP//+7r3WhhhZhYSNvLzaV6uWQkZtuDL9
-jqBnc2Yk2I9k9s/xd6/F4i+qpuFSFCDwSnaLqTW/N8KvPb542pSvY8Jnh9Vnz/eD
-428pZ/kun+2yc5rNdCfBYP/pd2anVRrkJFm32G9tJdfJm1A3+WnDJbmlErxejmlO
-Q4Rcn4T2jb4rGqb3hGwIqazza4+uTyyNBwK0twIDAQABAoIBAQDZDUbJK8uWyNMd
-s7skVotFTMqOR3tVb4NoCkrfRoL/QZCD6LV5e3R2NA/r28wGKPdRCd+++QbLPp+o
-qnBEUfxUNIpmFgfseIl4qjwBKgb3oAp5U9V0rlVIq0PB27Bp0E272w4wAM/KCoXV
-aDiSmWxYWpJReLLOPg6LnZWtLJkiXv43d61jXnK1EXaJRTyiYqqSBwqnlc7lCMHK
-xklg6Oju+4mSNX5Uz/TSyhO0EBWK0zz8nZmv1CJUjV4H0DAh64jWYeoHfDZrnnP/
-nIP2YcaH8WSNO5rBWuaZM8RLf7hV4OLXLM9qs5+VcQdZBiDRFcpXTkUHfxLTBMPl
-nZ9cjbbBAoGBAO+Zz/rGc/5Rgy9Nh3/e3P8P87z0xycN6s6sTs969WtZ5ntwHlcA
-tIX0kWGRxX9yNo7YEghcYDFmR0zuwRivdEdtpdCMELUHKMrFdEnvUeD4tLoY0a/m
-dqDqdLZgwN9fY0NQ++mQcsWLX40QO+IrG0/c6yqRUvLJ6AXs9vHC1wpDAoGBAOqE
-Lpjf9DM1BTNP9B703+dLcfmjTU/CtZPrP8yIpVVue3DaEa6gZjemyJhf3JKHaanq
-PAtiudO51dVY41FsURRJJK849WgrhZDaSlhGpC6PXj+mOZwy+p0Dyu+Cf7mjcqs2
-yt/yCZ4fG/neB0lRa2Bv4hY6NjB3mHZBRm4hpGZ9AoGAGH61EIIxYZKbwr4+WAhE
-t5694Fd19LwrgS2EcRm09WCfe4ce0u4zhm5WXo80ja7zfO8CCPDItMQsDeVqwEdP
-r+25wfRP0PIGbZR6KwTYbhN/Bnd7GGyLPDA79lk13qA12a/x0RL/aMqy3g0G0jxt
-8mA3eoaY4FFb8x8ir9ynd1kCgYEA2GujlPEYKymC4xel8euJtamqRPavIixN5XP0
-LIzuBykuQbb9Gmpr6m/ALt5Ib/EHUgcX4mn5k6qr63dcUIflSxM1B39I+hkv6b2J
-Xm3SliU4lQSRpdRl8wDNBrsno+lyqQ6nqoNy3LlY1/5OOxsoPJcDzf9qgs/bo0YZ
-+QiS7wECgYA8NKTzNjjRaFaRxR6ktkgn4OLmeIPcbxJIzTzeQgQxvQWN4MurzU1G
-NIL4XAlzJW/jt3pV+7ZijZ+RYW74m8Qrm3gu/zU0uvtyaXRDRIt7nWwrtzG4XhXL
-E1pY+1UOqnisdGsYEv5CLetBngS6aZEU3pf3xFVd4/5ml2N+wftqyA==
------END RSA PRIVATE KEY-----
-        script: |
-          cd /home/ubuntu/brmh-frontend-v2
-          git pull origin main
-          npm install --legacy-peer-deps
-          npm run build
-          # Install PM2 globally with sudo
-          sudo npm install -g pm2
-          # Stop any existing instances
-          pm2 stop brmh-frontend || true
-          pm2 delete brmh-frontend || true
-          # Start the application as a system service
-          pm2 start npm --name "brmh-frontend" -- start
-          # Save PM2 process list
-          pm2 save
-          # Remove any existing startup script
-          sudo pm2 unstartup systemd || true
-          # Generate new startup script
-          sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-          # Reload systemd daemon
-          sudo systemctl daemon-reload
-          # Enable and start the PM2 service
-          sudo systemctl enable pm2-ubuntu
-          sudo systemctl start pm2-ubuntu
-          # Verify the service is running
-          sudo systemctl status pm2-ubuntu
-          # Check PM2 status
-          pm2 status 
+      run: |
+        # Create deployment directory if it doesn't exist
+        ssh ec2 'mkdir -p ~/brmh-frontend'
+        
+        # Copy build files to EC2
+        scp -r .next ec2:~/brmh-frontend/
+        scp -r public ec2:~/brmh-frontend/
+        scp package.json ec2:~/brmh-frontend/
+        scp package-lock.json ec2:~/brmh-frontend/
+        scp next.config.js ec2:~/brmh-frontend/
+        
+        # Install dependencies and restart the application on EC2
+        ssh ec2 'cd ~/brmh-frontend && npm ci --production && pm2 restart brmh-frontend || pm2 start npm --name "brmh-frontend" -- start' 
