@@ -34,7 +34,7 @@ jobs:
       with:
         host: ec2-44-216-59-69.compute-1.amazonaws.com
         username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
+        key: ${{ secrets.SSH_KEY }}
         script: |
           cd /home/ubuntu/brmh-frontend-v2
           git pull origin main
