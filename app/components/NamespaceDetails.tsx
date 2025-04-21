@@ -313,7 +313,7 @@ const NamespaceDetails: React.FC<NamespaceDetailsProps> = ({
                 <h2 className="text-xl font-semibold text-gray-900">Methods</h2>
               </div>
               {methods.length > 0 ? (
-                <div className="grid gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {methods.map((method, index) => (
                     <div key={index} className="p-4 border border-gray-100 rounded-lg">
                       {/* Method Header */}

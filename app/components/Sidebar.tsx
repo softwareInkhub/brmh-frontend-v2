@@ -37,7 +37,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   {
     name: 'Dashboard',
-    path: '/namespace',
+    path: '/',
     icon: <LayoutDashboard size={18} className="text-blue-400" />,
   },
   {
@@ -48,14 +48,14 @@ const menuItems: MenuItem[] = [
       { name: 'Namespace', path: '/namespace' },
     ]
   },
-  {
-    name: 'Api Service',
-    path: '/api-service',
-    icon: <Server size={18} className="text-purple-400" />,
-    submenu: [
-      { name: 'Api Service', path: '/api-service' },
-    ]
-  },
+  // {
+  //   name: 'Api Service',
+  //   path: '/api-service',
+  //   icon: <Server size={18} className="text-purple-400" />,
+  //   submenu: [
+  //     { name: 'Api Service', path: '/api-service' },
+  //   ]
+  // },
   {
     name: 'Executions',
     path: '/executions',
@@ -90,6 +90,7 @@ const menuItems: MenuItem[] = [
 const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [submenuPosition, setSubmenuPosition] = useState<{ top: number } | null>(null);
   const pathname = usePathname();
@@ -97,8 +98,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
   // Handle screen resize
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 768) {
+      const isMobile = window.innerWidth < 768;
+      setIsMobileView(isMobile);
+      if (isMobile) {
         setIsCollapsed(true);
+        setIsMobileMenuOpen(false);
         onCollapse?.(true);
       }
     };
@@ -109,6 +113,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [onCollapse]);
+
+  const toggleSidebar = () => {
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      setIsMobileMenuOpen(!isMobileMenuOpen);
+    } else {
+      setIsCollapsed(!isCollapsed);
+      onCollapse?.(!isCollapsed);
+    }
+  };
 
   // Notify parent when collapse state changes
   useEffect(() => {
@@ -121,6 +135,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
   }, [pathname]);
 
   const toggleSubmenu = (path: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (isCollapsed) {
       const target = event.currentTarget as HTMLElement;
       const rect = target.getBoundingClientRect();
@@ -134,25 +150,46 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
       {menuItems.map((item, index) => (
         <div key={index} className="relative">
           <div
-            onClick={(e) => item.submenu && toggleSubmenu(item.path, e)}
             className={`flex items-center gap-3 px-6 py-3 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors duration-200 cursor-pointer ${
               pathname.startsWith(item.path) ? 'bg-gray-800 text-white' : ''
             }`}
           >
-            <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-              {item.icon}
-            </div>
-            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden flex-1 ${
-              isCollapsed && !isMobileMenuOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'
-            }`}>
-              {item.name}
-            </span>
-            {item.submenu && !isCollapsed && (
+            {item.name === 'Dashboard' ? (
+              <Link href={item.path} className="flex items-center gap-3 flex-1">
+                <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  {item.icon}
+                </div>
+                <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden flex-1 ${
+                  isCollapsed || isMobileView ? 'hidden' : 'block'
+                }`}>
+                  {item.name}
+                </span>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-3 flex-1">
+                <div 
+                  className="w-5 h-5 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                  onClick={(e) => toggleSubmenu(item.path, e)}
+                >
+                  {item.icon}
+                </div>
+                <span 
+                  className={`whitespace-nowrap transition-all duration-300 overflow-hidden flex-1 cursor-pointer ${
+                    isCollapsed || isMobileView ? 'hidden' : 'block'
+                  }`}
+                  onClick={(e) => toggleSubmenu(item.path, e)}
+                >
+                  {item.name}
+                </span>
+              </div>
+            )}
+            {item.submenu && !isCollapsed && !isMobileView && (
               <ChevronRight
                 size={16}
                 className={`transition-transform duration-200 ${
                   activeMenu === item.path ? 'rotate-90' : ''
                 }`}
+                onClick={(e) => toggleSubmenu(item.path, e)}
               />
             )}
           </div>
@@ -161,24 +198,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
           {item.submenu && activeMenu === item.path && (
             <div 
               className={`
-                ${isCollapsed 
+                ${isCollapsed || isMobileView
                   ? 'fixed left-16 bg-gray-900 rounded-lg shadow-lg border border-gray-700 min-w-[200px] z-50' 
                   : 'ml-4 pl-4 border-l border-gray-700'
                 }
               `}
               style={isCollapsed && submenuPosition ? { top: submenuPosition.top } : undefined}
             >
-              {/* {!isCollapsed && (
-                <div className="py-2 text-sm font-medium text-gray-400 px-6">
-                  {item.name}
-                </div>
-              )} */}
               {item.submenu.map((subItem, subIndex) => (
                 <Link
                   key={subIndex}
                   href={subItem.path}
+                  onClick={() => {
+                    setActiveMenu(null);
+                    setSubmenuPosition(null);
+                  }}
                   className={`flex items-center gap-3 px-6 py-2 text-sm text-gray-400 hover:text-white transition-colors duration-200 ${
-                    isCollapsed ? 'hover:bg-gray-800' : ''
+                    isCollapsed || isMobileView ? 'hover:bg-gray-800' : ''
                   } ${
                     pathname === subItem.path ? 'text-white' : ''
                   }`}
@@ -197,7 +233,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
         <div className="flex items-center gap-3 px-4 py-3 text-gray-300 rounded-lg bg-gray-800/50">
           <HelpCircle size={18} className="text-blue-400" />
           <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${
-            isCollapsed && !isMobileMenuOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'
+            isCollapsed || isMobileView ? 'hidden' : 'block'
           }`}>
             Need help?
           </span>
@@ -225,21 +261,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
 
   return (
     <>
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700 transition-colors"
-      >
-        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
       {/* Sidebar */}
       <aside
         id="main-sidebar"
         className={`fixed top-0 left-0 z-40 h-screen transition-transform ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0 ${
-          isCollapsed ? 'w-16' : 'w-64'
+          isCollapsed || isMobileView ? 'w-16' : 'w-64'
         } bg-gray-900 border-r border-gray-800`}
       >
         <div className="flex flex-col h-full">
@@ -250,21 +278,33 @@ const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
                 <span className="text-white font-bold text-lg">B</span>
               </div>
               <span className={`text-white font-semibold text-lg transition-all duration-300 ${
-                isCollapsed ? 'opacity-0 w-0' : 'opacity-100'
+                isCollapsed || isMobileView ? 'hidden' : 'block'
               }`}>
-                BRMH
+                BRHM
               </span>
             </Link>
             <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+              onClick={toggleSidebar}
+              className="p-2.5 rounded-lg bg-white text-gray-600 hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md border border-gray-100"
             >
-              <ChevronLeft
-                size={20}
+              <svg 
+                width="16" 
+                height="16" 
+                viewBox="0 0 16 16" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg"
                 className={`transition-transform duration-300 ${
                   isCollapsed ? 'rotate-180' : ''
                 }`}
-              />
+              >
+                <path 
+                  d="M2.75 4.25h10.5M2.75 8h10.5M2.75 11.75h10.5" 
+                  stroke="currentColor" 
+                  strokeWidth="1.5" 
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           </div>
 

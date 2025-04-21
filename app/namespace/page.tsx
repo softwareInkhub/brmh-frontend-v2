@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  Globe,
 } from 'react-feather';
 import { toast, Toaster } from 'react-hot-toast';
 import MethodTestModal from '../components/MethodTestModal';
@@ -87,6 +88,11 @@ interface EditFormData {
     'save-data': boolean;
     'tags': string[];
   };
+  namespace: {
+    'namespace-name': string;
+    'namespace-url': string;
+    'tags': string[];
+  };
 }
 
 interface AccountPayload {
@@ -108,21 +114,24 @@ interface MethodPayload {
   'tags'?: string[];
 }
 
+interface ExecutionData {
+  'execution-id': string;
+  'iteration-no': number;
+  'total-items-processed': number;
+  'items-in-current-page': number;
+  'request-url': string;
+  'response-status': number;
+  'pagination-type': string;
+  'timestamp': string;
+  'status'?: 'success' | 'completed' | 'error' | 'in-progress';
+  'is-last': boolean;
+  'error-message'?: string;
+}
+
 interface ExecutionLog {
   'exec-id': string;
   'child-exec-id': string;
-  data: {
-    'execution-id': string;
-    'iteration-no': number;
-    'total-items-processed': number;
-    'items-in-current-page': number;
-    'request-url': string;
-    'response-status': number;
-    'pagination-type': string;
-    'timestamp': string;
-    'status'?: string;
-    'is-last': boolean;
-  };
+  data: ExecutionData;
 }
 
 interface DynamoDBItem {
@@ -202,6 +211,24 @@ interface WebhookData {
   createdAt: string;
 }
 
+type ExecutionStatus = 'success' | 'completed' | 'error' | 'in-progress';
+
+const getStatusColor = (status: ExecutionStatus | undefined): string => {
+  if (!status) return 'bg-gray-100 text-gray-800';
+  
+  switch (status) {
+    case 'success':
+    case 'completed':
+      return 'bg-green-100 text-green-800';
+    case 'error':
+      return 'bg-red-100 text-red-800';
+    case 'in-progress':
+      return 'bg-blue-100 text-blue-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+};
+
 /**
  * NamespacePage Component
  * Displays a list of namespaces with their basic information and statistics
@@ -241,6 +268,11 @@ const NamespacePage = () => {
       'namespace-method-queryParams': [],
       'namespace-method-header': [],
       'save-data': false,
+      'tags': []
+    },
+    namespace: {
+      'namespace-name': '',
+      'namespace-url': '',
       'tags': []
     }
   });
@@ -1317,33 +1349,31 @@ const NamespacePage = () => {
   // Function to fetch all executions
   const fetchAllExecutions = async () => {
     try {
-      console.log('Fetching all executions...');
-      const response = await fetch(`${API_BASE_URL}/api/dynamodb/tables/executions/items`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/dynamodb/tables/executions/items`);
       if (!response.ok) {
-        throw new Error('Failed to fetch executions');
+        throw new Error(`Failed to fetch executions: ${response.statusText}`);
+      }
+      const data = await response.json();
+      
+      if (!data.items) {
+        setAllExecutions([]);
+        return;
       }
 
-      const data = await response.json();
-      console.log('Received executions data:', data);
+      // Convert DynamoDB format to plain values
       const logs = data.items.map((item: DynamoDBItem) => ({
         'exec-id': item['exec-id'].S,
         'child-exec-id': item['child-exec-id'].S,
         data: {
-          'request-url': item.data['M']['request-url']?.S || '',
-          'status': item.data['M']['status']?.S || 'In Progress',
-          'total-items-processed': parseInt(item.data['M']['total-items-processed']?.N || '0', 10),
-          'iteration-no': parseInt(item.data['M']['iteration-no']?.N || '0', 10),
-          'items-in-current-page': parseInt(item.data['M']['items-in-current-page']?.N || '0', 10),
-          'response-status': parseInt(item.data['M']['response-status']?.N || '0', 10),
-          'pagination-type': item.data['M']['pagination-type']?.S || '',
-          'timestamp': item.data['M']['timestamp']?.S || new Date().toISOString(),
-          'is-last': item.data['M']['is-last']?.BOOL || false
+          'request-url': item.data?.M?.['request-url']?.S || '',
+          'status': item.data?.M?.status?.S || 'in-progress',
+          'total-items-processed': parseInt(item.data?.M?.['total-items-processed']?.N || '0'),
+          'iteration-no': parseInt(item.data?.M?.['iteration-no']?.N || '0'),
+          'items-in-current-page': parseInt(item.data?.M?.['items-in-current-page']?.N || '0'),
+          'response-status': parseInt(item.data?.M?.['response-status']?.N || '0'),
+          'pagination-type': item.data?.M?.['pagination-type']?.S || '',
+          'timestamp': item.data?.M?.timestamp?.S || new Date().toISOString(),
+          'is-last': item.data?.M?.['is-last']?.BOOL || false
         }
       }));
       
@@ -1354,10 +1384,12 @@ const NamespacePage = () => {
         return dateB.getTime() - dateA.getTime();
       });
 
-      console.log('Processed logs:', sortedLogs);
+      console.log('Fetched and processed executions:', sortedLogs);
       setAllExecutions(sortedLogs);
     } catch (error) {
-      console.error('Error fetching all executions:', error);
+      console.error('Error fetching executions:', error);
+      toast.error('Failed to fetch execution logs. Please try again.');
+      setAllExecutions([]);
     }
   };
 
@@ -1458,20 +1490,6 @@ const NamespacePage = () => {
     };
   }, [isPolling, currentExecutionId, fetchExecutionLogs]);
 
-  // Function to get status color
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'error':
-        return 'bg-red-100 text-red-800';
-      case 'inProgress':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   // Function to toggle execution expansion
   const toggleExpansion = (execId: string) => {
     const newExpanded = new Set(expandedExecutions);
@@ -1508,20 +1526,20 @@ const NamespacePage = () => {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       <Toaster position="top-right" />
-      <div className="p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full">
+      <div className="p-2 sm:p-4 md:p-6 lg:p-8 w-full">
         {/* Header Section */}
         <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <Database className="text-blue-600" size={20} />
             <h2 className="text-lg font-semibold text-gray-900">Namespaces</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="relative min-w-[120px] sm:min-w-[160px]">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
               <input
                 type="text"
-                placeholder="Search namespaces..."
-                className="w-64 pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Search..."
+                className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1536,7 +1554,7 @@ const NamespacePage = () => {
             </div>
             <button
               onClick={() => setShowLogsSidebar(true)}
-              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shrink-0"
             >
               <Activity size={12} className="mr-1" />
               Logs
@@ -1551,74 +1569,70 @@ const NamespacePage = () => {
                   tags: []
                 });
               }}
-              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shrink-0"
             >
               <Plus size={12} className="mr-1" />
-               Namespace
+              Add
             </button>
           </div>
         </div>
 
         {/* Namespaces Grid */}
-        <div className="mb-6">
-          <div className="w-full overflow-hidden">
-            <div className="flex md:grid md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 flex-nowrap md:flex-wrap gap-3 overflow-x-auto md:overflow-x-visible pb-2 hide-scrollbar">
+        <div className="mb-2 w-full overflow-hidden">
+          <div className="w-full">
+            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-1.5 overflow-x-auto pb-2 hide-scrollbar">
               {filteredNamespaces.length > 0 ? (
                 filteredNamespaces.map((namespace) => (
                   <div 
-                    key={namespace['namespace-id']} 
-                    className={`flex-none md:flex-auto w-[160px] md:w-auto ${
-                      selectedNamespace?.['namespace-id'] === namespace['namespace-id']
-                        ? 'border-blue-500'
-                        : 'border-blue-100'
-                    } bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-sm border p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105`}
+                    key={namespace['namespace-id']}
                     onClick={() => handleNamespaceClick(namespace)}
+                    className="flex-none w-[9rem] md:w-auto bg-white rounded-md shadow-sm border border-gray-100 p-1.5 hover:shadow-md transition-all cursor-pointer hover:border-blue-100 flex flex-col"
                   >
                     <div className="flex items-start justify-between gap-1">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 mb-1">
-                          <Database size={10} className="text-blue-600" />
-                          <span className="text-[10px] font-medium truncate text-blue-900">{namespace['namespace-name']}</span>
-                        </div>
-                        <span className="text-[8px] text-blue-600/70 block truncate">{namespace['namespace-url']}</span>
+                        <h3 className="text-[0.7rem] font-medium text-gray-900 truncate">
+                          {namespace['namespace-name']}
+                        </h3>
+                        <p className="text-[0.6rem] text-gray-500 truncate mt-0.5">
+                          {namespace['namespace-url']}
+                        </p>
                       </div>
-                      <div className="flex items-start gap-0.5">
+                      <div className="flex items-center shrink-0">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleEditClick(namespace);
                           }}
-                          className="p-1 hover:bg-blue-100/50 rounded-full"
-                          title="Edit Namespace"
+                          className="p-0.5 text-gray-400 hover:text-blue-500 transition-colors"
                         >
-                          <Edit2 size={10} className="text-blue-600" />
+                          <Edit2 size={10} />
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteNamespace(namespace['namespace-id']);
                           }}
-                          className="p-1 hover:bg-red-100/50 rounded-full"
-                          title="Delete Namespace"
+                          className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
                         >
-                          <Trash2 size={10} className="text-red-500" />
+                          <Trash2 size={10} />
                         </button>
                       </div>
                     </div>
+
                     {namespace.tags && namespace.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {namespace.tags.slice(0, 2).map((tag, index) => (
+                      <div className="flex flex-wrap gap-0.5 mt-1">
+                        {namespace.tags.slice(0, 1).map((tag, index) => (
                           <span 
                             key={index} 
-                            className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gradient-to-r from-blue-500/10 to-indigo-500/10 text-[8px] font-medium text-blue-700 border border-blue-100/50"
+                            className="inline-flex items-center px-1 py-px rounded-full bg-gradient-to-r from-blue-500/10 to-indigo-500/10 text-[0.55rem] font-medium text-blue-700 border border-blue-100/50"
                           >
-                            <span className="w-1 h-1 rounded-full bg-blue-500 mr-1"></span>
+                            <span className="w-0.5 h-0.5 rounded-full bg-blue-500 mr-0.5"></span>
                             {tag}
                           </span>
                         ))}
-                        {namespace.tags.length > 2 && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 text-[8px] font-medium text-blue-600">
-                            +{namespace.tags.length - 2}
+                        {namespace.tags.length > 1 && (
+                          <span className="inline-flex items-center px-1 py-px rounded-full bg-blue-50 text-[0.55rem] font-medium text-blue-600">
+                            +{namespace.tags.length - 1}
                           </span>
                         )}
                       </div>
@@ -1626,8 +1640,8 @@ const NamespacePage = () => {
                   </div>
                 ))
               ) : (
-                <div className="w-full flex items-center justify-center py-12 text-gray-500">
-                  <p className="text-center">No namespaces found</p>
+                <div className="w-full flex items-center justify-center py-4 text-gray-500">
+                  <p className="text-[0.65rem]">No namespaces found</p>
                 </div>
               )}
             </div>
@@ -1649,19 +1663,19 @@ const NamespacePage = () => {
         {selectedNamespace && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
             {/* Accounts Section */}
-            <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-              <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <Users className="text-blue-600" size={20} />
-                  <h2 className="text-lg font-semibold text-gray-900">Accounts</h2>
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex flex-col md:flex-row gap-2  md:items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Users className="text-blue-600" size={16} />
+                  <h2 className="text-sm font-semibold text-gray-900">Accounts</h2>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                  <div className="relative flex-1 md:w-64">
-                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
+                <div className="flex  items-center gap-2">
+                  <div className="relative w-48">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={10} />
                     <input
                       type="text"
                       placeholder="Search accounts..."
-                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full pl-6 pr-2 py-1 text-[0.7rem] border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       value={accountSearchQuery}
                       onChange={(e) => setAccountSearchQuery(e.target.value)}
                     />
@@ -1681,67 +1695,66 @@ const NamespacePage = () => {
                       }));
                       setIsEditingAccount(true);
                     }}
-                    className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    className="inline-flex items-center px-2 py-1 text-[0.7rem] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
                   >
-                    <Plus size={12} className="mr-1" />
-                  Account
+                    <Plus size={10} className="mr-1" />
+                    Add
                   </button>
                 </div>
               </div>
 
-              {/* Accounts Grid */}
-              <div className="w-full">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto pr-2">
+              <div className="w-full overflow-hidden">
+                <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
                   {accounts.map((account) => (
                     <div
                       key={account['namespace-account-id']}
                       onClick={() => handleViewAccount(account)}
-                      className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-sm border border-purple-100 p-2 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+                      className="flex-none w-[9rem] bg-white rounded-md shadow-sm border border-gray-100 p-1.5 hover:shadow-md transition-all cursor-pointer hover:border-purple-100"
                     >
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1 mb-1">
-                            <User size={10} className="text-purple-600" />
-                            <span className="text-[10px] font-medium truncate text-purple-900">{account['namespace-account-name']}</span>
+                          <div className="flex items-center gap-1">
+                            <User size={10} className="text-purple-600 shrink-0" />
+                            <span className="text-[0.7rem] font-medium truncate text-gray-900">
+                              {account['namespace-account-name']}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-start gap-0.5">
+                        <div className="flex items-center shrink-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditAccount(account);
                             }}
-                            className="p-1 hover:bg-purple-100/50 rounded-full"
-                            title="Edit Account"
+                            className="p-0.5 text-gray-400 hover:text-purple-500 transition-colors"
                           >
-                            <Edit2 size={10} className="text-purple-600" />
+                            <Edit2 size={10} />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteAccount(account['namespace-account-id']);
                             }}
-                            className="p-1 hover:bg-red-100/50 rounded-full"
-                            title="Delete Account"
+                            className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
                           >
-                            <Trash2 size={10} className="text-red-500" />
+                            <Trash2 size={10} />
                           </button>
                         </div>
                       </div>
                       {account.tags && account.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {account.tags.slice(0, 2).map((tag, index) => (
+                        <div className="flex flex-wrap gap-0.5 mt-1">
+                          {account.tags.slice(0, 1).map((tag, index) => (
                             <span 
                               key={index} 
-                              className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-[8px] font-medium text-purple-700 border border-purple-100/50"
+                              className="inline-flex items-center px-1 py-px rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-[0.55rem] font-medium text-purple-700 border border-purple-100/50"
                             >
-                              <span className="w-1 h-1 rounded-full bg-purple-500 mr-1"></span>
+                              <span className="w-0.5 h-0.5 rounded-full bg-purple-500 mr-0.5"></span>
                               {tag}
                             </span>
                           ))}
-                          {account.tags.length > 2 && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-purple-50 text-[8px] font-medium text-purple-600">
-                              +{account.tags.length - 2}
+                          {account.tags.length > 1 && (
+                            <span className="inline-flex items-center px-1 py-px rounded-full bg-purple-50 text-[0.55rem] font-medium text-purple-600">
+                              +{account.tags.length - 1}
                             </span>
                           )}
                         </div>
@@ -1753,19 +1766,19 @@ const NamespacePage = () => {
             </div>
 
             {/* Methods Section */}
-            <div className="bg-white rounded-xl shadow-sm p-4 md:p-6">
-              <div className="flex flex-col space-y-4 md:space-y-0 md:flex-row md:justify-between md:items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <Code className="text-blue-600" size={20} />
-                  <h2 className="text-lg font-semibold text-gray-900">Methods</h2>
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex flex-col md:flex-row gap-2 md:items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Code className="text-emerald-600" size={16} />
+                  <h2 className="text-sm font-semibold text-gray-900">Methods</h2>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                  <div className="relative flex-1 md:w-64">
-                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
+                <div className="flex items-center gap-2">
+                  <div className="relative w-48">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={10} />
                     <input
                       type="text"
                       placeholder="Search methods..."
-                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full pl-6 pr-2 py-1 text-[0.7rem] border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       value={methodSearchQuery}
                       onChange={(e) => setMethodSearchQuery(e.target.value)}
                     />
@@ -1787,72 +1800,71 @@ const NamespacePage = () => {
                       }));
                       setIsEditingMethod(true);
                     }}
-                    className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    className="inline-flex items-center px-2 py-1 text-[0.7rem] font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors"
                   >
-                    <Plus size={12} className="mr-1" />
-                     Method
+                    <Plus size={10} className="mr-1" />
+                    Add
                   </button>
                 </div>
               </div>
 
-              {/* Methods Grid */}
-              <div className="w-full">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto pr-2">
-                  {methods.map((method) => (
-                    <div
-                      key={method['namespace-method-id']}
-                      onClick={() => handleViewMethod(method)}
-                      className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg shadow-sm border border-emerald-100 p-2.5 hover:shadow-md transition-all cursor-pointer hover:scale-105 relative"
-                    >
-                      {/* Method Type Badge */}
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-[calc(100vh-20rem)] overflow-y-auto pr-1 hide-scrollbar">
+                {methods.map((method) => (
+                  <div
+                    key={method['namespace-method-id']}
+                    onClick={() => handleViewMethod(method)}
+                    className="bg-white rounded-md shadow-sm border border-gray-100 p-1.5 hover:shadow-md transition-all cursor-pointer hover:border-emerald-100"
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[0.6rem] font-medium px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                           {method['namespace-method-type']}
                         </span>
-                        <div className="flex items-start gap-0.5">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTestMethod(method);
-                            }}
-                            className="p-1 hover:bg-emerald-100/50 rounded-full"
-                            title="Test Method"
-                          >
-                            <Play size={10} className="text-emerald-600" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditMethod(method);
-                            }}
-                            className="p-1 hover:bg-emerald-100/50 rounded-full"
-                            title="Edit Method"
-                          >
-                            <Edit2 size={10} className="text-emerald-600" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteMethod(method['namespace-method-id']);
-                            }}
-                            className="p-1 hover:bg-red-100/50 rounded-full"
-                            title="Delete Method"
-                          >
-                            <Trash2 size={10} className="text-red-500" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Method Name */}
-                      <div className="flex items-center gap-2">
-                        <Code size={12} className="text-emerald-600 flex-shrink-0" />
-                        <h3 className="text-[11px] font-medium text-emerald-900 truncate">
+                        <h3 className="text-[0.7rem] font-medium text-gray-900 truncate mt-1">
                           {method['namespace-method-name']}
                         </h3>
                       </div>
+                      <div className="flex items-center shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditMethod(method);
+                          }}
+                          className="p-0.5 text-gray-400 hover:text-emerald-500 transition-colors"
+                        >
+                          <Edit2 size={10} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMethod(method['namespace-method-id']);
+                          }}
+                          className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    {method.tags && method.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-0.5 mt-1">
+                        {method.tags.slice(0, 1).map((tag, index) => (
+                          <span 
+                            key={index} 
+                            className="inline-flex items-center px-1 py-px rounded-full bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-[0.55rem] font-medium text-emerald-700 border border-emerald-100/50"
+                          >
+                            <span className="w-0.5 h-0.5 rounded-full bg-emerald-500 mr-0.5"></span>
+                            {tag}
+                          </span>
+                        ))}
+                        {method.tags.length > 1 && (
+                          <span className="inline-flex items-center px-1 py-px rounded-full bg-emerald-50 text-[0.55rem] font-medium text-emerald-600">
+                            +{method.tags.length - 1}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1861,7 +1873,7 @@ const NamespacePage = () => {
         {/* Namespace Modal */}
         {isAddingNamespace && (
           <div 
-            className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 overflow-y-auto"
             onClick={() => handleOutsideClick(() => {
               setIsAddingNamespace(false);
               setEditingNamespace(null);
@@ -1872,11 +1884,107 @@ const NamespacePage = () => {
               });
             })}
           >
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {editingNamespace ? 'Edit Namespace' : 'Create New Namespace'}
-                </h2>
+            <div 
+              className="bg-white rounded-2xl shadow-xl w-full max-w-lg transform transition-all animate-in fade-in duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                    {editingNamespace ? 'Edit Namespace' : 'Create New Namespace'}
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsAddingNamespace(false);
+                      setEditingNamespace(null);
+                      setNewNamespace({
+                        'namespace-name': '',
+                        'namespace-url': '',
+                        tags: []
+                      });
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-5">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Namespace Name <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={newNamespace['namespace-name']}
+                      onChange={(e) => setNewNamespace({ ...newNamespace, 'namespace-name': e.target.value })}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                      placeholder="Enter namespace name"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Namespace URL <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={newNamespace['namespace-url']}
+                      onChange={(e) => setNewNamespace({ ...newNamespace, 'namespace-url': e.target.value })}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                      placeholder="https://api.example.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Tags</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={newNamespace.tags.join(', ')}
+                      onChange={(e) => setNewNamespace({
+                        ...newNamespace,
+                        tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
+                      })}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                      placeholder="Enter tags (comma-separated)"
+                    />
+                  </div>
+                  {newNamespace.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {newNamespace.tags.map((tag, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 group hover:bg-blue-100 transition-colors"
+                        >
+                          {tag}
+                          <button
+                            onClick={() => {
+                              const newTags = [...newNamespace.tags];
+                              newTags.splice(index, 1);
+                              setNewNamespace({ ...newNamespace, tags: newTags });
+                            }}
+                            className="ml-1.5 hover:text-blue-800"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50 rounded-b-2xl">
                 <button
                   onClick={() => {
                     setIsAddingNamespace(false);
@@ -1887,66 +1995,14 @@ const NamespacePage = () => {
                       tags: []
                     });
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Namespace Name *</label>
-                  <input
-                    type="text"
-                    value={newNamespace['namespace-name']}
-                    onChange={(e) => setNewNamespace({ ...newNamespace, 'namespace-name': e.target.value })}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="Enter namespace name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Namespace URL *</label>
-                  <input
-                    type="text"
-                    value={newNamespace['namespace-url']}
-                    onChange={(e) => setNewNamespace({ ...newNamespace, 'namespace-url': e.target.value })}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="Enter namespace URL"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                  <input
-                    type="text"
-                    value={newNamespace.tags.join(', ')}
-                    onChange={(e) => setNewNamespace({
-                      ...newNamespace,
-                      tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
-                    })}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder="Enter tags (comma-separated)"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  onClick={() => {
-                    setIsAddingNamespace(false);
-                    setEditingNamespace(null);
-                    setNewNamespace({
-                      'namespace-name': '',
-                      'namespace-url': '',
-                      tags: []
-                    });
-                  }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={editingNamespace ? handleEditNamespace : handleCreateNamespace}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm hover:shadow-md"
+                  disabled={!newNamespace['namespace-name'] || !newNamespace['namespace-url']}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors shadow-sm hover:shadow-md"
                 >
                   {editingNamespace ? 'Update Namespace' : 'Create Namespace'}
                 </button>
@@ -3394,7 +3450,7 @@ const NamespacePage = () => {
 
       {/* Logs Sidebar */}
       {showLogsSidebar && (
-        <div className="fixed inset-y-0 right-0 w-[480px] bg-white shadow-xl z-50 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[320px] bg-white shadow-xl z-50 flex flex-col">
           {/* Sidebar Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Execution Logs</h2>
@@ -3407,27 +3463,32 @@ const NamespacePage = () => {
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto  p-1 md:p-4">
             {/* Current Execution Section */}
             {currentExecutionId && (
-              <div className="mb-8">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Current Execution</h3>
-                <div className="space-y-4">
+              <div className="mb-2">
+                <h3 className="text-[11px] font-medium text-gray-600 mb-1 px-1">Current Execution</h3>
+                <div className="space-y-1">
                   {executionLogs.map((log) => (
-                    <div key={log['child-exec-id']} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium text-gray-900">
-                          {log['exec-id'] === log['child-exec-id'] ? 'Parent Execution' : `Iteration ${log.data['iteration-no']}`}
+                    <div 
+                      key={log['child-exec-id']} 
+                      className="bg-white rounded border border-gray-100 p-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[11px] font-medium text-gray-900 truncate flex-1">
+                          {log['exec-id'] === log['child-exec-id'] ? 'Parent' : `Iteration ${log.data['iteration-no']}`}
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.data.status)}`}>
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${getStatusColor(log.data.status)}`}>
                           {log.data.status || 'In Progress'}
                         </span>
                       </div>
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <div>URL: {log.data['request-url']}</div>
-                        <div>Items Processed: {log.data['total-items-processed']}</div>
-                        <div>Response Status: {log.data['response-status']}</div>
-                        {log.data['is-last'] && <div className="text-blue-600">Final Iteration</div>}
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        <div className="truncate text-[10px]">{log.data['request-url']}</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span>{log.data['total-items-processed']}</span>
+                          <span className="text-gray-300">•</span>
+                          <span>{log.data['response-status']}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3437,61 +3498,73 @@ const NamespacePage = () => {
 
             {/* All Executions Section */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">All Executions</h3>
-              <div className="space-y-4">
+              <h3 className="text-xs font-medium text-gray-600 mb-2 px-1">All Executions</h3>
+              <div className="space-y-1.5">
                 {allExecutions
                   .filter(log => log['exec-id'] === log['child-exec-id']) // Only show parent executions
                   .map((parentLog) => (
-                    <div key={parentLog['exec-id']} 
-                      className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden cursor-pointer"
+                    <div 
+                      key={parentLog['exec-id']} 
+                      className="bg-white rounded-md shadow-sm border border-gray-100 overflow-hidden"
                       onClick={() => toggleExpansion(parentLog['exec-id'])}
                     >
                       {/* Parent execution header */}
-                      <div className="p-4 hover:bg-gray-50">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            {expandedExecutions.has(parentLog['exec-id']) ? (
-                              <ChevronDown className="h-4 w-4 text-gray-500" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-gray-500" />
-                            )}
-                            <div className="text-sm font-medium text-gray-900">
-                              Execution ID: {parentLog['exec-id']}
+                      <div className="p-2.5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-3.5 h-3.5 flex items-center justify-center">
+                              {expandedExecutions.has(parentLog['exec-id']) ? (
+                                <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                              )}
+                            </div>
+                            <div className="text-xs font-medium text-gray-900">
+                              {parentLog['exec-id'].slice(0, 12)}...
                             </div>
                           </div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(parentLog.data.status)}`}>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-medium ${getStatusColor(parentLog.data.status)}`}>
                             {parentLog.data.status || 'In Progress'}
                           </span>
                         </div>
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <div>URL: {parentLog.data['request-url']}</div>
-                          <div>Items Processed: {parentLog.data['total-items-processed']}</div>
-                          <div>Response Status: {parentLog.data['response-status']}</div>
-                          <div className="text-gray-400">{new Date(parentLog.data.timestamp).toLocaleString()}</div>
+                        <div className="text-[11px] text-gray-500 pl-5">
+                          <div className="truncate mb-1">{parentLog.data['request-url']}</div>
+                          <div className="flex items-center gap-2">
+                            <span>Items: {parentLog.data['total-items-processed']}</span>
+                            <span>•</span>
+                            <span>Status: {parentLog.data['response-status']}</span>
+                          </div>
+                          <div className="text-gray-400 mt-1 text-[10px]">
+                            {new Date(parentLog.data.timestamp).toLocaleString()}
+                          </div>
                         </div>
                       </div>
 
                       {/* Child executions */}
                       {expandedExecutions.has(parentLog['exec-id']) && (
-                        <div className="border-t border-gray-200 bg-gray-50">
-                          <div className="divide-y divide-gray-200">
+                        <div className="border-t border-gray-100 bg-gray-50/50">
+                          <div className="divide-y divide-gray-100">
                             {allExecutions
-                              .filter(child => child['exec-id'] === parentLog['exec-id'] && child['child-exec-id'] !== parentLog['exec-id'])
-                              .sort((a, b) => a.data['iteration-no'] - b.data['iteration-no'])
-                              .map(child => (
-                                <div key={child['child-exec-id']} className="p-4 pl-8">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-medium text-gray-900">
-                                      Iteration {child.data['iteration-no']}
+                              .filter(log => log['exec-id'] === parentLog['exec-id'] && log['exec-id'] !== log['child-exec-id'])
+                              .map((childLog) => (
+                                <div 
+                                  key={childLog['child-exec-id']} 
+                                  className="p-2 pl-5 hover:bg-gray-50"
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-[11px] font-medium text-gray-700">
+                                      Iteration {childLog.data['iteration-no']}
                                     </div>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(child.data.status)}`}>
-                                      {child.data.status || 'In Progress'}
-                                    </span>
+                                    {childLog.data['is-last'] && (
+                                      <span className="text-[10px] text-blue-600 font-medium">Final</span>
+                                    )}
                                   </div>
-                                  <div className="text-xs text-gray-500 space-y-1">
-                                    <div>Items in Page: {child.data['items-in-current-page']}</div>
-                                    <div>Response Status: {child.data['response-status']}</div>
-                                    {child.data['is-last'] && <div className="text-blue-600">Final Iteration</div>}
+                                  <div className="text-[11px] text-gray-500">
+                                    <div className="flex items-center gap-2">
+                                      <span>Items: {childLog.data['items-in-current-page']}</span>
+                                      <span>•</span>
+                                      <span>Status: {childLog.data['response-status']}</span>
+                                    </div>
                                   </div>
                                 </div>
                               ))}

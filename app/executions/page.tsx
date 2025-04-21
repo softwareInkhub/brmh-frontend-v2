@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { ChevronDown, ChevronRight } from 'react-feather';
 import { useSearchParams } from 'next/navigation';
+import { Search } from 'lucide-react';
 
 interface ExecutionLog {
   'exec-id': string;
@@ -48,6 +49,7 @@ const ExecutionsContent = () => {
   const [allExecutions, setAllExecutions] = useState<ExecutionLog[]>([]);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 5;  // Maximum number of empty result retries
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Effect to fetch all executions
   useEffect(() => {
@@ -287,91 +289,142 @@ const ExecutionsContent = () => {
     setExpandedExecutions(newExpanded);
   };
 
+  // Add search filter function
+  const filterExecutions = (executions: ExecutionLog[]) => {
+    if (!searchTerm) return executions;
+    
+    return executions.filter(execution => {
+      const searchString = searchTerm.toLowerCase();
+      const execId = execution['exec-id'].toLowerCase();
+      const childExecId = execution['child-exec-id'].toLowerCase();
+      const url = execution.data['request-url']?.toLowerCase() || '';
+      const status = execution.data.status?.toLowerCase() || '';
+      const timestamp = execution.data.timestamp?.toLowerCase() || '';
+      const itemsProcessed = execution.data['total-items-processed']?.toString() || '';
+      const iterationNo = execution.data['iteration-no']?.toString() || '';
+      const responseStatus = execution.data['response-status']?.toString() || '';
+
+      return execId.includes(searchString) ||
+             childExecId.includes(searchString) ||
+             url.includes(searchString) ||
+             status.includes(searchString) ||
+             timestamp.includes(searchString) ||
+             itemsProcessed.includes(searchString) ||
+             iterationNo.includes(searchString) ||
+             responseStatus.includes(searchString);
+    });
+  };
+
+  // Filter executions before displaying
+  const filteredAllExecutions = filterExecutions(allExecutions);
+  const filteredExecutionLogs = filterExecutions(executionLogs);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-2 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Execution Logs</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Execution Logs</h1>
 
-        {/* Current Execution Section - Always visible */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Execution</h2>
+        {/* Search Bar */}
+        <div className="mb-4 sm:mb-6">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search executions (ID, URL, status, items...)"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 pl-10 pr-4 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          </div>
+        </div>
+
+        {/* Current Execution Section */}
+        <div className="mb-4 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-4">Current Execution</h2>
           {currentExecutionId ? (
-            <div className="space-y-4">
-              {Array.from(groupedLogs.entries()).map(([execId, { parent, children }]) => (
-                <div key={execId} className="bg-white rounded-lg shadow-lg border-2 border-blue-200 overflow-hidden">
-                  {/* Parent execution header */}
-                  <div
-                    className="p-4 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
-                    onClick={() => toggleExpansion(execId)}
-                  >
-                    <div className="flex items-center gap-4">
-                      {expandedExecutions.has(execId) ? (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-500" />
-                      )}
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          Execution ID: {parent['exec-id']}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          URL: {parent.data['request-url']}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Status: {parent.data.status || 'In Progress'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Items Processed: {parent.data['total-items-processed']}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(parent.data.status)}`}>
-                        {parent.data.status || 'started'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Child executions */}
-                  {expandedExecutions.has(execId) && children.length > 0 && (
-                    <div className="border-t border-gray-200">
-                      <div className="divide-y divide-gray-200">
-                        {children.map((child: ExecutionLog) => (
-                          <div key={`${execId}-${child['child-exec-id']}`} className="p-4 pl-12 bg-gray-50">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  Iteration {child.data['iteration-no']}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  Items in page: {child.data['items-in-current-page']}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  Response Status: {child.data['response-status']}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>
-                                  Status: {child.data['response-status']}
-                                </span>
-                                {child.data['is-last'] && (
-                                  <span className="text-xs text-gray-500">Final Iteration</span>
-                                )}
-                              </div>
-                            </div>
+            <div className="space-y-2 sm:space-y-4">
+              {Array.from(groupedLogs.entries()).map(([execId, { parent, children }]) => {
+                // Only show if matches search
+                if (!filterExecutions([parent]).length) return null;
+                
+                return (
+                  <div key={execId} className="bg-white rounded-lg shadow-lg border border-blue-200 overflow-hidden">
+                    {/* Parent execution header */}
+                    <div
+                      className="p-2 sm:p-4 cursor-pointer hover:bg-gray-50 flex items-start sm:items-center justify-between"
+                      onClick={() => toggleExpansion(execId)}
+                    >
+                      <div className="flex items-start gap-2 sm:gap-4">
+                        {expandedExecutions.has(execId) ? (
+                          <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 mt-1" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 mt-1" />
+                        )}
+                        <div>
+                          <div className="text-xs sm:text-sm font-medium text-gray-900">
+                            ID: {parent['exec-id'].slice(0, 8)}...
                           </div>
-                        ))}
+                          <div className="text-xs text-gray-500 truncate max-w-[200px] sm:max-w-md">
+                            {parent.data['request-url']}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Status: {parent.data.status || 'In Progress'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Items: {parent.data['total-items-processed']}
+                          </div>
+                          <div className="text-[10px] sm:text-xs text-gray-400">
+                            {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-medium ${getStatusColor(parent.data.status)}`}>
+                          {parent.data.status || 'started'}
+                        </span>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* Child executions */}
+                    {expandedExecutions.has(execId) && children.length > 0 && (
+                      <div className="border-t border-gray-200">
+                        <div className="divide-y divide-gray-200">
+                          {children
+                            .filter((child: ExecutionLog) => filterExecutions([child]).length > 0)
+                            .map((child: ExecutionLog) => (
+                              <div key={`${execId}-${child['child-exec-id']}`} className="p-2 sm:p-4 pl-8 sm:pl-12 bg-gray-50">
+                                <div className="flex items-start sm:items-center justify-between">
+                                  <div>
+                                    <div className="text-xs sm:text-sm font-medium text-gray-900">
+                                      Iteration {child.data['iteration-no']}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      Items: {child.data['items-in-current-page']}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      Status: {child.data['response-status']}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-gray-100 text-gray-800`}>
+                                      {child.data['response-status']}
+                                    </span>
+                                    {child.data['is-last'] && (
+                                      <span className="text-[10px] sm:text-xs text-gray-500">Final</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-lg border-2 border-gray-200 p-4 text-gray-500">
+            <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 text-sm text-gray-500">
               No active execution
             </div>
           )}
@@ -379,104 +432,100 @@ const ExecutionsContent = () => {
 
         {/* Loading state */}
         {isPolling && (
-          <div className="mt-4 mb-4 text-center text-gray-500">
+          <div className="mt-2 mb-2 sm:mt-4 sm:mb-4 text-center text-xs sm:text-sm text-gray-500">
             Polling for updates...
           </div>
         )}
 
         {/* All Executions List */}
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">All Executions</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-4">All Executions</h2>
           {allExecutions.length === 0 ? (
-            <div className="text-gray-500">No executions found</div>
+            <div className="text-sm text-gray-500">No executions found</div>
           ) : (
-            <div className="space-y-4">
-              {Array.from(groupedAllExecutions.entries()).map(([execId, { parent, children }]) => (
-                <div key={execId} className="bg-white rounded-lg shadow overflow-hidden">
-                  {/* Parent execution header */}
-                  <div
-                    className="p-4 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
-                    onClick={() => {
-                      toggleExpansion(execId);
-                    }}
-                  >
-                    <div className="flex items-center gap-4">
-                      {expandedExecutions.has(execId) ? (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-500" />
-                      )}
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          Execution ID: {parent?.['exec-id']}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Child Execution ID: {parent?.['child-exec-id']}
-                        </div>
-                        {parent?.data && (
-                          <>
-                            <div className="text-sm text-gray-500">
-                              URL: {parent.data['request-url']}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              Status: {parent.data['status']}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              Items Processed: {parent.data['total-items-processed']}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
-                            </div>
-                          </>
+            <div className="space-y-2 sm:space-y-4">
+              {Array.from(groupedAllExecutions.entries())
+                .filter(([_, { parent }]) => parent && filterExecutions([parent]).length > 0)
+                .map(([execId, { parent, children }]) => (
+                  <div key={execId} className="bg-white rounded-lg shadow overflow-hidden">
+                    {/* Parent execution header */}
+                    <div
+                      className="p-2 sm:p-4 cursor-pointer hover:bg-gray-50 flex items-start sm:items-center justify-between"
+                      onClick={() => toggleExpansion(execId)}
+                    >
+                      <div className="flex items-start gap-2 sm:gap-4">
+                        {expandedExecutions.has(execId) ? (
+                          <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 mt-1" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500 mt-1" />
                         )}
+                        <div>
+                          <div className="text-xs sm:text-sm font-medium text-gray-900">
+                            ID: {parent?.['exec-id'].slice(0, 8)}...
+                          </div>
+                          {parent?.data && (
+                            <>
+                              <div className="text-xs text-gray-500 truncate max-w-[200px] sm:max-w-md">
+                                {parent.data['request-url']}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Status: {parent.data['status']}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Items: {parent.data['total-items-processed']}
+                              </div>
+                              <div className="text-[10px] sm:text-xs text-gray-400">
+                                {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
+                      {parent?.data && parent.data.status && (
+                        <div>
+                          <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-medium ${getStatusColor(parent.data.status)}`}>
+                            {parent.data.status}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    {parent?.data && parent.data.status && (
-                      <div className="flex items-center gap-4">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(parent.data.status)}`}>
-                          {parent.data.status}
-                        </span>
+
+                    {/* Child executions */}
+                    {expandedExecutions.has(execId) && children && children.length > 0 && (
+                      <div className="border-t border-gray-200">
+                        <div className="divide-y divide-gray-200">
+                          {children
+                            .filter((child: ExecutionLog) => filterExecutions([child]).length > 0)
+                            .map((child: ExecutionLog) => (
+                              <div key={`${execId}-${child['child-exec-id']}`} className="p-2 sm:p-4 pl-8 sm:pl-12 bg-gray-50">
+                                <div className="flex items-start sm:items-center justify-between">
+                                  <div>
+                                    <div className="text-xs sm:text-sm font-medium text-gray-900">
+                                      Iteration {child.data['iteration-no']}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      Items: {child.data['items-in-current-page']}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      Status: {child.data['response-status']}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-gray-100 text-gray-800`}>
+                                      {child.data['response-status']}
+                                    </span>
+                                    {child.data['is-last'] && (
+                                      <span className="text-[10px] sm:text-xs text-gray-500">Final</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     )}
                   </div>
-
-                  {/* Child executions in All Executions section */}
-                  {expandedExecutions.has(execId) && children && children.length > 0 && (
-                    <div className="border-t border-gray-200">
-                      <div className="divide-y divide-gray-200">
-                        {children.map((child: ExecutionLog) => (
-                          <div key={`${execId}-${child['child-exec-id']}`} className="p-4 pl-12 bg-gray-50">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  Iteration {child.data['iteration-no']}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  Items in page: {child.data['items-in-current-page']}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  Response Status: {child.data['response-status']}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  Pagination Type: {child.data['pagination-type']}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>
-                                  Status: {child.data['response-status']}
-                                </span>
-                                {child.data['is-last'] && (
-                                  <span className="text-xs text-gray-500">Final Iteration</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
