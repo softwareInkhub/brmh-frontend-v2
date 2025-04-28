@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, RefreshCw, Copy, Download, Check, Clock, X, Trash2, ChevronRight, ChevronDown } from 'react-feather';
+import { Send, RefreshCw, Copy, Download, Check, Clock, X, Trash2, ChevronRight, ChevronDown, Copy as CopyIcon } from 'react-feather';
+
+import { toast } from 'react-hot-toast';
 
 interface KeyValuePair {
   key: string;
@@ -204,7 +206,7 @@ const ApiService = () => {
           : ns
       ));
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      console.error('Error fetching namespace accounts:', error);
     }
   }, []);
 
@@ -221,20 +223,22 @@ const ApiService = () => {
           : ns
       ));
     } catch (error) {
-      console.error('Error fetching methods:', error);
+      console.error('Error fetching namespace methods:', error);
     }
   }, []);
 
   const fetchNamespaces = useCallback(async () => {
     try {
       console.log('Starting to fetch namespaces...');
+      
+    
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const rawData = await response.json();
-      // console.log('Raw API Response:', rawData);
 
       if (!Array.isArray(rawData)) {
         console.error('Expected array of namespaces, got:', typeof rawData);
@@ -260,14 +264,12 @@ const ApiService = () => {
         })
         .filter((namespace: TransformedNamespace) => namespace['namespace-id'] && namespace['namespace-name']);
 
-      // console.log('Transformed namespaces:', transformedNamespaces);
-      
       if (transformedNamespaces.length === 0) {
         console.log('No valid namespaces found after transformation');
         setNamespaces([]);
       } else {
         setNamespaces(transformedNamespaces);
-        // After setting namespaces, fetch accounts and methods for each namespace
+      
         transformedNamespaces.forEach(namespace => {
           fetchNamespaceAccounts(namespace['namespace-id']);
           fetchNamespaceMethods(namespace['namespace-id']);
@@ -758,10 +760,124 @@ const ApiService = () => {
     setHeaders(newHeaders);
   };
 
-  // Helper function to extract items from response
- 
-  // Helper function to save items to DynamoDB
-  
+  // Add new function to handle duplication
+  const handleNamespaceDuplicate = async (namespaceId: string) => {
+    try {
+      console.group('Namespace Duplication Process');
+      console.log('Starting namespace duplication for ID:', namespaceId);
+      
+      // Get the namespace details
+      const namespace = namespaces.find(n => n['namespace-id'] === namespaceId);
+      if (!namespace) {
+        console.error('Namespace not found with ID:', namespaceId);
+        throw new Error('Namespace not found');
+      }
+
+      console.log('Found namespace to duplicate:', {
+        id: namespace['namespace-id'],
+        name: namespace['namespace-name'],
+        url: namespace['namespace-url'],
+        tags: namespace.tags
+      });
+
+      // Create new ID for the duplicate
+      const newId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      console.log('Generated new ID for duplicate:', newId);
+
+      // Prepare the namespace data for duplication
+      const namespaceData = {
+        'namespace-id': newId,
+        'namespace-name': `${namespace['namespace-name']} (Copy)`,
+        'namespace-url': namespace['namespace-url'],
+        'tags': [...namespace.tags]
+      };
+
+      console.log('Prepared namespace data for duplication:', namespaceData);
+
+      // Prepare DynamoDB request payload
+      const dynamoPayload = {
+        Item: {
+          id: { S: newId },
+          data: {
+            M: {
+              'namespace-id': { S: newId },
+              'namespace-name': { S: namespaceData['namespace-name'] },
+              'namespace-url': { S: namespaceData['namespace-url'] },
+              'tags': { 
+                L: namespaceData.tags.map(tag => ({ S: tag }))
+              }
+            }
+          }
+        }
+      };
+
+      console.log('DynamoDB request payload:', JSON.stringify(dynamoPayload, null, 2));
+
+      // Save to DynamoDB
+      console.log('Sending request to DynamoDB...');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/namespaces`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dynamoPayload)
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('Failed to save namespace duplicate:', errorData);
+        throw new Error(errorData?.message || 'Failed to save namespace duplicate');
+      }
+
+      const responseData = await response.json();
+      console.log('DynamoDB response data:', responseData);
+
+      console.log('Successfully saved namespace duplicate');
+
+      // Update local state
+      const newNamespace = {
+        ...namespaceData,
+        'namespace-accounts': [],
+        'namespace-methods': []
+      };
+
+      console.log('Updating local state with new namespace:', newNamespace);
+      setNamespaces(prev => [newNamespace, ...prev]);
+      
+      console.groupEnd();
+      toast.success('Namespace duplicated successfully');
+    } catch (error) {
+      console.error('Error duplicating namespace:', error);
+      console.groupEnd();
+      toast.error(error instanceof Error ? error.message : 'Failed to duplicate namespace');
+    }
+  };
+
+  // Update the handleDuplicate function to handle different types
+  const handleDuplicate = async (entry: HistoryEntry | { type: string; id: string }) => {
+    try {
+      console.group('Duplicate Handler');
+      console.log('Starting duplication process for:', entry);
+
+      if ('type' in entry && entry.type === 'namespace') {
+        console.log('Detected namespace duplication');
+        await handleNamespaceDuplicate(entry.id);
+        return;
+      }
+
+      // Rest of the existing handleDuplicate code for history entries
+      // ... existing code ...
+      
+      console.groupEnd();
+    } catch (error) {
+      console.error('Error in handleDuplicate:', error);
+      console.groupEnd();
+      toast.error(error instanceof Error ? error.message : 'Failed to duplicate item');
+    }
+  };
 
   return (
     <div className="h-screen bg-gray-50 flex overflow-hidden">
@@ -1214,12 +1330,25 @@ const ApiService = () => {
                         {entry.url}
                       </span>
                     </div>
-                    <button
-                      onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
-                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicate(entry);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-600"
+                        title="Duplicate"
+                      >
+                        <CopyIcon size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteHistoryEntry(entry.id, e)}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
