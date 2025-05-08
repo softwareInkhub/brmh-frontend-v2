@@ -41,7 +41,7 @@ import {
   clearExecutionCache
 } from '@/app/utils/cache';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 interface KeyValuePair {
   key: string;
@@ -3756,6 +3756,7 @@ const NamespacePage = () => {
           isOpen={isMethodTestModalOpen}
           onClose={() => setIsMethodTestModalOpen(false)}
           namespaceId={testingMethod['namespace-id']}
+          methodId={testingMethod['namespace-method-id']}
           methodName={testingMethod['namespace-method-name']}
           methodType={testingMethod['namespace-method-type']}
           namespaceMethodUrlOverride={testingMethod['namespace-method-url-override']}

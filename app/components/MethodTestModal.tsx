@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { X, Send, RefreshCw, Copy, Download, Check, ChevronDown } from 'lucide-react';
+import { X, Send, RefreshCw, Copy, Download, Check, ChevronDown, FileCode } from 'lucide-react';
+import SchemaPreviewModal from './SchemaPreviewModal';
+import SchemaEditorModal from './SchemaEditorModal';
 
 interface AccountHeader {
   key: string;
@@ -34,10 +36,19 @@ interface MethodTestModalProps {
   isOpen: boolean;
   onClose: () => void;
   namespaceId: string;
+  methodId: string;
   methodName: string;
   methodType: string;
   namespaceMethodUrlOverride: string;
   saveData: boolean;
+}
+
+interface SchemaState {
+  schema: any;
+  isArray: boolean;
+  originalType: string;
+  isSaved: boolean;
+  schemaId?: string;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
@@ -46,6 +57,7 @@ export default function MethodTestModal({
   isOpen,
   onClose,
   namespaceId,
+  methodId,
   methodName,
   methodType,
   namespaceMethodUrlOverride,
@@ -67,6 +79,10 @@ export default function MethodTestModal({
   const [copied, setCopied] = useState(false);
   const [activeButton, setActiveButton] = useState<'send' | 'loop' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [schemaState, setSchemaState] = useState<SchemaState | null>(null);
+  const [showSchemaPreview, setShowSchemaPreview] = useState(false);
+  const [showSchemaEditor, setShowSchemaEditor] = useState(false);
+  const [isSavingSchema, setIsSavingSchema] = useState(false);
 
   // Fetch namespace details
   useEffect(() => {
@@ -426,6 +442,106 @@ export default function MethodTestModal({
     }
   };
 
+  const generateSchema = async () => {
+    if (!response?.body) return;
+
+    try {
+      const schemaResponse = await fetch(`${API_BASE_URL}/api/schema/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ responseData: response.body })
+      });
+
+      if (!schemaResponse.ok) {
+        throw new Error('Failed to generate schema');
+      }
+
+      const schemaData = await schemaResponse.json();
+      setSchemaState({
+        schema: schemaData.schema,
+        isArray: schemaData.isArray,
+        originalType: schemaData.originalType,
+        isSaved: false
+      });
+      setShowSchemaPreview(true);
+    } catch (error) {
+      console.error('Error generating schema:', error);
+      setError('Failed to generate schema');
+    }
+  };
+
+  const saveSchema = async (schema: any) => {
+    if (!schemaState) return;
+
+    setIsSavingSchema(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/schema/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          methodId,
+          methodName,
+          namespaceId,
+          schemaType: 'response',
+          schema,
+          isArray: schemaState.isArray,
+          originalType: schemaState.originalType,
+          url
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save schema');
+      }
+
+      const savedSchema = await response.json();
+      setSchemaState(prev => ({
+        ...prev!,
+        schema,
+        isSaved: true,
+        schemaId: savedSchema['schema-id']
+      }));
+      setShowSchemaPreview(false);
+    } catch (error) {
+      console.error('Error saving schema:', error);
+      setError('Failed to save schema');
+    } finally {
+      setIsSavingSchema(false);
+    }
+  };
+
+  const updateSchema = async (updatedSchema: any) => {
+    if (!schemaState?.schemaId) return;
+
+    setIsSavingSchema(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/schema/${schemaState.schemaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schema: updatedSchema,
+          isArray: schemaState.isArray,
+          originalType: schemaState.originalType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update schema');
+      }
+
+      setSchemaState(prev => ({
+        ...prev!,
+        schema: updatedSchema
+      }));
+      setShowSchemaEditor(false);
+    } catch (error) {
+      console.error('Error updating schema:', error);
+      setError('Failed to update schema');
+    } finally {
+      setIsSavingSchema(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -686,6 +802,13 @@ export default function MethodTestModal({
                     >
                       <Download className="h-3 w-3" />
                     </button>
+                    <button
+                      onClick={generateSchema}
+                      className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all duration-200"
+                      title="Generate OpenAPI Schema"
+                    >
+                      <FileCode className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
 
@@ -767,6 +890,30 @@ export default function MethodTestModal({
           </button>
         </div>
       </div>
+
+      {/* Schema Preview Modal */}
+      <SchemaPreviewModal
+        isOpen={showSchemaPreview}
+        onClose={() => setShowSchemaPreview(false)}
+        schema={schemaState?.schema}
+        isArray={schemaState?.isArray ?? false}
+        originalType={schemaState?.originalType ?? ''}
+        onSave={saveSchema}
+        onEdit={() => {
+          setShowSchemaPreview(false);
+          setShowSchemaEditor(true);
+        }}
+        isSaving={isSavingSchema}
+      />
+
+      {/* Schema Editor Modal */}
+      <SchemaEditorModal
+        isOpen={showSchemaEditor}
+        onClose={() => setShowSchemaEditor(false)}
+        schema={schemaState?.schema}
+        onSave={updateSchema}
+        isSaving={isSavingSchema}
+      />
     </div>
   );
 } 

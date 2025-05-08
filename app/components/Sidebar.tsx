@@ -41,6 +41,14 @@ const menuItems: MenuItem[] = [
     icon: <LayoutDashboard size={18} className="text-blue-400" />,
   },
   {
+    name: 'Schema Service',
+    path: '/schema-service',
+    icon: <FileCode size={18} className="text-indigo-400" />,
+    submenu: [
+      { name: 'Schema Service', path: '/schema-service' },
+    ]
+  },
+  {
     name: 'Namespace',
     path: '/namespace',
     icon: <Database size={18} className="text-green-400" />,
