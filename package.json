@@ -59,6 +59,8 @@
     "react-dom": "^19.0.0",
     "react-feather": "^2.0.10",
     "react-hook-form": "^7.55.0",
+    "react-hot-toast": "^2.5.2",
+    "react-json-view": "^1.21.3",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "sonner": "^2.0.1",
