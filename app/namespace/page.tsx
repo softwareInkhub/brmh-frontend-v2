@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Namespace from './components/Namespace';
 import ApiBuilder from './components/ApiBuilder';
 import SchemaService from './components/SchemaService';
+import Tables from './components/Tables';
 
 const NamespacePage = () => {
   const [activeTab, setActiveTab] = useState('namespace');
@@ -50,6 +51,19 @@ const NamespacePage = () => {
             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>
           )}
                   </button>
+          <button
+            className={`px-6 py-2 text-sm font-medium transition-all relative ${
+              activeTab === 'tables'
+                ? 'text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('tables')}
+          >
+            Tables
+            {activeTab === 'tables' && (
+              <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>
+            )}
+          </button>
               </div>
 
       {/* Tab Content */}
@@ -57,6 +71,7 @@ const NamespacePage = () => {
         {activeTab === 'namespace' && <Namespace />}
         {activeTab === 'apiBuilder' && <ApiBuilder />}
         {activeTab === 'schemaService' && <SchemaService />}
+        {activeTab === 'tables' && <Tables />}
                           </div>
     </div>
   );

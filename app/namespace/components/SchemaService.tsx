@@ -357,6 +357,119 @@ function parseTypeScriptToJsonSchema(ts: string) {
   };
 }
 
+// Add a recursive DynamicForm component for object/array types
+interface DynamicFormProps {
+  schema: any;
+  formData: any;
+  setFormData: (data: any) => void;
+  path?: string;
+}
+function DynamicForm({ schema, formData, setFormData, path = '' }: DynamicFormProps) {
+  if (!schema || !schema.properties) return null;
+  return (
+    <div className="space-y-4">
+      {Object.entries(schema.properties).map(([key, prop]) => {
+        const fullPath = path ? `${path}.${key}` : key;
+        const typedProp = prop as any;
+        if (typedProp.type === 'object') {
+          return (
+            <div key={fullPath} className="border rounded p-2 bg-gray-50">
+              <div className="font-semibold text-xs mb-1">{key} (object)</div>
+              <DynamicForm
+                schema={typedProp}
+                formData={formData[key] || {}}
+                setFormData={(subData: any) => setFormData({ ...formData, [key]: subData })}
+                path={fullPath}
+              />
+            </div>
+          );
+        }
+        if (typedProp.type === 'array') {
+          // If items is empty, default to string
+          const itemSchema = typedProp.items && Object.keys(typedProp.items).length > 0
+            ? typedProp.items
+            : { type: 'string' };
+
+          return (
+            <div key={fullPath} className="border rounded p-2 bg-gray-50">
+              <div className="font-semibold text-xs mb-1">{key} (array)</div>
+              {(formData[key] || []).map((item: any, idx: number) => (
+                <div key={idx} className="mb-2 flex items-center gap-2">
+                  {itemSchema.type === 'object' ? (
+                    <DynamicForm
+                      schema={itemSchema}
+                      formData={item}
+                      setFormData={(itemData: any) => {
+                        const arr = [...(formData[key] || [])];
+                        arr[idx] = itemData;
+                        setFormData({ ...formData, [key]: arr });
+                      }}
+                      path={fullPath + `[${idx}]`}
+                    />
+                  ) : (
+                    <input
+                      className="border border-gray-300 p-2 rounded w-full focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50"
+                      type={itemSchema.type === 'number' ? 'number' : itemSchema.type === 'boolean' ? 'checkbox' : 'text'}
+                      value={itemSchema.type === 'boolean' ? undefined : item ?? ''}
+                      checked={itemSchema.type === 'boolean' ? !!item : undefined}
+                      onChange={e => {
+                        let value: any = e.target.value;
+                        if (itemSchema.type === 'number') value = Number(value);
+                        if (itemSchema.type === 'boolean') value = e.target.checked;
+                        const arr = [...(formData[key] || [])];
+                        arr[idx] = value;
+                        setFormData({ ...formData, [key]: arr });
+                      }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="text-xs text-red-600"
+                    onClick={() => {
+                      const arr = [...(formData[key] || [])];
+                      arr.splice(idx, 1);
+                      setFormData({ ...formData, [key]: arr });
+                    }}
+                  >Remove</button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="text-xs text-blue-600"
+                onClick={() => setFormData({ ...formData, [key]: [...(formData[key] || []), itemSchema.type === 'object' ? {} : itemSchema.type === 'boolean' ? false : '' ] })}
+              >Add Item</button>
+            </div>
+          );
+        }
+        // Primitive types
+        return (
+          <div key={fullPath}>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{key}</label>
+            <input
+              className="border border-gray-300 p-2 rounded w-full focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50"
+              type={typedProp.type === 'number' ? 'number' : typedProp.type === 'boolean' ? 'checkbox' : 'text'}
+              value={typedProp.type === 'boolean' ? undefined : formData[key] ?? ''}
+              checked={typedProp.type === 'boolean' ? !!formData[key] : undefined}
+              onChange={e => {
+                let value: any = e.target.value;
+                if (typedProp.type === 'number') value = Number(value);
+                if (typedProp.type === 'boolean') value = e.target.checked;
+                setFormData({ ...formData, [key]: value });
+              }}
+              required={schema.required?.includes(key)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Add a helper to generate a random id
+function generateRandomId() {
+  return Math.random().toString(36).substring(2, 12);
+}
+
 const SchemaService = () => {
   const [showModal, setShowModal] = useState(false);
   const [schemas, setSchemas] = useState<any[]>([]);
@@ -374,6 +487,11 @@ const SchemaService = () => {
   const [rawFields, setRawFields] = useState('');
   const [rawFieldsError, setRawFieldsError] = useState<string | null>(null);
   const [editingSchemaId, setEditingSchemaId] = useState<string | null>(null);
+  const [showDataModal, setShowDataModal] = useState(false);
+  const [dataFormSchema, setDataFormSchema] = useState<any>(null);
+  const [dataForm, setDataForm] = useState<any>({});
+  const [dataTableName, setDataTableName] = useState<string>('');
+  const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
 
   // Bidirectional sync: update JSON editor from form fields if not editing JSON
   useEffect(() => {
@@ -545,6 +663,29 @@ const SchemaService = () => {
     }
   };
 
+  // After fetching schemas, fetch table meta status for each schema with a meta id
+  useEffect(() => {
+    const fetchTableMetas = async () => {
+      const metas: { [metaId: string]: string } = {};
+      await Promise.all(
+        schemas.map(async (schema) => {
+          const metaId = schema['brmh-schema-table-data-id'];
+          if (metaId) {
+            try {
+              const res = await fetch(`${API_URL}/schema/table-meta/${metaId}`);
+              if (res.ok) {
+                const data = await res.json();
+                metas[metaId] = data.status;
+              }
+            } catch {}
+          }
+        })
+      );
+      setTableMetaStatusById(metas);
+    };
+    if (schemas.length > 0) fetchTableMetas();
+  }, [schemas]);
+
   // Load schemas on component mount
   useEffect(() => {
     fetchSchemas();
@@ -586,36 +727,97 @@ const SchemaService = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {schemas.map((schema) => (
-                  <tr key={schema.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {schema.schemaName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {schema.isArray ? 'Array' : schema.originalType}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(schema.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(schema.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEditSchema(schema)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSchema(schema.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {schemas.map((schema) => {
+                  const metaId = schema['brmh-schema-table-data-id'];
+                  const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
+                  return (
+                    <tr key={schema.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {schema.schemaName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {schema.isArray ? 'Array' : schema.originalType}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(schema.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(schema.updatedAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center gap-2 justify-end">
+                          {!isTableActive && (
+                            <button
+                              type="button"
+                              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-400 text-white rounded-full shadow-sm hover:from-blue-600 hover:to-blue-500 hover:shadow-md transition font-semibold text-xs"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_URL}/schema/table`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ schemaId: schema.id, tableName: schema.schemaName })
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok) {
+                                    alert('Table created successfully!');
+                                  } else {
+                                    alert('Failed to create table: ' + (data.error || 'Unknown error'));
+                                  }
+                                } catch (err) {
+                                  alert('Failed to create table: ' + err);
+                                }
+                              }}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" />
+                                <path d="M3 10h18M9 21V7" stroke="currentColor" />
+                              </svg>
+                              Create Table
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-full shadow-sm hover:from-green-600 hover:to-green-500 hover:shadow-md transition font-semibold text-xs"
+                            onClick={() => {
+                              setDataFormSchema(schema.schema);
+                              setDataTableName(schema.tableName || schema.schemaName);
+                              setDataForm({});
+                              setShowDataModal(true);
+                            }}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" stroke="currentColor" />
+                              <path d="M8 12h8M12 8v8" stroke="currentColor" />
+                            </svg>
+                            Create Data
+                          </button>
+                          <span className="mx-2 border-l border-gray-200 h-5"></span>
+                          <button
+                            onClick={() => handleEditSchema(schema)}
+                            aria-label="Edit"
+                            className="p-2 rounded-full hover:bg-blue-100 text-blue-600 transition flex items-center justify-center"
+                            type="button"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M12 20h9" strokeLinecap="round"/>
+                              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19.5 3 21l1.5-4L16.5 3.5z" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSchema(schema.id)}
+                            aria-label="Delete"
+                            className="p-2 rounded-full hover:bg-red-100 text-red-600 transition flex items-center justify-center"
+                            type="button"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 3h4a1 1 0 011 1v2H9V4a1 1 0 011-1z" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -723,7 +925,7 @@ const SchemaService = () => {
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
                 onClick={handleSave}
               >
-                {editingSchemaId ? 'Update' : 'Save'}
+                {editingSchemaId ? 'Update' : 'Create'}
               </button>
             </div>
             {validationResult && (
@@ -737,6 +939,69 @@ const SchemaService = () => {
             {saveMessage && (
               <div className="mt-2 text-blue-700 font-semibold text-sm">{saveMessage}</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showDataModal && dataFormSchema && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="absolute inset-0 bg-black bg-opacity-30 backdrop-blur-sm"></div>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col relative z-10 max-h-[95vh] border border-gray-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white rounded-t-2xl z-10">
+              <h2 className="text-lg font-bold">Create Data for {dataTableName}</h2>
+              <button className="text-gray-500 hover:text-gray-700 text-xl" onClick={() => setShowDataModal(false)}>✕</button>
+            </div>
+            {/* Main content */}
+            <div className="flex-1 flex min-h-0">
+              {/* Schema view */}
+              <div className="w-1/2 border-r bg-gray-50 p-4 overflow-y-auto" style={{ maxHeight: 'calc(95vh - 64px - 64px)' }}>
+                <div className="font-semibold text-sm mb-2">Schema</div>
+                <pre className="text-xs bg-gray-100 rounded p-2 overflow-x-auto">{JSON.stringify(dataFormSchema, null, 2)}</pre>
+              </div>
+              {/* Data form */}
+              <div className="w-1/2 p-4 overflow-y-auto" style={{ maxHeight: 'calc(95vh - 64px - 64px)' }}>
+                <DynamicForm
+                  schema={dataFormSchema}
+                  formData={dataForm}
+                  setFormData={setDataForm}
+                />
+              </div>
+            </div>
+            {/* Sticky action bar */}
+            <div className="flex justify-end gap-2 px-6 py-4 border-t sticky bottom-0 bg-white rounded-b-2xl z-10">
+              <button
+                type="button"
+                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg font-semibold shadow-sm transition"
+                onClick={async () => {
+                  const itemToSave = { ...dataForm };
+                  if (!itemToSave.id) {
+                    itemToSave.id = generateRandomId();
+                  }
+                  const res = await fetch(`${API_URL}/schema/data`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      tableName: dataTableName,
+                      item: itemToSave
+                    })
+                  });
+                  if (res.ok) {
+                    alert('Data saved!');
+                    setShowDataModal(false);
+                  } else {
+                    let errMsg = 'Unknown error';
+                    try {
+                      const err = await res.json();
+                      errMsg = err.error || errMsg;
+                    } catch {}
+                    alert('Failed to save data: ' + errMsg);
+                  }
+                }}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}

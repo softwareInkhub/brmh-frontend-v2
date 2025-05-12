@@ -77,14 +77,7 @@ const menuItems: MenuItem[] = [
       { name: 'SQS', path: '/aws/sqs' },
     ]
   },
-  {
-    name: 'Ai Api Builder',
-    path: '/yaml',
-    icon: <FileCode size={18} className="text-pink-400" />,
-    submenu: [
-      { name: 'YAML generator', path: '/ai-api-builder' }
-    ]
-  },
+ 
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ onCollapse }) => {
