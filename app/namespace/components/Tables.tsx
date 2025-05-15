@@ -1,9 +1,12 @@
+'use client';
+
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui3/table";
 import { Badge } from "../../components/ui3/badge";
 import { Button } from "../../components/ui3/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui3/card";
-import { AlertCircle, RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface TableMetadata {
@@ -19,13 +22,22 @@ const Tables = () => {
   const [tables, setTables] = useState<TableMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const router = useRouter();
 
   const fetchTables = async () => {
     try {
-      const response = await fetch('/api/schema/table-meta');
+      const response = await fetch(`${BASE_URL}/schema/table-meta`);
       if (!response.ok) throw new Error('Failed to fetch tables');
       const data = await response.json();
-      setTables(data);
+      setTables(data.map((item: any) => ({
+        id: item.id,
+        tableName: item.tableName,
+        schemaName: item.details?.schemaName || item.schemaName || '',
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt || item.createdAt,
+      })));
     } catch (error) {
       toast.error('Failed to load tables');
       console.error('Error fetching tables:', error);
@@ -36,7 +48,7 @@ const Tables = () => {
 
   const refreshTableStatus = async (metaId: string) => {
     try {
-      const response = await fetch(`/api/schema/table-meta/check/${metaId}`);
+      const response = await fetch(`${BASE_URL}/schema/table-meta/check/${metaId}`);
       if (!response.ok) throw new Error('Failed to check table status');
       const updatedTable = await response.json();
       setTables(prev => prev.map(table => 
@@ -51,13 +63,11 @@ const Tables = () => {
 
   const deleteTable = async (metaId: string, tableName: string) => {
     if (!confirm(`Are you sure you want to delete table "${tableName}"?`)) return;
-    
     try {
-      const response = await fetch(`/api/schema/table/${metaId}`, {
+      const response = await fetch(`${BASE_URL}/schema/table/${metaId}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete table');
-      
       setTables(prev => prev.filter(table => table.id !== metaId));
       toast.success('Table deleted successfully');
     } catch (error) {
@@ -78,6 +88,15 @@ const Tables = () => {
     }
   };
 
+  const syncTableStatus = async () => {
+    await fetch(`${BASE_URL}/schema/table-meta/check-all`, { method: 'POST' });
+    fetchTables(); // Refresh the table list after syncing
+  };
+
+  const handleRowClick = (tableName: string) => {
+    router.push(`/namespace/table/${tableName}`);
+  };
+
   useEffect(() => {
     fetchTables();
   }, []);
@@ -94,15 +113,24 @@ const Tables = () => {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Schema Tables</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={refreshAllTables}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh All
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshAllTables}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={syncTableStatus}
+          >
+            Sync Table Status
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {tables.length === 0 ? (
@@ -123,7 +151,11 @@ const Tables = () => {
             </TableHeader>
             <TableBody>
               {tables.map((table) => (
-                <TableRow key={table.id}>
+                <TableRow
+                  key={table.id}
+                  className="cursor-pointer hover:bg-blue-50"
+                  onClick={() => handleRowClick(table.tableName)}
+                >
                   <TableCell className="font-medium">{table.tableName}</TableCell>
                   <TableCell>{table.schemaName}</TableCell>
                   <TableCell>
@@ -136,16 +168,8 @@ const Tables = () => {
                   </TableCell>
                   <TableCell>{new Date(table.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>{new Date(table.updatedAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => refreshTableStatus(table.id)}
-                        title="Refresh Status"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

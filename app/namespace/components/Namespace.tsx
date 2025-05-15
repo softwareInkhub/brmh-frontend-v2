@@ -3760,6 +3760,7 @@ const NamespacePage = () => {
           methodType={testingMethod['namespace-method-type']}
           namespaceMethodUrlOverride={testingMethod['namespace-method-url-override']}
           saveData={testingMethod['save-data']}
+          methodId={testingMethod['namespace-method-id']}
         />
       )}
 

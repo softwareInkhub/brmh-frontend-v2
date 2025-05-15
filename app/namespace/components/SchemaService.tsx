@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, LayoutGrid, List as ListIcon } from 'lucide-react';
+import SchemaModal from './SchemaModal';
+import SchemaPreviewModal from './SchemaPreviewModal';
 
 const FIELD_TYPES = ['string', 'number', 'boolean', 'object', 'array', 'enum'];
 
@@ -83,15 +85,15 @@ function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCo
                   <span style={{ display: 'inline-block', width: 16, height: 16 }} />
                 )}
               </span>
-              <input
+            <input
                 className="border border-gray-300 p-1 rounded-md w-28 text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400"
-                placeholder="Field name"
-                value={field.name ?? ''}
-                onChange={e => updateField(idx, 'name', e.target.value)}
-              />
-              <select
+              placeholder="Field name"
+              value={field.name ?? ''}
+              onChange={e => updateField(idx, 'name', e.target.value)}
+            />
+            <select
                 className="border border-gray-300 p-1 rounded-md text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50"
-                value={field.type ?? 'string'}
+              value={field.type ?? 'string'}
                 onChange={e => {
                   const newType = e.target.value;
                   updateField(idx, 'type', newType);
@@ -100,11 +102,11 @@ function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCo
                     updateField(idx, 'enumValues', []);
                   }
                 }}
-              >
-                {FIELD_TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+            >
+              {FIELD_TYPES.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
               {field.type === 'enum' && (
                 <div className="flex-1 flex flex-wrap gap-1 items-center">
                   <input
@@ -145,68 +147,68 @@ function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCo
                 </div>
               )}
               <label className="flex items-center gap-1 text-xs ml-1 text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={!!field.required}
-                  onChange={e => updateField(idx, 'required', e.target.checked)}
-                />
+              <input
+                type="checkbox"
+                checked={!!field.required}
+                onChange={e => updateField(idx, 'required', e.target.checked)}
+              />
                 <span>Required</span>
-              </label>
+            </label>
               <label className="flex items-center gap-1 text-xs text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={!!field.allowNull}
-                  onChange={e => updateField(idx, 'allowNull', e.target.checked)}
-                />
+              <input
+                type="checkbox"
+                checked={!!field.allowNull}
+                onChange={e => updateField(idx, 'allowNull', e.target.checked)}
+              />
                 <span>Null</span>
-              </label>
-              <button
+            </label>
+            <button
                 className="ml-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full p-1 text-xs transition"
-                onClick={() => removeField(idx)}
-                title="Remove"
+              onClick={() => removeField(idx)}
+              title="Remove"
                 style={{ minWidth: 24 }}
-              >✕</button>
-            </div>
+            >✕</button>
+          </div>
             {field.type === 'object' && !isCollapsed && (
               <div className="ml-4">
                 <div className="text-xs font-semibold text-gray-600 mb-1">Object Fields:</div>
-                <NestedFieldsEditor
-                  fields={field.fields || []}
-                  onChange={subFields => updateSubFields(idx, subFields)}
-                  level={level + 1}
+              <NestedFieldsEditor
+                fields={field.fields || []}
+                onChange={subFields => updateSubFields(idx, subFields)}
+                level={level + 1}
                   collapsedNodes={collapsedNodes}
                   setCollapsedNodes={setCollapsedNodes}
                   nodePath={thisPath}
-                />
-              </div>
-            )}
+              />
+            </div>
+          )}
             {field.type === 'array' && !isCollapsed && (
               <div className="ml-4">
                 <div className="text-xs font-semibold text-gray-600 mb-1">Array Item Type:</div>
-                <select
+              <select
                   className="border border-gray-300 p-1 rounded-md text-xs ml-1 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50"
-                  value={field.itemType ?? 'string'}
-                  onChange={e => updateField(idx, 'itemType', e.target.value)}
-                >
-                  {FIELD_TYPES.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                {field.itemType === 'object' && (
+                value={field.itemType ?? 'string'}
+                onChange={e => updateField(idx, 'itemType', e.target.value)}
+              >
+                {FIELD_TYPES.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              {field.itemType === 'object' && (
                   <div className="mt-1 ml-4">
                     <div className="text-xs font-semibold text-gray-600 mb-1">Object Fields:</div>
-                    <NestedFieldsEditor
-                      fields={field.itemFields || []}
-                      onChange={subFields => updateItemFields(idx, subFields)}
+                  <NestedFieldsEditor
+                    fields={field.itemFields || []}
+                    onChange={subFields => updateItemFields(idx, subFields)}
                       level={level + 2}
                       collapsedNodes={collapsedNodes}
                       setCollapsedNodes={setCollapsedNodes}
                       nodePath={thisPath + '.item'}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           </React.Fragment>
         );
       })}
@@ -244,10 +246,10 @@ function fieldsToSchema(fields: Field[]): Record<string, any> {
     } else if (field.type === 'array') {
       if (field.itemType === 'object') {
         property.items = fieldsToSchema(field.itemFields || []);
-      } else {
+    } else {
         property.items = { type: field.allowNull ? [field.itemType, 'null'] : field.itemType };
-      }
     }
+  }
     
     properties[field.name] = property;
     if (field.required) {
@@ -262,14 +264,14 @@ function fieldsToSchema(fields: Field[]): Record<string, any> {
   };
   if (required.length > 0) {
     schema.required = required;
-  }
+}
   return schema;
 }
 
 // --- OpenAPI-compatible schemaToFields ---
 function schemaToFields(schema: any): Field[] {
   if (!schema || !schema.properties) return [];
-  return Object.entries(schema.properties).map(([name, prop]: [string, any]) => {
+    return Object.entries(schema.properties).map(([name, prop]: [string, any]) => {
     let type = prop.type;
     let allowNull = false;
     if (Array.isArray(type)) {
@@ -293,11 +295,11 @@ function schemaToFields(schema: any): Field[] {
       type: type || 'string',
       required: (schema.required || []).includes(name),
       allowNull,
-      fields: type === 'object' ? schemaToFields(prop) : [],
-      itemType: type === 'array' ? (Array.isArray(prop.items?.type) ? prop.items.type[0] : prop.items?.type || 'string') : 'string',
-      itemFields: type === 'array' && prop.items?.type === 'object' ? schemaToFields(prop.items) : [],
-    };
-  });
+        fields: type === 'object' ? schemaToFields(prop) : [],
+        itemType: type === 'array' ? (Array.isArray(prop.items?.type) ? prop.items.type[0] : prop.items?.type || 'string') : 'string',
+        itemFields: type === 'array' && prop.items?.type === 'object' ? schemaToFields(prop.items) : [],
+      };
+    });
 }
 
 // --- TypeScript-like to JSON Schema parser ---
@@ -492,6 +494,14 @@ const SchemaService = () => {
   const [dataForm, setDataForm] = useState<any>({});
   const [dataTableName, setDataTableName] = useState<string>('');
   const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
+  const [showTableNameModal, setShowTableNameModal] = useState(false);
+  const [pendingTableSchema, setPendingTableSchema] = useState<any>(null);
+  const [tableNameInput, setTableNameInput] = useState('');
+  const [tableNameError, setTableNameError] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [search, setSearch] = useState('');
+  const [previewSchema, setPreviewSchema] = useState<any | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Bidirectional sync: update JSON editor from form fields if not editing JSON
   useEffect(() => {
@@ -511,7 +521,7 @@ const SchemaService = () => {
         (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0) ||
         (Array.isArray(parsed) && parsed.length > 0)
       ) {
-        setFields(schemaToFields(parsed));
+      setFields(schemaToFields(parsed));
         setIsEditingJson(false);
       }
       // If parsed is empty ({} or []), do not update fields or clear anything
@@ -607,7 +617,7 @@ const SchemaService = () => {
     setEditingSchemaId(null);
     setSchemaName('');
     setJsonSchema('{}');
-    setFields([{ name: '', type: 'string', children: [] }]);
+    setFields([]);
     setJsonError(null);
     setValidationResult(null);
     setValidated(false);
@@ -691,257 +701,304 @@ const SchemaService = () => {
     fetchSchemas();
   }, []);
 
+  // Filter schemas by search
+  const filteredSchemas = schemas.filter(s =>
+    s.schemaName?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleSchemaModalSave = async (schemaName: string, jsonSchema: string) => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/schema/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schemaName,
+          schema: JSON.parse(jsonSchema),
+          methodId: 'manual',
+        })
+      });
+      const result = await res.json();
+      if (result && (result.schemaId || result.id)) {
+        setSaveMessage('Schema created successfully!');
+        setShowModal(false);
+        resetForm();
+        // Optionally refresh schema list here
+      } else {
+        setSaveMessage(result?.error || 'Failed to save schema. Please try again.');
+      }
+    } catch (error) {
+      setSaveMessage('Failed to save schema. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h1 className="text-2xl font-semibold text-gray-900">Schema Management</h1>
-        <button
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-        >
-          Create Schema
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Search box */}
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search schemas..."
+              className="pl-7 pr-2 py-1.5 rounded-md border border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none min-w-[180px]"
+            />
+          </div>
+          {/* View Toggle */}
+          <button
+            className={`p-2 rounded-full border transition-colors ${viewMode === 'list' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+            onClick={() => setViewMode('list')}
+            title="List View"
+            aria-label="List View"
+          >
+            <ListIcon size={20} />
+          </button>
+          <button
+            className={`p-2 rounded-full border transition-colors ${viewMode === 'grid' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+            onClick={() => setViewMode('grid')}
+            title="Grid View"
+            aria-label="Grid View"
+          >
+            <LayoutGrid size={20} />
+          </button>
+      <button
+            className="bg-blue-600 text-sm text-white px-4 py-2 rounded hover:bg-blue-700 transition ml-2"
+        onClick={() => {
+              resetForm();
+          setShowModal(true);
+        }}
+      >
+        Create Schema
+      </button>
+        </div>
       </div>
 
-      {/* Schema List */}
+      {/* Schema List/Grid */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
           <div className="p-4 text-center text-gray-500">Loading schemas...</div>
         ) : error ? (
           <div className="p-4 text-center text-red-500">{error}</div>
-        ) : schemas.length === 0 ? (
+        ) : filteredSchemas.length === 0 ? (
           <div className="p-4 text-center text-gray-500">No schemas found</div>
-        ) : (
+        ) : viewMode === 'list' ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Updated</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {schemas.map((schema) => {
-                  const metaId = schema['brmh-schema-table-data-id'];
-                  const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
-                  return (
-                    <tr key={schema.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {schema.schemaName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {schema.isArray ? 'Array' : schema.originalType}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(schema.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(schema.updatedAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center gap-2 justify-end">
-                          {!isTableActive && (
+            <div style={{ maxHeight: '75vh', overflowY: 'auto' }}>
+              <table className="min-w-full divide-y divide-gray-200 rounded-lg shadow-sm text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg">Name</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">Updated</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {filteredSchemas.map((schema) => {
+                    const metaId = schema['brmh-schema-table-data-id'];
+                    const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
+                    return (
+                      <tr
+                        key={schema.id}
+                        className="hover:bg-blue-50 transition rounded-lg cursor-pointer"
+                        onClick={() => setPreviewSchema(schema)}
+                      >
+                        <td className="px-3 py-2  whitespace-nowrap font-medium text-gray-900 rounded-l-lg">
+                          {schema.schemaName}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-500">{schema.isArray ? 'Array' : schema.originalType}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.createdAt).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right rounded-r-lg">
+                          <div className="flex items-center gap-2 justify-end">
+                            {!isTableActive && (
+                              <button
+                                type="button"
+                                className="p-2 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition flex items-center gap-2"
+                                onClick={e => { e.stopPropagation(); setPendingTableSchema(schema); setTableNameInput(schema.schemaName || ''); setTableNameError(''); setShowTableNameModal(true); }}
+                                title="Create Table"
+                                aria-label="Create Table"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                  <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" />
+                                  <path d="M3 10h18M9 21V7" stroke="currentColor" />
+                                </svg>
+                                <span className="text-xs">Create Table</span>
+                              </button>
+                            )}
                             <button
                               type="button"
-                              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-400 text-white rounded-full shadow-sm hover:from-blue-600 hover:to-blue-500 hover:shadow-md transition font-semibold text-xs"
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch(`${API_URL}/schema/table`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ schemaId: schema.id, tableName: schema.schemaName })
-                                  });
-                                  const data = await res.json();
-                                  if (res.ok) {
-                                    alert('Table created successfully!');
-                                  } else {
-                                    alert('Failed to create table: ' + (data.error || 'Unknown error'));
-                                  }
-                                } catch (err) {
-                                  alert('Failed to create table: ' + err);
-                                }
-                              }}
+                              className="p-2 rounded-full bg-green-50 hover:bg-green-100 text-green-600 transition flex items-center gap-1"
+                              onClick={e => { e.stopPropagation(); setDataFormSchema(schema.schema); setDataTableName(schema.tableName || schema.schemaName); setDataForm({}); setShowDataModal(true); }}
+                              title="Create Data"
+                              aria-label="Create Data"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" />
-                                <path d="M3 10h18M9 21V7" stroke="currentColor" />
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" />
+                                <path d="M8 12h8M12 8v8" stroke="currentColor" />
                               </svg>
-                              Create Table
+                              <span className="text-xs">Create Data</span>
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-400 text-white rounded-full shadow-sm hover:from-green-600 hover:to-green-500 hover:shadow-md transition font-semibold text-xs"
-                            onClick={() => {
-                              setDataFormSchema(schema.schema);
-                              setDataTableName(schema.tableName || schema.schemaName);
-                              setDataForm({});
-                              setShowDataModal(true);
-                            }}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                              <circle cx="12" cy="12" r="10" stroke="currentColor" />
-                              <path d="M8 12h8M12 8v8" stroke="currentColor" />
-                            </svg>
-                            Create Data
-                          </button>
-                          <span className="mx-2 border-l border-gray-200 h-5"></span>
-                          <button
-                            onClick={() => handleEditSchema(schema)}
-                            aria-label="Edit"
-                            className="p-2 rounded-full hover:bg-blue-100 text-blue-600 transition flex items-center justify-center"
-                            type="button"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                              <path d="M12 20h9" strokeLinecap="round"/>
-                              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19.5 3 21l1.5-4L16.5 3.5z" strokeLinecap="round"/>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSchema(schema.id)}
-                            aria-label="Delete"
-                            className="p-2 rounded-full hover:bg-red-100 text-red-600 transition flex items-center justify-center"
-                            type="button"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 3h4a1 1 0 011 1v2H9V4a1 1 0 011-1z" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="p-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+              {filteredSchemas.map((schema) => {
+                const metaId = schema['brmh-schema-table-data-id'];
+                const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
+                return (
+                  <div
+                    key={schema.id}
+                    className="bg-white rounded-lg border border-gray-200 shadow-sm p-1.5 flex items-center justify-between hover:bg-blue-50 transition-all duration-150 gap-2 min-h-0 cursor-pointer"
+                    onClick={() => setPreviewSchema(schema)}
+                  >
+                    <span
+                      className="text-[12px] font-medium text-gray-600 hover:underline hover:text-blue-800 truncate"
+                      title={schema.schemaName}
+                      style={{lineHeight: '1.2'}}
+                    >
+                      {schema.schemaName}
+                    </span>
+                    <div className="flex gap-1 items-center ml-2">
+                      {!isTableActive && (
+                        <button
+                          type="button"
+                          className="p-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition"
+                          onClick={e => { e.stopPropagation(); setPendingTableSchema(schema); setTableNameInput(schema.schemaName || ''); setTableNameError(''); setShowTableNameModal(true); }}
+                          title="Create Table"
+                          aria-label="Create Table"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" />
+                            <path d="M3 10h18M9 21V7" stroke="currentColor" />
+                          </svg>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="p-1 rounded-full bg-green-50 hover:bg-green-100 text-green-600 transition"
+                        onClick={e => { e.stopPropagation(); setDataFormSchema(schema.schema); setDataTableName(schema.tableName || schema.schemaName); setDataForm({}); setShowDataModal(true); }}
+                        title="Create Data"
+                        aria-label="Create Data"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" />
+                          <path d="M8 12h8M12 8v8" stroke="currentColor" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
+        {/* Preview Modal */}
+        <SchemaPreviewModal
+          open={!!previewSchema}
+          onClose={() => setPreviewSchema(null)}
+          schema={previewSchema}
+          onEdit={s => { handleEditSchema(s); setPreviewSchema(null); }}
+          onDelete={s => { handleDeleteSchema(s.id); setPreviewSchema(null); }}
+        />
       </div>
 
-      {/* Unified Schema Editor Modal */}
-      {showModal && (
+      {/* Table Name Modal */}
+      {showTableNameModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="absolute inset-0 bg-black bg-opacity-30 backdrop-blur-sm"></div>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-7xl relative z-10 max-h-[98vh] flex flex-col overflow-hidden border border-gray-200">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md relative z-10 border border-gray-200">
             <button
               className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-              onClick={() => {
-                setShowModal(false);
-                resetForm();
-              }}
-            >
-              ✕
-            </button>
-            <h2 className="text-lg font-semibold mb-2 tracking-tight text-gray-900">
-              {editingSchemaId ? 'Edit Schema' : 'Create Schema'}
-            </h2>
+              onClick={() => setShowTableNameModal(false)}
+            >✕</button>
+            <h2 className="text-lg font-semibold mb-4">Create Table for Schema</h2>
+            <label className="block text-sm font-medium mb-2">Table Name</label>
             <input
-              className="border border-gray-300 p-2 rounded-lg mb-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
-              placeholder="Schema Name (required)"
-              value={schemaName}
-              onChange={e => setSchemaName(e.target.value)}
-              required
+              className="border border-gray-300 p-2 rounded-lg w-full mb-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400"
+              value={tableNameInput}
+              onChange={e => setTableNameInput(e.target.value)}
+              placeholder="Enter table name"
+              autoFocus
             />
-            <div className="flex flex-col md:flex-row gap-0 md:gap-6 flex-1 min-h-0 w-full overflow-hidden">
-              {/* Recursive Form */}
-              <div className="flex-1 min-w-0 max-w-full overflow-x-auto" style={{ maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto', minWidth: 0 }}>
-                <div className="font-semibold mb-2 text-base text-gray-800">Form Editor</div>
-                <div className="border-b border-gray-200 mb-2" />
-                <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
-              </div>
-              {/* Divider for desktop */}
-              <div className="hidden md:block w-px bg-gray-200 mx-4" />
-              {/* JSON Tree (simple textarea) */}
-              <div className="flex-1 min-w-0 max-w-full flex flex-col mt-4 md:mt-0">
-                {/* New: Raw fields input */}
-                <div className="mb-2">
-                  <div className="font-semibold text-xs text-gray-700 mb-1">Paste TypeScript/Raw Fields</div>
-                  <textarea
-                    className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
-                    placeholder={`Paste fields like:\nid: string;\nemail: string;\nrole: \"ADMIN\" | \"USER\";\ndepartmentId: string | null;`}
-                    value={rawFields}
-                    onChange={e => setRawFields(e.target.value)}
-                    rows={4}
-                    style={{ minHeight: 60 }}
-                  />
-                  <button
-                    className="mt-1 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold border border-blue-600 transition"
-                    onClick={handleConvertRawFields}
-                    type="button"
-                  >
-                    Convert to JSON Schema
-                  </button>
-                  {rawFieldsError && (
-                    <div className="text-xs text-red-600 mt-1">{rawFieldsError}</div>
-                  )}
-                </div>
-                <div className="flex items-center mb-2 gap-2">
-                  <div className="font-semibold flex-1 text-base text-gray-800">JSON Schema Editor</div>
-                  <button
-                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs border border-gray-300 font-semibold transition"
-                    onClick={() => {
-                      try {
-                        setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
-                      } catch {}
-                    }}
-                    title="Format JSON"
-                  >
-                    Format
-                  </button>
-                </div>
-                <div className="text-xs text-gray-500 mb-1">
-                  {/* OpenAPI 3.0+ spec: Use <code>type: ["string", "null"]</code> for nullable fields, and <code>required: ["field1", ...]</code> for required fields. */}
-                  <span>OpenAPI 3.0+ spec: Use <code>type: ["string", "null"]</code> for nullable fields, and <code>required: ["field1", ...]</code> for required fields.</span>
-                </div>
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg">
-                  <textarea
-                    className="w-full h-full border-0 rounded-lg p-2 font-mono text-xs resize-none bg-transparent focus:outline-none text-gray-800"
-                    value={jsonSchema}
-                    onChange={handleJsonChange}
-                    spellCheck={false}
-                    style={{ minHeight: 180, maxHeight: '40vh', overflow: 'auto' }}
-                  />
-                  {jsonError && (
-                    <div className="text-xs text-red-600 mt-1">{jsonError}</div>
-                  )}
-                </div>
-              </div>
-            </div>
-            {/* Sticky action buttons */}
-            <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-4 sticky bottom-0 right-0 bg-white pt-2 pb-1 z-20 border-t border-gray-100">
+            {tableNameError && <div className="text-xs text-red-600 mb-2">{tableNameError}</div>}
+            <div className="flex justify-end gap-2 mt-4">
               <button
-                className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-                onClick={handleValidate}
-              >
-                Validate
-              </button>
-              <button
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-                onClick={handleSave}
-              >
-                {editingSchemaId ? 'Update' : 'Create'}
-              </button>
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-semibold"
+                onClick={() => setShowTableNameModal(false)}
+              >Cancel</button>
+                  <button
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
+                onClick={async () => {
+                  if (!tableNameInput.trim()) {
+                    setTableNameError('Table name is required.');
+                    return;
+                  }
+                  setTableNameError('');
+                  try {
+                    const res = await fetch(`${API_URL}/schema/table`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ schemaId: pendingTableSchema.id, tableName: tableNameInput.trim() })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      alert('Table created successfully!');
+                      setShowTableNameModal(false);
+                    } else {
+                      setTableNameError(data.error || 'Failed to create table.');
+                    }
+                  } catch (err) {
+                    setTableNameError('Failed to create table: ' + err);
+                  }
+                }}
+              >Create</button>
             </div>
-            {validationResult && (
-              <div className="mt-2">
-                <div className="font-semibold text-sm">Validation Result:</div>
-                <pre className="bg-gray-100 p-2 rounded text-xs">
-                  {JSON.stringify(validationResult, null, 2)}
-                </pre>
-              </div>
-            )}
-            {saveMessage && (
-              <div className="mt-2 text-blue-700 font-semibold text-sm">{saveMessage}</div>
-            )}
           </div>
-        </div>
+                </div>
       )}
+
+      {/* Unified Schema Editor Modal */}
+      <SchemaModal
+        showModal={showModal}
+        setShowModal={setShowModal}
+        resetForm={resetForm}
+        editingSchemaId={editingSchemaId}
+        schemaName={schemaName}
+        setSchemaName={setSchemaName}
+        fields={fields}
+        setFields={setFields}
+        collapsedNodes={collapsedNodes}
+        setCollapsedNodes={setCollapsedNodes}
+        rawFields={rawFields}
+        setRawFields={setRawFields}
+        handleConvertRawFields={handleConvertRawFields}
+        rawFieldsError={rawFieldsError}
+        jsonSchema={jsonSchema}
+        setJsonSchema={setJsonSchema}
+        handleJsonChange={handleJsonChange}
+        jsonError={jsonError}
+        NestedFieldsEditor={NestedFieldsEditor}
+        onSave={handleSchemaModalSave}
+        isSaving={isSaving}
+      />
 
       {showDataModal && dataFormSchema && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
@@ -958,7 +1015,7 @@ const SchemaService = () => {
               <div className="w-1/2 border-r bg-gray-50 p-4 overflow-y-auto" style={{ maxHeight: 'calc(95vh - 64px - 64px)' }}>
                 <div className="font-semibold text-sm mb-2">Schema</div>
                 <pre className="text-xs bg-gray-100 rounded p-2 overflow-x-auto">{JSON.stringify(dataFormSchema, null, 2)}</pre>
-              </div>
+                </div>
               {/* Data form */}
               <div className="w-1/2 p-4 overflow-y-auto" style={{ maxHeight: 'calc(95vh - 64px - 64px)' }}>
                 <DynamicForm
@@ -1009,4 +1066,5 @@ const SchemaService = () => {
   );
 };
 
+export { NestedFieldsEditor, schemaToFields };
 export default SchemaService;
