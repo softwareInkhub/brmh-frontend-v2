@@ -6,6 +6,7 @@ import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
 import SchemaModal from './components/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
+import UnifiedNamespace from './components/UnifiedNamespace';
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
   const properties: Record<string, any> = {};
@@ -221,15 +222,29 @@ const NamespacePage = () => {
             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>
           )}
         </button>
+        <button
+          className={`px-6 py-2 text-sm font-medium transition-all relative ${
+            activeTab === 'unifiedNamespace'
+              ? 'text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+          onClick={() => setActiveTab('unifiedNamespace')}
+        >
+          Unified Namespace
+          {activeTab === 'unifiedNamespace' && (
+            <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>
+          )}
+        </button>
               </div>
 
       {/* Main Content Container */}
-      <div className="max-w-8xl mx-auto w-full relative h-[90vh] overflow-hidden">
+      <div className="max-w-8xl mx-auto w-full relative h-full overflow-y-auto">
         {/* Tab Content */}
         <div className="w-full pt-4">
           {activeTab === 'namespace' && <Namespace />}
           {activeTab === 'schemaService' && <SchemaService />}
           {activeTab === 'tables' && <Tables />}
+          {activeTab === 'unifiedNamespace' && <UnifiedNamespace />}
         </div>
         <LLMTerminal openSchemaModal={openSchemaModal} />
         <SchemaModal
