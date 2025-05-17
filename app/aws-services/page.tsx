@@ -3,6 +3,94 @@
 import React from 'react';
 import Link from 'next/link';
 
+const SIDEPANEL_WIDTH = 256;
+const awsServices = [
+  { id: 'lambda', name: 'Lambda', icon: '🟧' },
+  { id: 's3', name: 'S3', icon: '🟨' },
+  { id: 'dynamodb', name: 'DynamoDB', icon: '🟩' },
+  { id: 'iam', name: 'IAM', icon: '🟦' },
+  { id: 'sns', name: 'SNS', icon: '🟪' },
+  { id: 'apigateway', name: 'API Gateway', icon: '🟫' },
+];
+
+function AwsSidePanel({ onServiceClick }: { onServiceClick?: (service: any) => void }) {
+  const [active, setActive] = React.useState<string | null>(null);
+  return (
+    <aside className="h-full w-full bg-white flex flex-col py-4">
+      <div className="text-xs font-bold text-gray-500 px-4 mb-4">AWS Services</div>
+      <ul className="space-y-1">
+        {awsServices.map(service => (
+          <li key={service.id}>
+            <button
+              className={`flex items-center w-full px-4 py-2 rounded-lg text-left transition-colors
+                ${active === service.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-100'}`}
+              onClick={() => {
+                setActive(service.id);
+                onServiceClick && onServiceClick(service);
+              }}
+            >
+              <span className="mr-2 text-lg">{service.icon}</span>
+              <span>{service.name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+const awsPage = () => {
+  return (
+    <div className="flex h-screen ml-20">
+      {/* SidePanel */}
+      <div
+        style={{
+          width: SIDEPANEL_WIDTH,
+          minWidth: SIDEPANEL_WIDTH,
+          maxWidth: SIDEPANEL_WIDTH,
+          background: '#fff',
+          borderRight: '1px solid #f0f0f0',
+          height: '100vh',
+          zIndex: 20,
+        }}
+      >
+        <AwsSidePanel onServiceClick={() => {}} />
+      </div>
+      {/* Main Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto pl-8">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">AWS Services Overview</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Manage and monitor your AWS services from one central dashboard
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {serviceCards.map((card) => (
+              <Link
+                key={card.title}
+                href={card.href}
+                className="block p-6 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="p-2 bg-gray-100 rounded-lg text-gray-600">
+                    {card.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">{card.title}</h3>
+                    <p className="mt-1 text-sm text-gray-500">{card.description}</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const serviceCards = [
   {
     title: 'S3 Buckets',
@@ -55,37 +143,5 @@ const serviceCards = [
     ),
   },
 ];
-
-const awsPage = () => {  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">AWS Services Overview</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Manage and monitor your AWS services from one central dashboard
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {serviceCards.map((card) => (
-          <Link
-            key={card.title}
-            href={card.href}
-            className="block p-6 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="p-2 bg-gray-100 rounded-lg text-gray-600">
-                {card.icon}
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">{card.title}</h3>
-                <p className="mt-1 text-sm text-gray-500">{card.description}</p>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default awsPage;

@@ -54,7 +54,7 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
   const [rawFields, setRawFields] = useState('');
   const [rawFieldsError, setRawFieldsError] = useState<string | null>(null);
-  const [jsonSchema, setJsonSchema] = useState('{}');
+  const [jsonSchema, setJsonSchema] = useState('{\n  "type": "object",\n  "properties": {},\n  "required": []\n}');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -113,6 +113,9 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
     try {
       parsedSchema = JSON.parse(jsonSchema);
       setJsonError(null);
+      if (!parsedSchema || typeof parsedSchema !== 'object' || !parsedSchema.type) {
+        parsedSchema = { type: 'object', properties: {}, required: [] };
+      }
     } catch {
       setJsonError('Invalid JSON');
       return;
@@ -120,16 +123,30 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
     setIsSaving(true);
     setSaveMessage('');
     try {
+      console.log('Creating schema:', { schemaName: schemaName.trim(), schema: parsedSchema });
+      const payload = {
+        methodId: null,
+        schemaName: schemaName.trim(),
+        methodName: null,
+        namespaceId: null,
+        schemaType: null,
+        schema: parsedSchema
+      };
+      console.log('Schema creation payload:', payload);
       const response = await fetch(`${API_BASE_URL}/unified/schema`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schemaName: schemaName.trim(), schema: parsedSchema })
+        body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error('Failed to save schema');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Schema creation error:', errorText);
+        throw new Error(errorText || 'Failed to save schema');
+      }
       setSaveMessage('Schema created successfully!');
       setShowModal(false);
       setSchemaName('');
-      setJsonSchema('{}');
+      setJsonSchema('{\n  "type": "object",\n  "properties": {},\n  "required": []\n}');
       setFields([]);
       setRawFields('');
       setCollapsedNodes(new Set());

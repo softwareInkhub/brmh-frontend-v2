@@ -26,10 +26,10 @@ export default function RootLayout({
       >
         <QueryClientProvider client={queryClient}>
           <div className="flex min-h-screen bg-gray-50">
-            <Sidebar onCollapse={(collapsed) => setIsCollapsed(collapsed)} />
-            <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'md:ml-20' : 'md:ml-64'}`}>
+            <Sidebar />
+            <div className="flex-1 min-h-screen">
               <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
-              <main className="w-full p-4 md:p-6">
+              <main className="w-full min-h-screen">
                 {children}
               </main>
             </div>

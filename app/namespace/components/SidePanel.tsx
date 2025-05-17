@@ -1,0 +1,359 @@
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2 } from 'lucide-react';
+import NamespacePreviewModal from './NamespacePreviewModal';
+
+interface SidePanelProps {
+  namespaces: any[];
+  accounts: Record<string, any[]>; // namespaceId -> accounts
+  schemas: any[];
+  methods: Record<string, any[]>; // namespaceId -> methods
+  onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method', parentData?: any) => void;
+  fetchNamespaceDetails: (namespaceId: string) => void;
+  selectedSchemaId?: string | null;
+  onEditSchema?: (schema: any) => void;
+  onDeleteSchema?: (schema: any) => void;
+  onDeleteNamespace?: (namespace: any) => void;
+}
+
+const methodColor = (type: string) => {
+  switch (type) {
+    case 'GET': return 'text-green-600';
+    case 'POST': return 'text-orange-500';
+    case 'PUT': return 'text-blue-600';
+    case 'DELETE': return 'text-red-600';
+    case 'PATCH': return 'text-yellow-600';
+    default: return 'text-gray-600';
+  }
+};
+
+const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState({
+    endpoints: true,
+    schemas: false,
+    components: false,
+    requests: false,
+  });
+  const [expandedNs, setExpandedNs] = useState<Record<string, boolean>>({});
+  const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean }>>({});
+  const [viewingNamespace, setViewingNamespace] = useState<any>(null);
+
+  const toggle = (section: keyof typeof expanded) => setExpanded(e => ({ ...e, [section]: !e[section] }));
+  const toggleNs = (nsId: string) => {
+    setExpandedNs(e => {
+      const newState = { ...e, [nsId]: !e[nsId] };
+      if (newState[nsId]) {
+        fetchNamespaceDetails(nsId);
+      }
+      return newState;
+    });
+  };
+  const toggleSection = (nsId: string, section: 'accounts' | 'methods') => {
+    setExpandedSection(e => ({
+      ...e,
+      [nsId]: {
+        ...e[nsId],
+        [section]: !e[nsId]?.[section],
+      },
+    }));
+  };
+
+  const filteredNamespaces = namespaces.filter(ns =>
+    ns['namespace-name'].toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <aside className="w-64 bg-white border-r border-gray-100 h-full flex flex-col shadow-sm p-0 overflow-y-auto select-none">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <Database className="text-blue-600" size={20} />
+          <span className="font-bold text-lg text-gray-900">BRMH Namespace</span>
+        </div>
+        {/* <button
+          onClick={() => onAdd('namespace')}
+          className="ml-2 p-1 rounded hover:bg-blue-50"
+          title="Add Namespace"
+          type="button"
+        >
+          <Plus size={16} className="text-blue-500" />
+        </button> */}
+      </div>
+      {/* Search/Filter/Add Row */}
+      <div className="flex items-center px-3 py-2 space-x-2 border-b border-gray-100 bg-white">
+        <div className="flex-1 flex items-center bg-gray-50 rounded-md px-2">
+          <Search size={16} className="text-gray-400" />
+          <input
+            className="flex-1 bg-transparent px-2 py-1 text-sm outline-none"
+            placeholder="Search..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <button className="p-2 rounded hover:bg-gray-100" title="Filter (coming soon)"><Filter size={16} className="text-gray-400" /></button>
+      </div>
+      {/* Overview */}
+      <button className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-50 w-full text-sm">
+        <Globe size={16} className="text-gray-400" /> Overview
+      </button>
+      {/* Endpoints Section */}
+      <div>
+        <div className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold">
+          <button
+            className="flex items-center gap-2 flex-1 text-left"
+            onClick={() => toggle('endpoints')}
+            tabIndex={0}
+            type="button"
+          >
+            {expanded.endpoints ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <Folder size={16} className="text-blue-500" /> 
+          </button>
+        </div>
+        {expanded.endpoints && (
+          <div className="pl-6">
+            {/* Root node */}
+            <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+              <div className='flex items-center gap-1'>         
+                     <Box size={14} /> Namespaces
+              </div>
+              <button
+                onClick={() => onAdd('namespace')}
+                className="ml-1 p-1 rounded hover:bg-blue-50"
+                title="Add Namespace"
+                type="button"
+              >
+                <Plus size={16} className="text-blue-500" />
+              </button>
+            </div>
+            {/* Namespaces tree */}
+            {filteredNamespaces.length === 0 && (
+              <div className="text-xs text-gray-400 pl-2 py-2">No namespaces found</div>
+            )}
+            {filteredNamespaces.map(ns => (
+              <div key={ns['namespace-id']} className="mb-1">
+                <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+                  <button
+                    className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold"
+                    onClick={e => {
+                      if (
+                        (e.target as HTMLElement).closest('.ns-chevron-folder')
+                      ) {
+                        toggleNs(ns['namespace-id']);
+                      } else {
+                        setViewingNamespace(ns);
+                      }
+                    }}
+                  >
+                    <span className="ns-chevron-folder flex items-center gap-1">
+                      {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      <Folder size={16} className="text-blue-500" />
+                    </span>
+                    <span className="font-medium text-sm text-gray-800 group-hover:text-blue-600 truncate">
+                      {ns['namespace-name']}
+                    </span>
+                  </button>
+                </div>
+                {/* Expanded Namespace: show Accounts and Methods */}
+                {expandedNs[ns['namespace-id']] && (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {/* Accounts */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+                        <div className="relative flex items-center group">
+                          <span>Accounts</span>
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
+                            <Plus size={14} className="text-blue-400" />
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => onAdd('account', ns)}
+                          className="p-1 rounded hover:bg-blue-50"
+                          title="Add Account"
+                          type="button"
+                        >
+                          <Plus size={14} className="text-blue-500" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {(accounts[ns['namespace-id']] || []).map(acc => (
+                          <button
+                            key={acc['namespace-account-id']}
+                            onClick={() => onItemClick('account', acc)}
+                            className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
+                          >
+                            <User size={16} className="text-blue-500" />
+                            <span>{acc['namespace-account-name']}</span>
+                            <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
+                              <Plus size={14} className="text-blue-400" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Methods */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+                        <div className="relative flex items-center group">
+                          <span>Methods</span>
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
+                            <Plus size={14} className="text-blue-400" />
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => onAdd('method', ns)}
+                          className="p-1 rounded hover:bg-blue-50"
+                          title="Add Method"
+                          type="button"
+                        >
+                          <Plus size={14} className="text-blue-500" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {(methods[ns['namespace-id']] || []).map(m => (
+                          <button
+                            key={m['namespace-method-id']}
+                            onClick={() => onItemClick('method', m)}
+                            className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
+                          >
+                            <Terminal size={16} className="text-blue-500" />
+                            <span className={`font-bold text-xs ${methodColor(m['namespace-method-type'])}`}>{m['namespace-method-type']}</span>
+                            <span className="truncate group-hover:text-blue-600 text-xs">{m['namespace-method-name']}</span>
+                            <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
+                              <Plus size={14} className="text-blue-400" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* Schemas Section */}
+      <div>
+        <div className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold">
+          <button
+            className="flex items-center gap-2 flex-1 text-left"
+            onClick={() => toggle('schemas')}
+            tabIndex={0}
+            type="button"
+          >
+            {expanded.schemas ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <FileCode size={16} className="text-purple-500" /> Schemas
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onAdd('schema'); }}
+            className="p-1 rounded hover:bg-purple-50"
+            title="Add Schema"
+            type="button"
+          >
+            <Plus size={14} className="text-purple-500" />
+          </button>
+        </div>
+        {expanded.schemas && (
+          <div className="pl-6 pr-2 pt-1">
+            
+            <ul className="space-y-1">
+              {schemas.length === 0 && <li className="text-xs text-gray-400">No schemas found</li>}
+              {schemas
+                .filter(s => s.schemaName?.toLowerCase().includes(search.toLowerCase()))
+                .map(s => (
+                  <li
+                    key={s.id}
+                    className={
+                      `group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all ` +
+                      (selectedSchemaId === s.id ? 'bg-purple-50 border border-purple-200' : 'hover:bg-gray-100')
+                    }
+                    onClick={() => onItemClick('schema', s)}
+                    title={s.schemaName}
+                  >
+                    <FileCode size={16} className="text-purple-400 flex-shrink-0" />
+                    <span className="truncate font-medium text-sm flex-1">{s.schemaName}</span>
+                    {onEditSchema && (
+                      <button
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-purple-100 transition"
+                        onClick={e => { e.stopPropagation(); onEditSchema(s); }}
+                        title="Edit"
+                      >
+                        <Edit2 size={14} className="text-purple-500" />
+                      </button>
+                    )}
+                    {onDeleteSchema && (
+                      <button
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 transition"
+                        onClick={e => { e.stopPropagation(); onDeleteSchema(s); }}
+                        title="Delete"
+                      >
+                        <Trash2 size={14} className="text-red-500" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      {/* Components Section (placeholder) */}
+      <div>
+        <div className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold">
+          <button
+            className="flex items-center gap-2 flex-1 text-left"
+            onClick={() => toggle('components')}
+            tabIndex={0}
+            type="button"
+          >
+            {expanded.components ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <Layers size={16} className="text-gray-400" /> XYZ
+          </button>
+        </div>
+        {expanded.components && (
+          <ul className="pl-10 mt-1">
+            <li className="text-xs text-gray-400">No components yet</li>
+          </ul>
+        )}
+      </div>
+      {/* Requests Section (placeholder) */}
+      <div>
+        <div className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold">
+          <button
+            className="flex items-center gap-2 flex-1 text-left"
+            onClick={() => toggle('requests')}
+            tabIndex={0}
+            type="button"
+          >
+            {expanded.requests ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <List size={16} className="text-gray-400" /> XYZ
+          </button>
+        </div>
+        {expanded.requests && (
+          <ul className="pl-10 mt-1">
+            <li className="text-xs text-gray-400">No requests yet</li>
+          </ul>
+        )}
+      </div>
+      {/* Settings/Bottom (optional) */}
+      {/* <div className="mt-auto px-4 py-2 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-400">
+        <Settings size={14} /> Settings
+      </div> */}
+      <NamespacePreviewModal
+        isOpen={!!viewingNamespace}
+        onClose={() => setViewingNamespace(null)}
+        namespace={viewingNamespace}
+        onEdit={ns => {
+          onItemClick('namespace', ns);
+          setViewingNamespace(null);
+        }}
+        onDelete={ns => {
+          if (onDeleteNamespace) onDeleteNamespace(ns);
+          setViewingNamespace(null);
+        }}
+      />
+    </aside>
+  );
+};
+
+export default SidePanel; 

@@ -4,6 +4,7 @@ import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Sea
 import UnifiedSchemaModal from './UnifiedSchemaModal';
 import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from './SchemaPreviewModal';
+import AccountPreviewModal from './AccountPreviewModal';
 
 // --- Types ---
 interface KeyValuePair {
@@ -265,7 +266,24 @@ function handleOAuthRedirect(
   window.location.href = authUrl.toString();
 }
 
-const UnifiedNamespace: React.FC = () => {
+// Add at the top, after imports
+export type UnifiedNamespaceModalType = 'namespace' | 'schema' | 'account' | 'method';
+export interface UnifiedNamespaceModalTrigger {
+  type: UnifiedNamespaceModalType;
+  data: any;
+}
+
+// In the component props
+export interface UnifiedNamespaceProps {
+  externalModalTrigger?: UnifiedNamespaceModalTrigger | null;
+  onModalClose?: () => void;
+  fetchNamespaceDetails: (namespaceId: string) => Promise<void>;
+  namespaceDetailsMap: Record<string, { accounts: any[]; methods: any[] }>;
+  setNamespaceDetailsMap: React.Dispatch<React.SetStateAction<Record<string, { accounts: any[]; methods: any[] }>>>;
+  refreshData: () => void;
+}
+
+const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigger, onModalClose, fetchNamespaceDetails, namespaceDetailsMap, setNamespaceDetailsMap, refreshData }) => {
   // --- State ---
   const [namespaces, setNamespaces] = useState<UnifiedNamespace[]>([]);
   const [schemas, setSchemas] = useState<UnifiedSchema[]>([]);
@@ -276,16 +294,12 @@ const UnifiedNamespace: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [expandedNamespace, setExpandedNamespace] = useState<string | null>(null);
-  const [namespaceDetails, setNamespaceDetails] = useState<{
-    accounts: Account[];
-    methods: Method[];
-  }>({ accounts: [], methods: [] });
+  const [namespaceDetails, setNamespaceDetails] = useState<{ accounts: Account[]; methods: Method[] }>({ accounts: [], methods: [] });
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedNamespace, setSelectedNamespace] = useState<UnifiedNamespace | null>(null);
   const [showUnifiedSchemaModal, setShowUnifiedSchemaModal] = useState(false);
   const [expandedNamespaceId, setExpandedNamespaceId] = useState<string | null>(null);
-  const [namespaceDetailsMap, setNamespaceDetailsMap] = useState<Record<string, { accounts: Account[]; methods: Method[] }>>({});
 
   // --- Form State ---
   const [namespaceForm, setNamespaceForm] = useState({
@@ -409,30 +423,6 @@ const UnifiedNamespace: React.FC = () => {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Add new function to fetch namespace details
-  const fetchNamespaceDetails = async (namespaceId: string) => {
-    setLoadingDetails(true);
-    try {
-      const [accountsRes, methodsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}/accounts`),
-        fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}/methods`)
-      ]);
-
-      if (!accountsRes.ok || !methodsRes.ok) throw new Error('Failed to fetch namespace details');
-
-      const [accounts, methods] = await Promise.all([
-        accountsRes.json(),
-        methodsRes.json()
-      ]);
-
-      setNamespaceDetails({ accounts, methods });
-    } catch (err: any) {
-      setError(prev => ({ ...prev, namespaces: err.message }));
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
 
   // --- Handlers ---
   const handleNamespaceSave = async () => {
@@ -628,7 +618,7 @@ const UnifiedNamespace: React.FC = () => {
     try {
       const method = editingAccount ? 'PUT' : 'POST';
       const url = editingAccount
-        ? `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/accounts/${editingAccount["namespace-account-id"]}`
+        ? `${API_BASE_URL}/unified/accounts/${editingAccount["namespace-account-id"]}`
         : `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/accounts`;
       const res = await fetch(url, {
         method,
@@ -652,7 +642,7 @@ const UnifiedNamespace: React.FC = () => {
     setAccountLoading(true);
     setAccountError('');
     try {
-      const url = `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/accounts/${account["namespace-account-id"]}`;
+      const url = `${API_BASE_URL}/unified/accounts/${account["namespace-account-id"]}`;
       const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete account');
       fetchNamespaceDetails(selectedNamespace["namespace-id"]);
@@ -696,7 +686,7 @@ const UnifiedNamespace: React.FC = () => {
     try {
       const method = editingMethod ? 'PUT' : 'POST';
       const url = editingMethod
-        ? `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/methods/${editingMethod["namespace-method-id"]}`
+        ? `${API_BASE_URL}/unified/methods/${editingMethod["namespace-method-id"]}`
         : `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/methods`;
       const res = await fetch(url, {
         method,
@@ -720,7 +710,7 @@ const UnifiedNamespace: React.FC = () => {
     setMethodLoading(true);
     setMethodError('');
     try {
-      const url = `${API_BASE_URL}/unified/namespaces/${selectedNamespace["namespace-id"]}/methods/${method["namespace-method-id"]}`;
+      const url = `${API_BASE_URL}/unified/methods/${method["namespace-method-id"]}`;
       const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete method');
       fetchNamespaceDetails(selectedNamespace["namespace-id"]);
@@ -746,9 +736,36 @@ const UnifiedNamespace: React.FC = () => {
     setIsMethodTestModalOpen(true);
   };
 
+  // Add effect to open modals from external trigger
+  useEffect(() => {
+    if (externalModalTrigger) {
+      if (externalModalTrigger.type === 'namespace') {
+        setShowModal({ type: 'namespace', data: externalModalTrigger.data });
+      } else if (externalModalTrigger.type === 'schema') {
+        setShowModal({ type: 'schema', data: externalModalTrigger.data });
+      } else if (externalModalTrigger.type === 'account') {
+        setEditingAccount(externalModalTrigger.data);
+        setAccountForm(externalModalTrigger.data);
+        setShowAccountModal(true);
+      } else if (externalModalTrigger.type === 'method') {
+        setEditingMethod(externalModalTrigger.data);
+        setMethodForm(externalModalTrigger.data);
+        setShowMethodModal(true);
+      }
+    }
+  }, [externalModalTrigger]);
+
+  // When closing any modal, call onModalClose if provided
+  const closeAllModals = () => {
+    setShowModal({ type: null, data: null });
+    setShowAccountModal(false);
+    setShowMethodModal(false);
+    if (onModalClose) onModalClose();
+  };
+
   // --- UI ---
   return (
-    <div className="p-4">
+    <div className="p-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Unified Management</h2>
@@ -838,7 +855,7 @@ const UnifiedNamespace: React.FC = () => {
                   </div>
                   {ns.tags && ns.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {ns.tags.map(tag => (
+                      {ns.tags.map((tag: string) => (
                         <span key={tag} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
                           {tag}
                         </span>
@@ -864,7 +881,7 @@ const UnifiedNamespace: React.FC = () => {
                             <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
-                              {account.tags && account.tags.length > 0 && account.tags.map(tag => (
+                              {account.tags && account.tags.length > 0 && account.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
@@ -891,7 +908,7 @@ const UnifiedNamespace: React.FC = () => {
                             <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
-                              {method.tags && method.tags.length > 0 && method.tags.map(tag => (
+                              {method.tags && method.tags.length > 0 && method.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod(method)}><Eye size={12} /></button>
@@ -1567,11 +1584,36 @@ const UnifiedNamespace: React.FC = () => {
       {/* Method Preview Modal */}
       {previewMethod && (
         <MethodPreviewModal
-          method={previewMethod}
           onClose={() => setPreviewMethod(null)}
-          onEdit={handleEditMethod}
-          onDelete={handleDeleteMethod}
-          onTest={handleTestMethod}
+          method={previewMethod}
+          onEdit={method => {
+            setEditingMethod(method as any); // Acceptable since editingMethod is any/null
+            setMethodForm({
+              "namespace-method-name": method["namespace-method-name"],
+              "namespace-method-type": method["namespace-method-type"],
+              "namespace-method-url-override": method["namespace-method-url-override"] || '',
+              tags: method.tags || [],
+              "namespace-method-queryParams": method["namespace-method-queryParams"] || [],
+              "namespace-method-header": method["namespace-method-header"] || [],
+              "save-data": !!method["save-data"],
+              "isInitialized": !!method["isInitialized"],
+              "sample-request": '',
+              "sample-response": '',
+              "request-schema": '',
+              "response-schema": '',
+            });
+            setShowMethodModal(true);
+            setPreviewMethod(null);
+          }}
+          onDelete={method => {
+            handleDeleteMethod(method);
+            setPreviewMethod(null);
+          }}
+          onTest={method => {
+            setTestingMethod(method);
+            setIsMethodTestModalOpen(true);
+            setPreviewMethod(null);
+          }}
         />
       )}
 
@@ -1584,113 +1626,40 @@ const UnifiedNamespace: React.FC = () => {
           methodName={testingMethod['namespace-method-name']}
           methodType={testingMethod['namespace-method-type']}
           namespaceMethodUrlOverride={testingMethod['namespace-method-url-override'] || ''}
-          saveData={testingMethod['save-data']}
+          saveData={!!testingMethod['save-data']}
           methodId={testingMethod['namespace-method-id']}
         />
       )}
 
       {/* Account Preview Modal */}
       {previewAccount && (
-        <div 
-          className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={() => setPreviewAccount(null)}
-        >
-          <div className="bg-white rounded-xl p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="text-blue-600" size={16} />
-                </div>
-                <h3 className="text-base sm:text-xl font-semibold truncate">{previewAccount["namespace-account-name"]}</h3>
-              </div>
-              <button
-                onClick={() => setPreviewAccount(null)}
-                className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-              <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
-                <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">ID</p>
-                <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-id"]}</p>
-              </div>
-              {previewAccount["namespace-account-url-override"] && (
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
-                  <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">URL Override</p>
-                  <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-url-override"]}</p>
-                </div>
-              )}
-            </div>
-            {previewAccount["namespace-account-header"] && previewAccount["namespace-account-header"].length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Headers</h4>
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-3 space-y-1.5 sm:space-y-2">
-                  {previewAccount["namespace-account-header"].map((header, index) => (
-                    <div key={index} className="grid grid-cols-2 gap-2">
-                      <div className="text-xs sm:text-sm font-medium text-gray-700 break-all">{header.key}</div>
-                      <div className="text-xs sm:text-sm text-gray-600 font-mono break-all">{header.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {previewAccount.variables && previewAccount.variables.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Variables</h4>
-                <div className="bg-gray-50 rounded-lg p-2 sm:p-3 space-y-1.5 sm:space-y-2">
-                  {previewAccount.variables.map((variable, index) => (
-                    <div key={index} className="grid grid-cols-2 gap-2">
-                      <div className="text-xs sm:text-sm font-medium text-gray-700 break-all">{variable.key}</div>
-                      <div className="text-xs sm:text-sm text-gray-600 font-mono break-all">{variable.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {previewAccount.tags && previewAccount.tags.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Tags</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {previewAccount.tags.map((tag, index) => (
-                    <span key={index} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="mt-6 flex justify-end items-center gap-2">
-              <button
-                onClick={() => handleOAuthRedirect(previewAccount, selectedNamespace, API_BASE_URL, fetchNamespaceDetails)}
-                className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
-                title="Fetch Token"
-              >
-                <Key size={16} />
-              </button>
-              <button
-                onClick={() => {
-                  handleEditAccount(previewAccount);
-                  setPreviewAccount(null);
-                }}
-                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-                title="Edit Account"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button
-                onClick={() => {
-                  handleDeleteAccount(previewAccount);
-                  setPreviewAccount(null);
-                }}
-                className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                title="Delete Account"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <AccountPreviewModal
+          isOpen={!!previewAccount}
+          onClose={() => setPreviewAccount(null)}
+          account={{
+            ...previewAccount,
+            ["namespace-account-variables"]: previewAccount.variables || [],
+          }}
+          onEdit={account => {
+            setEditingAccount(account as any); // Acceptable since editingAccount is any/null
+            setAccountForm({
+              "namespace-account-name": account["namespace-account-name"],
+              "namespace-account-url-override": account["namespace-account-url-override"] || '',
+              tags: account.tags || [],
+              "namespace-account-header": account["namespace-account-header"] || [],
+              variables: account["namespace-account-variables"] || [],
+            });
+            setShowAccountModal(true);
+            setPreviewAccount(null);
+          }}
+          onDelete={account => {
+            handleDeleteAccount({ ...account, variables: account["namespace-account-variables"] || [] });
+            setPreviewAccount(null);
+          }}
+          onLink={account => {
+            handleOAuthRedirect({ ...account, variables: account["namespace-account-variables"] || [] }, selectedNamespace, API_BASE_URL, fetchNamespaceDetails);
+          }}
+        />
       )}
     </div>
   );
