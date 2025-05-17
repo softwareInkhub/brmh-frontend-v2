@@ -40,6 +40,11 @@ const sidebarItems = [
     icon: <Play size={24} />, // Tests icon
   },
   {
+    name: 'LLM Dashboard',
+    path: '/llm-dashboard',
+    icon: <FileCode size={24} />, // You can use any icon you like
+  },
+  {
     name: 'Share Docs',
     path: '/docs',
     icon: <BookOpen size={24} />, // Docs icon
