@@ -8,7 +8,7 @@ import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
 import SchemaModal from './components/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
-import { User, X } from 'lucide-react';
+import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database } from 'lucide-react';
 import AccountModal from './components/AccountModal';
 import MethodModal from './components/MethodModal';
 import NamespaceModal from './components/NamespaceModal';
@@ -17,9 +17,15 @@ import MethodPreviewModal from './components/MethodPreviewModal';
 import MethodTestModal from '../components/MethodTestModal';
 import UnifiedSchemaModal from './components/UnifiedSchemaModal';
 import SchemaPreviewModal from './components/SchemaPreviewModal';
+import { useSidePanel } from "../components/SidePanelContext";
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
+
+const initialTabs = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'new', label: 'New Tab', italic: true, bold: true },
+];
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
   const properties: Record<string, any> = {};
@@ -61,7 +67,9 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
 }
 
 export default function NamespacePage() {
-  const [activeTab, setActiveTab] = useState('namespace');
+  const { isCollapsed } = useSidePanel();
+  const [activeTab, setActiveTab] = useState('overview');
+  const [tabs, setTabs] = useState(initialTabs);
 
   // Modal state for schema creation
   const [showModal, setShowModal] = useState(false);
@@ -104,27 +112,20 @@ export default function NamespacePage() {
     Object.entries(namespaceDetailsMap).map(([nsId, v]) => [nsId, v.methods])
   );
 
-  // Fetch all namespaces and schemas
+  // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
-    if (activeTab !== 'unifiedNamespace') return;
-    const fetchData = async () => {
-      try {
-        const [nsRes, schemaRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces`),
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/schema`)
-        ]);
-        const [nsData, schemaData] = await Promise.all([
-          nsRes.json(),
-          schemaRes.json()
-        ]);
-        setNamespaces(nsData);
-        setSchemas(Array.isArray(schemaData) ? schemaData : []);
-      } catch (err) {
-        // handle error
-      }
-    };
-    fetchData();
-  }, [activeTab]);
+    // Fetch namespaces
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces`)
+      .then(res => res.json())
+      .then(data => setNamespaces(Array.isArray(data) ? data : []))
+      .catch(() => setNamespaces([]));
+
+    // Fetch schemas
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/schema`)
+      .then(res => res.json())
+      .then(data => setSchemas(Array.isArray(data) ? data : []))
+      .catch(() => setSchemas([]));
+  }, []);
 
   // Fetch accounts and methods for a namespace
   const fetchNamespaceDetails = async (namespaceId: string) => {
@@ -380,22 +381,107 @@ export default function NamespacePage() {
     }
   };
 
+  const handleAddTab = () => {
+    const newKey = `tab-${tabs.length + 1}`;
+    setTabs([...tabs, { key: newKey, label: 'New Tab', italic: true, bold: true }]);
+    setActiveTab(newKey);
+  };
+
+  const handleCloseTab = (key: string) => {
+    const filteredTabs = tabs.filter(tab => tab.key !== key);
+    setTabs(filteredTabs);
+    if (activeTab === key) {
+      setActiveTab('overview');
+    }
+  };
+
+  // --- NewTabContent moved inside component to access handleOpenTab ---
+  function handleOpenTab(type: string) {
+    const key = type;
+    // If current tab is a 'New Tab' (key === 'new' or starts with 'tab-'), replace it or activate existing
+    if (activeTab === 'new' || activeTab.startsWith('tab-')) {
+      const existingTab = tabs.find(tab => tab.key === key);
+      if (existingTab) {
+        // Remove the placeholder tab and activate the existing one
+        setTabs(prevTabs => prevTabs.filter(tab => tab.key !== activeTab));
+        setActiveTab(key);
+        return;
+      }
+      // Otherwise, replace the placeholder tab
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.key === activeTab
+          ? { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}` }
+          : tab
+      ));
+      setActiveTab(key);
+      return;
+    }
+    // Otherwise, open a new tab if it doesn't exist
+    const existingTab = tabs.find(tab => tab.key === key);
+    if (existingTab) {
+      setActiveTab(key);
+      return;
+    }
+    setTabs([...tabs, { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}` }]);
+    setActiveTab(key);
+  }
+
+  function NewTabContent({ onOpenTab }: { onOpenTab: (type: string) => void }) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="flex gap-6 mb-8 flex-wrap justify-center">
+          <div className="flex flex-col items-center bg-white rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer" onClick={() => onOpenTab('namespace')}>
+            <Database size={40} className="text-blue-400 mb-4" />
+            <div className="font-semibold text-gray-800">New Namespace</div>
+          </div>
+          <div className="flex flex-col items-center bg-white rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer" onClick={() => onOpenTab('endpoint')}>
+            <GitBranch size={40} className="text-pink-400 mb-4" />
+            <div className="font-semibold text-gray-800">New Endpoint</div>
+          </div>
+          <div className="flex flex-col items-center bg-white rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer" onClick={() => onOpenTab('schema')}>
+            <Box size={40} className="text-purple-400 mb-4" />
+            <div className="font-semibold text-gray-800">New Schema</div>
+          </div>
+          <div className="flex flex-col items-center bg-white rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer" onClick={() => onOpenTab('markdown')}>
+            <FileText size={40} className="text-blue-400 mb-4" />
+            <div className="font-semibold text-gray-800">New Markdown</div>
+          </div>
+          <div className="flex flex-col items-center bg-white rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer" onClick={() => onOpenTab('request')}>
+            <Zap size={40} className="text-blue-300 mb-4" />
+            <div className="font-semibold text-gray-800">New Request</div>
+          </div>
+        </div>
+        <div className="mb-4">
+          <button className="text-gray-600 text-sm font-medium px-4 py-2 rounded hover:bg-gray-100 transition flex items-center gap-1">
+            More <span className="text-lg">&#9660;</span>
+          </button>
+        </div>
+        <div className="bg-purple-100 text-purple-700 px-6 py-3 rounded-full shadow text-sm font-medium flex items-center gap-2">
+          Support importing Swagger, Postman, cURL and more.
+          <button className="ml-2 text-purple-700 font-bold">×</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-[#f7f8fa] min-h-screen">
       <div className="flex h-screen ml-20">
-        {/* SidePanel (only for Unified Namespace tab) */}
-        {activeTab === 'unifiedNamespace' && (
-          <div
-            style={{
-              width: 256,
-              minWidth: 256,
-              maxWidth: 256,
-              background: '#fff',
-              borderRight: '1px solid #f0f0f0',
-              height: '100vh',
-              zIndex: 20,
-            }}
-          >
+        {/* SidePanel (always visible) */}
+        <div
+          style={{
+            width: isCollapsed ? 0 : 256,
+            minWidth: isCollapsed ? 0 : 256,
+            maxWidth: isCollapsed ? 0 : 256,
+            background: '#fff',
+            borderRight: isCollapsed ? 'none' : '1px solid #f0f0f0',
+            height: '100vh',
+            zIndex: 20,
+            overflow: isCollapsed ? 'hidden' : 'auto',
+            transition: 'width 0.2s, min-width 0.2s, max-width 0.2s',
+          }}
+        >
+          {!isCollapsed && (
             <SidePanel
               namespaces={namespaces}
               accounts={accounts}
@@ -428,43 +514,72 @@ export default function NamespacePage() {
               }}
               onDeleteNamespace={handleDeleteNamespace}
             />
-          </div>
-        )}
+          )}
+        </div>
         {/* Main Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto pl-8">
-          {/* Tab Navigation */}
-          <div className="flex items-center border-b border-gray-100 mb-6">
-            {/* <button
-              className={`px-6 text-sm font-medium transition-all relative ${activeTab === 'namespace' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setActiveTab('namespace')}
-            >
-              Namespace
-              {activeTab === 'namespace' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>}
-            </button>
-            <button
-              className={`px-6 py-2 text-sm font-medium transition-all relative ${activeTab === 'schemaService' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setActiveTab('schemaService')}
-            >
-              Schema Service
-              {activeTab === 'schemaService' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>}
-            </button>
-            <button
-              className={`px-6 py-2 text-sm font-medium transition-all relative ${activeTab === 'tables' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setActiveTab('tables')}
-            >
-              Tables
-              {activeTab === 'tables' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>}
-            </button> */}
-            <button
-              className={`px-6 py-2 text-sm font-medium transition-all relative ${activeTab === 'unifiedNamespace' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setActiveTab('unifiedNamespace')}
-            >
-              Overview  
-              {activeTab === 'unifiedNamespace' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 transition-all"></div>}
-            </button>
+        <div className="flex-1 min-h-0 overflow-y-auto transition-all duration-200">
+          {/* Tab Section (always flush left) */}
+          <div className="flex items-center border-b bg-white px-4 py-2">
+            <div className="flex items-center gap-1">
+              {tabs.map(tab => (
+                <div key={tab.key} className="flex items-center group">
+                  <button
+                    className={`px-4 py-2 text-sm rounded-t-lg transition
+                      ${activeTab === tab.key ? 'font-medium text-gray-700 border-b-2 border-blue-600 bg-white' : 'text-gray-700 hover:bg-gray-100'}
+                      ${tab.bold ? 'font-bold' : ''}
+                      ${tab.italic ? 'italic' : ''}
+                    `}
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                  </button>
+                  {tab.key !== 'overview' && (
+                    <button
+                      className="ml-1 text-gray-400 hover:text-red-500 text-xs px-1 focus:outline-none"
+                      onClick={() => handleCloseTab(tab.key)}
+                      title="Close tab"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full"
+                onClick={handleAddTab}
+              >
+                <Plus size={16} />
+              </button>
+              <button className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                <MoreHorizontal size={16} />
+              </button>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button className="px-3 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg">
+                Testing Env <span className="ml-1">&#9660;</span>
+              </button>
+              <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                <Menu size={18} />
+              </button>
+            </div>
           </div>
-          {/* Main Tab Content */}
-          <div className="w-full pt-4">
+          {/* Main Tab Content with conditional left padding */}
+          <div className={`${isCollapsed ? 'pl-0' : 'pl-8'} pr-8 w-full pt-4 transition-all duration-200`}>
+            {activeTab === 'overview' && (
+              <UnifiedNamespace
+                externalModalTrigger={sidePanelModal}
+                onModalClose={() => setSidePanelModal(null)}
+                fetchNamespaceDetails={fetchNamespaceDetails}
+                namespaceDetailsMap={namespaceDetailsMap}
+                setNamespaceDetailsMap={setNamespaceDetailsMap}
+                refreshData={() => {
+                  // re-fetch all data
+                  setNamespaceDetailsMap({});
+                  // trigger fetchData in useEffect
+                  setNamespaces([]);
+                }}
+              />
+            )}
             {activeTab === 'namespace' && <Namespace />}
             {activeTab === 'schemaService' && <SchemaService />}
             {activeTab === 'tables' && <Tables />}
@@ -482,6 +597,18 @@ export default function NamespacePage() {
                   setNamespaces([]);
                 }}
               />
+            )}
+            {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
+              <NewTabContent onOpenTab={handleOpenTab} />
+            )}
+            {activeTab !== 'overview' &&
+              activeTab !== 'namespace' &&
+              activeTab !== 'schemaService' &&
+              activeTab !== 'tables' &&
+              activeTab !== 'unifiedNamespace' &&
+              activeTab !== 'new' &&
+              !activeTab.startsWith('tab-') && (
+                <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
             )}
           </div>
           <LLMTerminal openSchemaModal={openSchemaModal} />

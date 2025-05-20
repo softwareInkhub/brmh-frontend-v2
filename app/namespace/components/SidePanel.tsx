@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw } from 'lucide-react';
 import NamespacePreviewModal from './NamespacePreviewModal';
 
 interface SidePanelProps {
@@ -27,7 +27,22 @@ const methodColor = (type: string) => {
   }
 };
 
+const methodIcon = (type: string) => {
+  switch (type) {
+    case 'GET': return <Download size={16} className="text-green-600" />;
+    case 'POST': return <Upload size={16} className="text-orange-500" />;
+    case 'PUT': return <Edit2 size={16} className="text-blue-600" />;
+    case 'DELETE': return <Trash2 size={16} className="text-red-600" />;
+    case 'PATCH': return <RefreshCw size={16} className="text-yellow-600" />;
+    default: return <FileCode size={16} className="text-gray-600" />;
+  }
+};
+
 const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
+  // Debug logs
+  console.log('SidePanel namespaces:', namespaces);
+  console.log('SidePanel schemas:', schemas);
+
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({
     endpoints: true,
@@ -38,6 +53,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
   const [expandedNs, setExpandedNs] = useState<Record<string, boolean>>({});
   const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean }>>({});
   const [viewingNamespace, setViewingNamespace] = useState<any>(null);
+  const [expandedNamespaces, setExpandedNamespaces] = useState(true);
 
   const toggle = (section: keyof typeof expanded) => setExpanded(e => ({ ...e, [section]: !e[section] }));
   const toggleNs = (nsId: string) => {
@@ -59,9 +75,14 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
     }));
   };
 
-  const filteredNamespaces = namespaces.filter(ns =>
-    ns['namespace-name'].toLowerCase().includes(search.toLowerCase())
-  );
+  // Robust filter logic
+  const filteredNamespaces = Array.isArray(namespaces)
+    ? namespaces.filter(ns => (ns['namespace-name'] || '').toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  const filteredSchemas = Array.isArray(schemas)
+    ? schemas.filter(s => (s.schemaName || '').toLowerCase().includes(search.toLowerCase()))
+    : [];
 
   return (
     <aside className="w-64 bg-white border-r border-gray-100 h-full flex flex-col shadow-sm p-0 overflow-y-auto select-none">
@@ -93,40 +114,33 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
         </div>
         <button className="p-2 rounded hover:bg-gray-100" title="Filter (coming soon)"><Filter size={16} className="text-gray-400" /></button>
       </div>
-      {/* Overview */}
+      {/* Overview
       <button className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-50 w-full text-sm">
         <Globe size={16} className="text-gray-400" /> Overview
-      </button>
+      </button> */}
       {/* Endpoints Section */}
       <div>
-        <div className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold">
+        <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500 mt-4">
           <button
-            className="flex items-center gap-2 flex-1 text-left"
-            onClick={() => toggle('endpoints')}
-            tabIndex={0}
+            className="flex items-center gap-1"
+            onClick={() => setExpandedNamespaces(exp => !exp)}
             type="button"
           >
-            {expanded.endpoints ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            <Folder size={16} className="text-blue-500" /> 
+            {expandedNamespaces ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <Box size={14} />
+            <span>Namespaces</span>
+          </button>
+          <button
+            onClick={() => onAdd('namespace')}
+            className="ml-1 p-1 rounded hover:bg-blue-50"
+            title="Add Namespace"
+            type="button"
+          >
+            <Plus size={16} className="text-blue-500" />
           </button>
         </div>
-        {expanded.endpoints && (
-          <div className="pl-6">
-            {/* Root node */}
-            <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
-              <div className='flex items-center gap-1'>         
-                     <Box size={14} /> Namespaces
-              </div>
-              <button
-                onClick={() => onAdd('namespace')}
-                className="ml-1 p-1 rounded hover:bg-blue-50"
-                title="Add Namespace"
-                type="button"
-              >
-                <Plus size={16} className="text-blue-500" />
-              </button>
-            </div>
-            {/* Namespaces tree */}
+        {expandedNamespaces && (
+          <div className="pl-2">
             {filteredNamespaces.length === 0 && (
               <div className="text-xs text-gray-400 pl-2 py-2">No namespaces found</div>
             )}
@@ -134,38 +148,32 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
               <div key={ns['namespace-id']} className="mb-1">
                 <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                   <button
-                    className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold"
-                    onClick={e => {
-                      if (
-                        (e.target as HTMLElement).closest('.ns-chevron-folder')
-                      ) {
-                        toggleNs(ns['namespace-id']);
-                      } else {
-                        setViewingNamespace(ns);
-                      }
-                    }}
+                    className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold"
+                    onClick={() => toggleNs(ns['namespace-id'])}
                   >
-                    <span className="ns-chevron-folder flex items-center gap-1">
-                      {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      <Folder size={16} className="text-blue-500" />
-                    </span>
+                    {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <Folder size={16} className="text-blue-500" />
                     <span className="font-medium text-sm text-gray-800 group-hover:text-blue-600 truncate">
                       {ns['namespace-name']}
                     </span>
                   </button>
                 </div>
-                {/* Expanded Namespace: show Accounts and Methods */}
                 {expandedNs[ns['namespace-id']] && (
                   <div className="ml-6 mt-1 space-y-1">
                     {/* Accounts */}
                     <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
-                        <div className="relative flex items-center group">
+                        <button
+                          className="flex items-center gap-1 group"
+                          onClick={() => toggleSection(ns['namespace-id'], 'accounts')}
+                          type="button"
+                        >
+                          {expandedSection[ns['namespace-id']]?.accounts ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Accounts</span>
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
                             <Plus size={14} className="text-blue-400" />
                           </span>
-                        </div>
+                        </button>
                         <button
                           onClick={() => onAdd('account', ns)}
                           className="p-1 rounded hover:bg-blue-50"
@@ -175,31 +183,38 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                           <Plus size={14} className="text-blue-500" />
                         </button>
                       </div>
-                      <div className="space-y-1">
-                        {(accounts[ns['namespace-id']] || []).map(acc => (
-                          <button
-                            key={acc['namespace-account-id']}
-                            onClick={() => onItemClick('account', acc)}
-                            className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
-                          >
-                            <User size={16} className="text-blue-500" />
-                            <span>{acc['namespace-account-name']}</span>
-                            <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
-                              <Plus size={14} className="text-blue-400" />
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      {expandedSection[ns['namespace-id']]?.accounts && (
+                        <div className="space-y-1">
+                          {(accounts[ns['namespace-id']] || []).map(acc => (
+                            <button
+                              key={acc['namespace-account-id']}
+                              onClick={() => onItemClick('account', acc)}
+                              className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
+                            >
+                              <User size={16} className="text-blue-500" />
+                              <span>{acc['namespace-account-name']}</span>
+                              <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
+                                <Plus size={14} className="text-blue-400" />
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {/* Methods */}
                     <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
-                        <div className="relative flex items-center group">
+                        <button
+                          className="flex items-center gap-1 group"
+                          onClick={() => toggleSection(ns['namespace-id'], 'methods')}
+                          type="button"
+                        >
+                          {expandedSection[ns['namespace-id']]?.methods ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Methods</span>
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
                             <Plus size={14} className="text-blue-400" />
                           </span>
-                        </div>
+                        </button>
                         <button
                           onClick={() => onAdd('method', ns)}
                           className="p-1 rounded hover:bg-blue-50"
@@ -209,22 +224,24 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                           <Plus size={14} className="text-blue-500" />
                         </button>
                       </div>
-                      <div className="space-y-1">
-                        {(methods[ns['namespace-id']] || []).map(m => (
-                          <button
-                            key={m['namespace-method-id']}
-                            onClick={() => onItemClick('method', m)}
-                            className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
-                          >
-                            <Terminal size={16} className="text-blue-500" />
-                            <span className={`font-bold text-xs ${methodColor(m['namespace-method-type'])}`}>{m['namespace-method-type']}</span>
-                            <span className="truncate group-hover:text-blue-600 text-xs">{m['namespace-method-name']}</span>
-                            <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
-                              <Plus size={14} className="text-blue-400" />
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      {expandedSection[ns['namespace-id']]?.methods && (
+                        <div className="space-y-1">
+                          {(methods[ns['namespace-id']] || []).map(m => (
+                            <button
+                              key={m['namespace-method-id']}
+                              onClick={() => onItemClick('method', m)}
+                              className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
+                            >
+                              {methodIcon(m['namespace-method-type'])}
+                              <span className={`font-bold text-xs ${methodColor(m['namespace-method-type'])}`}>{m['namespace-method-type']}</span>
+                              <span className="truncate group-hover:text-blue-600 text-xs">{m['namespace-method-name']}</span>
+                              <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => { e.stopPropagation(); console.log('clicked'); }}>
+                                <Plus size={14} className="text-blue-400" />
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -258,9 +275,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
           <div className="pl-6 pr-2 pt-1">
             
             <ul className="space-y-1">
-              {schemas.length === 0 && <li className="text-xs text-gray-400">No schemas found</li>}
-              {schemas
-                .filter(s => s.schemaName?.toLowerCase().includes(search.toLowerCase()))
+              {filteredSchemas.length === 0 && <li className="text-xs text-gray-400">No schemas found</li>}
+              {filteredSchemas
                 .map(s => (
                   <li
                     key={s.id}

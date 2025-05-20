@@ -73,7 +73,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-4 ml-20 px-8 pt-8">
+    <div className="space-y-4 ml-20 px-8 pt-8 pb-24">
       {/* Header Section */}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>

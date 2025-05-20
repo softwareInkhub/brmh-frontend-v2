@@ -1066,5 +1066,5 @@ const SchemaService = () => {
   );
 };
 
-export { NestedFieldsEditor, schemaToFields };
+export { NestedFieldsEditor, schemaToFields, DynamicForm };
 export default SchemaService;

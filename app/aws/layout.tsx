@@ -1,19 +1,22 @@
 'use client'
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Landmark, Database, Cloud, Shield, Radio, Globe } from 'lucide-react';
 
 const SIDEPANEL_WIDTH = 256; // px, w-64
 
 const awsServices = [
-  { id: 'lambda', name: 'Lambda', icon: '🟧' },
-  { id: 's3', name: 'S3', icon: '🟨' },
-  { id: 'dynamodb', name: 'DynamoDB', icon: '🟩' },
-  { id: 'iam', name: 'IAM', icon: '🟦' },
-  { id: 'sns', name: 'SNS', icon: '🟪' },
-  { id: 'apigateway', name: 'API Gateway', icon: '🟫' },
+  { id: 'lambda', name: 'Lambda', icon: <Landmark className="text-orange-500" />, route: '/aws/lambda' },
+  { id: 's3', name: 'S3', icon: <Cloud className="text-yellow-500" />, route: '/aws/s3' },
+  { id: 'dynamodb', name: 'DynamoDB', icon: <Database className="text-green-500" />, route: '/aws/dynamodb' },
+  { id: 'iam', name: 'IAM', icon: <Shield className="text-blue-500" />, route: '/aws/iam' },
+  { id: 'sns', name: 'SNS', icon: <Radio className="text-purple-500" />, route: '/aws/sns' },
+  { id: 'apigateway', name: 'API Gateway', icon: <Globe className="text-rose-900" />, route: '/aws/apigateway' },
 ];
 
 function AwsSidePanel({ onServiceClick }: { onServiceClick?: (service: any) => void }) {
   const [active, setActive] = useState<string | null>(null);
+  const router = useRouter();
   return (
     <aside className="h-full w-full bg-white flex flex-col py-4">
       <div className="text-xs font-bold text-gray-500 px-4 mb-4">AWS Services</div>
@@ -25,6 +28,7 @@ function AwsSidePanel({ onServiceClick }: { onServiceClick?: (service: any) => v
                 ${active === service.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-100'}`}
               onClick={() => {
                 setActive(service.id);
+                router.push(service.route);
                 onServiceClick && onServiceClick(service);
               }}
             >

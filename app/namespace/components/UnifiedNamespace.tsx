@@ -1,10 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Eye, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key } from "react-feather";
+import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Eye, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key, MoreVertical } from "react-feather";
 import UnifiedSchemaModal from './UnifiedSchemaModal';
 import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from './SchemaPreviewModal';
 import AccountPreviewModal from './AccountPreviewModal';
+import CreateDataModal from './CreateDataModal';
+import { useSidePanel } from "@/app/components/SidePanelContext";
 
 // --- Types ---
 interface KeyValuePair {
@@ -284,6 +286,7 @@ export interface UnifiedNamespaceProps {
 }
 
 const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigger, onModalClose, fetchNamespaceDetails, namespaceDetailsMap, setNamespaceDetailsMap, refreshData }) => {
+  const { isCollapsed } = useSidePanel();
   // --- State ---
   const [namespaces, setNamespaces] = useState<UnifiedNamespace[]>([]);
   const [schemas, setSchemas] = useState<UnifiedSchema[]>([]);
@@ -300,6 +303,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [selectedNamespace, setSelectedNamespace] = useState<UnifiedNamespace | null>(null);
   const [showUnifiedSchemaModal, setShowUnifiedSchemaModal] = useState(false);
   const [expandedNamespaceId, setExpandedNamespaceId] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
 
   // --- Form State ---
   const [namespaceForm, setNamespaceForm] = useState({
@@ -384,12 +388,14 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   // Schema preview and actions state
   const [previewSchema, setPreviewSchema] = useState<any | null>(null);
   const [showTableNameModal, setShowTableNameModal] = useState(false);
+  const [pendingTableSchema, setPendingTableSchema] = useState<any>(null);
   const [tableNameInput, setTableNameInput] = useState('');
   const [tableNameError, setTableNameError] = useState('');
   const [showDataModal, setShowDataModal] = useState(false);
   const [dataFormSchema, setDataFormSchema] = useState<any>(null);
   const [dataForm, setDataForm] = useState<any>({});
   const [dataTableName, setDataTableName] = useState('');
+  const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
 
   // --- Fetch Data ---
   const fetchData = useCallback(async () => {
@@ -765,7 +771,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
 
   // --- UI ---
   return (
-    <div className="p-0">
+    <div className={`p-0 transition-all duration-200 ${isCollapsed ? 'ml-10' : 'ml-10'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Unified Management</h2>
@@ -823,11 +829,11 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
           {loading.namespaces && <div className="text-gray-500">Loading namespaces...</div>}
           {error.namespaces && <div className="text-red-500">{error.namespaces}</div>}
 
-          <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2' : 'space-y-2'}>
+          <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 justify-start' : 'space-y-2'}>
             {filteredNamespaces.map(ns => (
               <React.Fragment key={ns["namespace-id"]}>
                 <div
-                  className="bg-white rounded-lg shadow border border-gray-100 p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between"
+                  className="bg-white rounded-lg shadow border border-gray-100 p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full"
                   onClick={() => handleNamespaceClick(ns)}
                   style={{ minWidth: 0 }}
                 >
@@ -941,44 +947,82 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
           {loading.schemas && <div className="text-gray-500">Loading schemas...</div>}
           {error.schemas && <div className="text-red-500">{error.schemas}</div>}
 
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2'}>
-            {filteredSchemas.map(s => (
-              <div key={s.id} className="bg-white rounded-lg shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition-all" onClick={() => setPreviewSchema(s)}>
-                <div className="flex items-start justify-between">
+          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 justify-start' : 'space-y-2'}>
+            {filteredSchemas.map((schema) => {
+              const metaId = schema['brmh-schema-table-data-id'];
+              const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
+              return (
+                <div key={schema.id} className="bg-white rounded-lg shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition-all relative group flex items-start justify-between max-w-xs w-full" onClick={() => setPreviewSchema(schema)}>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-gray-900 truncate">{s.schemaName}</h4>
+                    <h4 className="text-sm font-medium text-gray-900 truncate">{schema.schemaName}</h4>
                     <p className="text-xs text-gray-500">
-                      {s.originalType}{s.isArray ? ' (Array)' : ''}
+                      {schema.originalType}{schema.isArray ? ' (Array)' : ''}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 ml-2">
-                    <button
-                      onClick={e => { e.stopPropagation(); setPreviewSchema(s); }}
-                      className="p-1 text-gray-400 hover:text-blue-600"
-                    >
-                      <Eye size={14} />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); setShowModal({ type: 'schema', data: s }); }}
-                      className="p-1 text-gray-400 hover:text-blue-600"
-                    >
-                      <Edit size={14} />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDelete('schema', s.id); }}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  <div className="flex items-center gap-2">
+                    {!isTableActive && (
+                      <button
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-blue-700 transition"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setPendingTableSchema(schema);
+                          setTableNameInput(schema.schemaName || '');
+                          setTableNameError('');
+                          setShowTableNameModal(true);
+                        }}
+                      >
+                        Create Table
+                      </button>
+                    )}
+                    <div className="relative">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setDropdownOpen(dropdownOpen === schema.id ? null : schema.id);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-600"
+                      >
+                        <MoreVertical size={18} />
+                      </button>
+                      {dropdownOpen === schema.id && (
+                        <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow-lg z-10">
+                          <button
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                            onClick={e => { e.stopPropagation(); setPreviewSchema(schema); setDropdownOpen(null); }}
+                          >
+                            View
+                          </button>
+                          <button
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                            onClick={e => { e.stopPropagation(); setShowModal({ type: 'schema', data: schema }); setDropdownOpen(null); }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                            onClick={e => { e.stopPropagation(); handleDelete('schema', schema.id); setDropdownOpen(null); }}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setDataFormSchema(schema.schema);
+                              setDataTableName(schema.tableName || schema.schemaName);
+                              setShowDataModal(true);
+                              setDropdownOpen(null);
+                            }}
+                          >
+                            Create Data
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-                  <span>Created: {new Date(s.createdAt || '').toLocaleDateString()}</span>
-                  <span>•</span>
-                  <span>Updated: {new Date(s.updatedAt || '').toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -988,7 +1032,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         open={!!previewSchema}
         onClose={() => setPreviewSchema(null)}
         schema={previewSchema}
-        onEdit={schema => { setShowModal({ type: 'schema', data: schema }); setPreviewSchema(null); }}
+        onEdit={schema => {
+          setShowModal({ type: 'schema', data: schema });
+          setPreviewSchema(null);
+        }}
         onDelete={schema => { handleDelete('schema', schema.id); setPreviewSchema(null); }}
       />
       {/* Extra actions: Create Table & Create Data */}
@@ -1045,7 +1092,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ schemaId: previewSchema.id, tableName: tableNameInput.trim() })
+                      body: JSON.stringify({ schemaId: pendingTableSchema.id, tableName: tableNameInput.trim() })
                     });
                     const data = await res.json();
                     if (res.ok) {
@@ -1210,9 +1257,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
       )}
 
       <UnifiedSchemaModal
-        showModal={showUnifiedSchemaModal}
-        setShowModal={setShowUnifiedSchemaModal}
+        showModal={showModal.type === 'schema'}
+        setShowModal={show => setShowModal(show ? { type: 'schema', data: showModal.data } : { type: null, data: null })}
         onSuccess={fetchData}
+        editingSchema={showModal.data || null}
       />
 
       {/* Account Modal */}
@@ -1661,6 +1709,14 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
           }}
         />
       )}
+
+      <CreateDataModal
+        open={showDataModal && !!dataFormSchema}
+        onClose={() => setShowDataModal(false)}
+        schema={dataFormSchema}
+        tableName={dataTableName}
+        onSuccess={() => { setShowDataModal(false); }}
+      />
     </div>
   );
 };

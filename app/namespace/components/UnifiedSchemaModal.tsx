@@ -5,6 +5,7 @@ interface UnifiedSchemaModalProps {
   showModal: boolean;
   setShowModal: (show: boolean) => void;
   onSuccess: () => void;
+  editingSchema?: any;
 }
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
@@ -48,7 +49,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess }) => {
+const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess, editingSchema }) => {
   const [schemaName, setSchemaName] = useState('');
   const [fields, setFields] = useState<any[]>([]);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -59,6 +60,19 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+
+  // Add editing detection
+  const isEditing = !!editingSchema && !!editingSchema.id;
+
+  // Prefill state when editing
+  useEffect(() => {
+    if (showModal && editingSchema) {
+      setSchemaName(editingSchema.schemaName || '');
+      setFields(schemaToFields(editingSchema.schema || {}));
+      setJsonSchema(JSON.stringify(editingSchema.schema || {}, null, 2));
+    }
+    // eslint-disable-next-line
+  }, [showModal, editingSchema]);
 
   // Bidirectional sync: update JSON from fields
   useEffect(() => {
@@ -169,7 +183,7 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
         >
           ✕
         </button>
-        <h2 className="text-lg font-semibold mb-2 tracking-tight text-gray-900">Create Schema</h2>
+        <h2 className="text-lg font-semibold mb-2 tracking-tight text-gray-900">{isEditing ? 'Edit Schema' : 'Create Schema'}</h2>
         <input
           className="border border-gray-300 p-2 rounded-lg mb-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
           placeholder="Schema Name (required)"
@@ -249,7 +263,7 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
             disabled={isSaving}
             onClick={handleSave}
           >
-            {isSaving ? 'Saving...' : 'Create'}
+            {isEditing ? 'Update' : isSaving ? 'Saving...' : 'Create'}
           </button>
         </div>
         {validationResult && (
