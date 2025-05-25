@@ -6,18 +6,19 @@ import Namespace from './components/Namespace';
 import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
-import SchemaModal from './components/SchemaModal';
+import SchemaModal from './Modals/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
 import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database } from 'lucide-react';
-import AccountModal from './components/AccountModal';
+import AccountModal from './Modals/AccountModal';
 import MethodModal from './components/MethodModal';
-import NamespaceModal from './components/NamespaceModal';
-import AccountPreviewModal from './components/AccountPreviewModal';
-import MethodPreviewModal from './components/MethodPreviewModal';
+import NamespaceModal from './Modals/NamespaceModal';
+import AccountPreviewModal from './Modals/AccountPreviewModal';
+import MethodPreviewModal from './Modals/MethodPreviewModal';
 import MethodTestModal from '../components/MethodTestModal';
-import UnifiedSchemaModal from './components/UnifiedSchemaModal';
-import SchemaPreviewModal from './components/SchemaPreviewModal';
+import UnifiedSchemaModal from './Modals/UnifiedSchemaModal';
+import SchemaPreviewModal from './Modals/SchemaPreviewModal';
 import { useSidePanel } from "../components/SidePanelContext";
+import SchemaCreatePage from './pages/SchemaCreatePage';
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -397,6 +398,28 @@ export default function NamespacePage() {
 
   // --- NewTabContent moved inside component to access handleOpenTab ---
   function handleOpenTab(type: string) {
+    if (type === 'schema') {
+      // Open a tab for schema creation
+      const key = 'schema';
+      const existingTab = tabs.find(tab => tab.key === key);
+      if (existingTab) {
+        setActiveTab(key);
+        return;
+      }
+      // If on a placeholder tab, replace it
+      if (activeTab === 'new' || activeTab.startsWith('tab-')) {
+        setTabs(prevTabs => prevTabs.map(tab =>
+          tab.key === activeTab
+            ? { key, label: 'New Schema' }
+            : tab
+        ));
+        setActiveTab(key);
+        return;
+      }
+      setTabs([...tabs, { key, label: 'New Schema' }]);
+      setActiveTab(key);
+      return;
+    }
     const key = type;
     // If current tab is a 'New Tab' (key === 'new' or starts with 'tab-'), replace it or activate existing
     if (activeTab === 'new' || activeTab.startsWith('tab-')) {
@@ -598,6 +621,13 @@ export default function NamespacePage() {
                 }}
               />
             )}
+            {activeTab === 'schema' && <SchemaCreatePage onSchemaNameChange={name => {
+              setTabs(tabs => tabs.map(tab =>
+                tab.key === 'schema'
+                  ? { ...tab, label: name.trim() ? name : 'New Schema' }
+                  : tab
+              ));
+            }} />}
             {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
               <NewTabContent onOpenTab={handleOpenTab} />
             )}

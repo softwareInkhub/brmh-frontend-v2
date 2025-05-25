@@ -9,6 +9,8 @@ interface Namespace {
   "namespace-header"?: { key: string; value: string }[];
   "namespace-variables"?: { key: string; value: string }[];
   tags: string[];
+  "schemaId"?: string;
+  "schemaIds"?: string[];
 }
 
 interface NamespaceModalProps {
@@ -171,6 +173,17 @@ const NamespaceModal: React.FC<NamespaceModalProps> = ({ isOpen, onClose, onSave
               </div>
             )}
           </div>
+
+          {isEdit && namespace && Array.isArray(namespace["schemaIds"]) && namespace["schemaIds"].length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Schema IDs</label>
+              <ul className="list-disc pl-5 text-xs text-gray-700 bg-gray-100 rounded p-2">
+                {namespace["schemaIds"].map((id: string) => (
+                  <li key={id}>{id}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {error && <div className="mt-4 text-sm text-red-600">{error}</div>}

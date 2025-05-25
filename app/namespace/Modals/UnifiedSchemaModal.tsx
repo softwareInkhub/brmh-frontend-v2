@@ -1,28 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { schemaToFields } from './SchemaService';
+import { NestedFieldsEditor, schemaToFields } from '../components/SchemaService';
 
-interface SchemaModalProps {
+interface UnifiedSchemaModalProps {
   showModal: boolean;
   setShowModal: (show: boolean) => void;
-  resetForm: () => void;
-  editingSchemaId: string | null;
-  schemaName: string;
-  setSchemaName: (name: string) => void;
-  fields: any[];
-  setFields: (fields: any[]) => void;
-  collapsedNodes: Set<string>;
-  setCollapsedNodes: (nodes: Set<string>) => void;
-  rawFields: string;
-  setRawFields: (fields: string) => void;
-  handleConvertRawFields: () => void;
-  rawFieldsError: string | null;
-  jsonSchema: string;
-  setJsonSchema: (json: string) => void;
-  handleJsonChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  jsonError: string | null;
-  NestedFieldsEditor: React.ComponentType<any>;
-  onSave: (schemaName: string, jsonSchema: string) => void;
-  isSaving: boolean;
+  onSuccess: () => void;
+  editingSchema?: any;
 }
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
@@ -64,75 +47,128 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
-const SchemaModal: React.FC<SchemaModalProps> = (props) => {
-  const {
-    showModal,
-    setShowModal,
-    resetForm,
-    editingSchemaId,
-    schemaName,
-    setSchemaName,
-    fields,
-    setFields,
-    collapsedNodes,
-    setCollapsedNodes,
-    rawFields,
-    setRawFields,
-    handleConvertRawFields,
-    rawFieldsError,
-    jsonSchema,
-    setJsonSchema,
-    handleJsonChange,
-    jsonError,
-    NestedFieldsEditor,
-    onSave,
-    isSaving,
-  } = props;
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-  // Local state for bidirectional sync
-  const [localFields, setLocalFields] = useState<any[]>(fields);
-  const [localJsonSchema, setLocalJsonSchema] = useState(jsonSchema);
+const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess, editingSchema }) => {
+  const [schemaName, setSchemaName] = useState('');
+  const [fields, setFields] = useState<any[]>([]);
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  const [rawFields, setRawFields] = useState('');
+  const [rawFieldsError, setRawFieldsError] = useState<string | null>(null);
+  const [jsonSchema, setJsonSchema] = useState('{\n  "type": "object",\n  "properties": {},\n  "required": []\n}');
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  // Initialize local state from props on open
+  // Add editing detection
+  const isEditing = !!editingSchema && !!editingSchema.id;
+
+  // Prefill state when editing
   useEffect(() => {
-    if (showModal) {
-      // If the schema is an object with a single property that is an array, extract fields from the array's items
-      let initialFields = fields;
-      try {
-        const parsedSchema = JSON.parse(jsonSchema);
-        const propKeys = parsedSchema.properties ? Object.keys(parsedSchema.properties) : [];
-        if (propKeys.length === 1) {
-          const mainProp = parsedSchema.properties[propKeys[0]];
-          if (mainProp.type === 'array' && mainProp.items) {
-            initialFields = schemaToFields(mainProp.items);
-          } else if (mainProp.type === 'object') {
-            initialFields = schemaToFields(mainProp);
-          }
-        }
-      } catch {}
-      setLocalFields(initialFields);
-      setLocalJsonSchema(jsonSchema);
+    if (showModal && editingSchema) {
+      setSchemaName(editingSchema.schemaName || '');
+      setFields(schemaToFields(editingSchema.schema || {}));
+      setJsonSchema(JSON.stringify(editingSchema.schema || {}, null, 2));
     }
     // eslint-disable-next-line
-  }, [showModal, schemaName]);
+  }, [showModal, editingSchema]);
 
-  // When localFields change, update localJsonSchema
+  // Bidirectional sync: update JSON from fields
   useEffect(() => {
-    setLocalJsonSchema(JSON.stringify(fieldsToSchema(localFields), null, 2));
+    setJsonSchema(JSON.stringify(fieldsToSchema(fields), null, 2));
     // eslint-disable-next-line
-  }, [localFields]);
+  }, [fields]);
 
-  // When localJsonSchema changes, update localFields (only on direct edit)
-  const handleLocalJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalJsonSchema(e.target.value);
+  // When JSON changes, update fields (if valid)
+  const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setJsonSchema(e.target.value);
     try {
       const parsed = JSON.parse(e.target.value);
-      setLocalFields(schemaToFields(parsed));
+      setJsonError(null);
+      setFields(schemaToFields(parsed));
     } catch {
-      // Optionally handle error
+      setJsonError('Invalid JSON');
+    }
+  };
+
+  // When raw fields are converted, update both fields and JSON
+  const handleConvertRawFields = () => {
+    // Dummy: just clear error for now and set fields to []
+    setRawFieldsError(null);
+    setFields([]); // You can implement a real parser if needed
+  };
+
+  const handleValidate = async () => {
+    setValidationResult(null);
+    try {
+      const parsed = JSON.parse(jsonSchema);
+      setJsonError(null);
+      const response = await fetch(`${API_BASE_URL}/unified/schema/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema: parsed })
+      });
+      if (!response.ok) throw new Error('Validation failed');
+      const result = await response.json();
+      setValidationResult(result);
+    } catch (error) {
+      setJsonError('Invalid JSON or validation failed');
+      setValidationResult({ valid: false, message: 'Validation failed. Please check your schema.' });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!schemaName.trim()) {
+      setSaveMessage('Schema name is required.');
+      return;
+    }
+    let parsedSchema;
+    try {
+      parsedSchema = JSON.parse(jsonSchema);
+      setJsonError(null);
+      if (!parsedSchema || typeof parsedSchema !== 'object' || !parsedSchema.type) {
+        parsedSchema = { type: 'object', properties: {}, required: [] };
+      }
+    } catch {
+      setJsonError('Invalid JSON');
+      return;
+    }
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      console.log('Creating schema:', { schemaName: schemaName.trim(), schema: parsedSchema });
+      const payload = {
+        methodId: null,
+        schemaName: schemaName.trim(),
+        methodName: null,
+        namespaceId: null,
+        schemaType: null,
+        schema: parsedSchema
+      };
+      console.log('Schema creation payload:', payload);
+      const response = await fetch(`${API_BASE_URL}/unified/schema`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Schema creation error:', errorText);
+        throw new Error(errorText || 'Failed to save schema');
+      }
+      setSaveMessage('Schema created successfully!');
+      setShowModal(false);
+      setSchemaName('');
+      setJsonSchema('{\n  "type": "object",\n  "properties": {},\n  "required": []\n}');
+      setFields([]);
+      setRawFields('');
+      setCollapsedNodes(new Set());
+      onSuccess();
+    } catch (error: any) {
+      setSaveMessage(error.message || 'Failed to save schema.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -140,19 +176,14 @@ const SchemaModal: React.FC<SchemaModalProps> = (props) => {
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50">
       <div className="absolute inset-0 bg-opacity-30 backdrop-blur-sm"></div>
-      <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-7xl relative z-10 max-h-[98vh] flex flex-col overflow-hidden border border-gray-200">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-5xl relative z-10 max-h-[98vh] flex flex-col overflow-hidden border border-gray-200">
         <button
           className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-          onClick={() => {
-            setShowModal(false);
-            resetForm();
-          }}
+          onClick={() => setShowModal(false)}
         >
           ✕
         </button>
-        <h2 className="text-lg font-semibold mb-2 tracking-tight text-gray-900">
-          {editingSchemaId ? 'Edit Schema' : 'Create Schema'}
-        </h2>
+        <h2 className="text-lg font-semibold mb-2 tracking-tight text-gray-900">{isEditing ? 'Edit Schema' : 'Create Schema'}</h2>
         <input
           className="border border-gray-300 p-2 rounded-lg mb-3 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
           placeholder="Schema Name (required)"
@@ -161,17 +192,16 @@ const SchemaModal: React.FC<SchemaModalProps> = (props) => {
           required
         />
         <div className="flex flex-col md:flex-row gap-0 md:gap-6 flex-1 min-h-0 w-full overflow-hidden">
-          {/* Recursive Form */}
+          {/* Form Editor */}
           <div className="flex-1 min-w-0 max-w-full overflow-x-auto" style={{ maxHeight: '60vh', overflowY: 'auto', overflowX: 'auto', minWidth: 0 }}>
             <div className="font-semibold mb-2 text-base text-gray-800">Form Editor</div>
             <div className="border-b border-gray-200 mb-2" />
-            <NestedFieldsEditor fields={localFields} onChange={setLocalFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
+            <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
           </div>
           {/* Divider for desktop */}
           <div className="hidden md:block w-px bg-gray-200 mx-4" />
-          {/* JSON Tree (simple textarea) */}
+          {/* JSON Tree (raw fields + JSON schema) */}
           <div className="flex-1 min-w-0 max-w-full flex flex-col mt-4 md:mt-0">
-            {/* New: Raw fields input */}
             <div className="mb-2">
               <div className="font-semibold text-xs text-gray-700 mb-1">Paste TypeScript/Raw Fields</div>
               <textarea
@@ -199,7 +229,7 @@ const SchemaModal: React.FC<SchemaModalProps> = (props) => {
                 className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs border border-gray-300 font-semibold transition"
                 onClick={() => {
                   try {
-                    setLocalJsonSchema(JSON.stringify(JSON.parse(localJsonSchema), null, 2));
+                    setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
                   } catch {}
                 }}
                 title="Format JSON"
@@ -210,57 +240,30 @@ const SchemaModal: React.FC<SchemaModalProps> = (props) => {
             <div className="text-xs text-gray-500 mb-1">
               <span>OpenAPI 3.0+ spec: Use type: <code>["string", "null"]</code> for nullable fields, and <code>required: ["field1", ...]</code> for required fields.</span>
             </div>
-            <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg">
-              <textarea
-                className="w-full h-full border-0 rounded-lg p-2 font-mono text-xs resize-none bg-transparent focus:outline-none text-gray-800"
-                value={localJsonSchema}
-                onChange={handleLocalJsonChange}
-                spellCheck={false}
-                style={{ minHeight: 180, maxHeight: '40vh', overflow: 'auto' }}
-              />
-              {jsonError && (
-                <div className="text-xs text-red-600 mt-1">{jsonError}</div>
-              )}
-            </div>
+            <textarea
+              className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition flex-1"
+              value={jsonSchema}
+              onChange={handleJsonChange}
+              rows={16}
+              style={{ minHeight: 180, maxHeight: '40vh', overflow: 'auto' }}
+            />
+            {jsonError && <div className="text-xs text-red-600 mt-1">{jsonError}</div>}
           </div>
         </div>
         {/* Sticky action buttons */}
         <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-4 sticky bottom-0 right-0 bg-white pt-2 pb-1 z-20 border-t border-gray-100">
           <button
             className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-            onClick={async () => {
-              setValidationResult(null);
-              try {
-                const parsed = JSON.parse(localJsonSchema);
-                // Make API call to validate schema
-                const response = await fetch('http://localhost:5000/schema/validate', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ schema: parsed })
-                });
-                if (!response.ok) throw new Error('Validation failed');
-                const result = await response.json();
-                setValidationResult(result);
-              } catch (error) {
-                setValidationResult({ valid: false, message: 'Validation failed. Please check your schema.' });
-              }
-            }}
+            onClick={handleValidate}
           >
             Validate
           </button>
           <button
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-            disabled={saving || isSaving}
-            onClick={async () => {
-              if (!schemaName.trim()) {
-                setSaveMessage('Schema name is required.');
-                return;
-              }
-              setSaveMessage('');
-              onSave(schemaName, localJsonSchema);
-            }}
+            disabled={isSaving}
+            onClick={handleSave}
           >
-            {editingSchemaId ? 'Update' : isSaving ? 'Saving...' : 'Create'}
+            {isEditing ? 'Update' : isSaving ? 'Saving...' : 'Create'}
           </button>
         </div>
         {validationResult && (
@@ -279,4 +282,4 @@ const SchemaModal: React.FC<SchemaModalProps> = (props) => {
   );
 };
 
-export default SchemaModal; 
+export default UnifiedSchemaModal; 

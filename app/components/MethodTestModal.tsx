@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Send, RefreshCw, Copy, Download, Check, ChevronDown, Save } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import SchemaModal from '@/app/namespace/components/SchemaModal';
+import SchemaModal from '@/app/namespace/Modals/SchemaModal';
 import { schemaToFields } from '@/app/namespace/components/SchemaService';
 import { NestedFieldsEditor } from '@/app/namespace/components/SchemaService';
 
@@ -90,7 +90,7 @@ export default function MethodTestModal({
   useEffect(() => {
     const fetchNamespaceDetails = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}`);
+        const response = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch namespace details: ${response.status}`);
         }
@@ -123,8 +123,8 @@ export default function MethodTestModal({
       setActiveButton(isPaginated ? 'loop' : 'send');
 
       const endpoint = isPaginated
-        ? `${API_BASE_URL}/execute/paginated`
-        : `${API_BASE_URL}/execute`;
+        ? `${API_BASE_URL}/unified/execute/paginated`
+        : `${API_BASE_URL}/unified/execute`;
 
       // Prepare headers from the form
       const formHeaders = Object.fromEntries(
@@ -326,7 +326,7 @@ export default function MethodTestModal({
   const handleSchemaModalSave = async (finalSchemaName: string, finalJsonSchema: string) => {
     try {
       setIsSavingSchema(true);
-      const apiResponse = await fetch(`${API_BASE_URL}/schema/create`, {
+      const apiResponse = await fetch(`${API_BASE_URL}/unified/schema`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -349,6 +349,66 @@ export default function MethodTestModal({
       const result = await apiResponse.json();
       toast.success('Schema saved successfully');
       setShowSchemaModal(false);
+
+      // --- Update the namespace with the new schemaId ---
+      if (result.schemaId) {
+        // Fetch current namespace data
+        const nsRes = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}`);
+        const nsData = await nsRes.json();
+        const currentSchemaIds = Array.isArray(nsData.schemaIds) ? nsData.schemaIds : [];
+        const updatedSchemaIds = [...currentSchemaIds, result.schemaId];
+        console.log('Updating namespace with schemaIds:', updatedSchemaIds);
+
+        // Send the update
+        const updateRes = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...nsData,
+            schemaIds: updatedSchemaIds
+          }),
+        });
+        let updateResult = null;
+        if (updateRes.headers.get('content-type')?.includes('application/json')) {
+          updateResult = await updateRes.json();
+        }
+        console.log('Namespace update response:', updateResult);
+        toast.success('Namespace updated with schemaIds');
+      }
+      // --------------------------------------------------
+
+      // --- Update the method with the new schemaId ---
+      if (result.schemaId && methodId) {
+        // Fetch current method data
+        const methodRes = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`);
+        const methodDataRaw = await methodRes.json();
+        const methodData = methodDataRaw.data ? methodDataRaw.data : methodDataRaw;
+
+        // Send the update (only required/expected fields)
+        const methodUpdatePayload = {
+          "namespace-method-name": methodData["namespace-method-name"] || "unknown",
+          "namespace-method-type": methodData["namespace-method-type"] || "GET",
+          "namespace-method-url-override": methodData["namespace-method-url-override"] || "",
+          "namespace-method-queryParams": methodData["namespace-method-queryParams"] || [],
+          "namespace-method-header": methodData["namespace-method-header"] || [],
+          "save-data": methodData["save-data"] || false,
+          "isInitialized": methodData["isInitialized"] || false,
+          "tags": methodData["tags"] || [],
+          "schemaId": result.schemaId
+        };
+        // Remove null or undefined fields (fix TS linter error)
+        Object.keys(methodUpdatePayload as any).forEach(
+          key => ((methodUpdatePayload as any)[key] == null) && delete (methodUpdatePayload as any)[key]
+        );
+        console.log('Method update payload:', methodUpdatePayload);
+        await fetch(`${API_BASE_URL}/unified/methods/${methodId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(methodUpdatePayload),
+        });
+        toast.success('Method updated with schemaId');
+      }
+      // --------------------------------------------------
     } catch (error) {
       console.error('Error saving schema:', error);
       toast.error('Failed to save schema');
@@ -404,7 +464,7 @@ export default function MethodTestModal({
     const initializeModal = async () => {
       if (isOpen && mounted) {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/namespaces/${namespaceId}/accounts`);
+          const response = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}/accounts`);
           
           if (!response.ok || !mounted) {
             return;

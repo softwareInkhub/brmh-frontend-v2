@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import SchemaModal from './SchemaModal';
+import SchemaModal from '../Modals/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './SchemaService';
 import { Wand2, Sparkles } from 'lucide-react';
 

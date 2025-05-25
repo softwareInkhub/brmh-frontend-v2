@@ -342,40 +342,40 @@ export default function LLMDashboard() {
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow p-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Use Case</label>
-              <select
+        <select
                 className="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                value={selected.value}
-                onChange={e => setSelected(CONTEXTS.find(c => c.value === e.target.value)!)}
-              >
-                {CONTEXTS.map(c => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-            </div>
+          value={selected.value}
+          onChange={e => setSelected(CONTEXTS.find(c => c.value === e.target.value)!)}
+        >
+          {CONTEXTS.map(c => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+      </div>
             <div className="bg-white rounded-2xl shadow p-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Context</label>
-              <textarea
+        <textarea
                 className="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                rows={2}
-                value={selected.context}
-                onChange={e => setSelected({ ...selected, context: e.target.value })}
-              />
-            </div>
+          rows={2}
+          value={selected.context}
+          onChange={e => setSelected({ ...selected, context: e.target.value })}
+        />
+      </div>
             <div className="bg-white rounded-2xl shadow p-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Message</label>
-              <textarea
+        <textarea
                 className="w-full border border-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                rows={3}
-                value={message}
-                onChange={e => setMessage(e.target.value)}
-                placeholder="Describe your requirements..."
-              />
-            </div>
-            <button
+          rows={3}
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          placeholder="Describe your requirements..."
+        />
+      </div>
+      <button
               className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:from-blue-600 hover:to-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
-              onClick={handleSend}
-              disabled={loading || !message.trim()}
-            >
+        onClick={handleSend}
+        disabled={loading || !message.trim()}
+      >
               {loading ? (
                 <div className="flex items-center justify-center">
                   <div className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
@@ -400,21 +400,21 @@ export default function LLMDashboard() {
                   onClick={() => setShowDeployModal(true)}
                 >
                   Deploy to Lambda
-                </button>
+      </button>
               )}
             </div>
             <div className="flex-1 overflow-x-auto">
-              {outputType === 'code' ? (
+        {outputType === 'code' ? (
                 <pre className="bg-gray-900 text-white p-4 rounded-lg min-h-[120px] whitespace-pre-wrap overflow-x-auto text-sm">
-                  <code>{autoFormatted}</code>
-                </pre>
-              ) : (
+            <code>{autoFormatted}</code>
+          </pre>
+        ) : (
                 <pre className="bg-gray-50 p-4 rounded-lg min-h-[120px] whitespace-pre-wrap overflow-x-auto text-sm">
-                  {autoFormatted}
-                  {streaming && <span className="animate-pulse">▋</span>}
-                </pre>
-              )}
-            </div>
+            {autoFormatted}
+            {streaming && <span className="animate-pulse">▋</span>}
+          </pre>
+        )}
+      </div>
           </div>
         </div>
       </div>
@@ -426,14 +426,14 @@ export default function LLMDashboard() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Deploy Lambda Function</h2>
-                <button 
+            <button
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                   onClick={() => setShowDeployModal(false)}
-                >
+            >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                </button>
+            </button>
               </div>
             </div>
 
@@ -545,16 +545,16 @@ export default function LLMDashboard() {
                 <div className="mt-4 p-3 bg-green-50 text-green-700 rounded-lg">
                   {deploySuccess}
                 </div>
-              )}
-            </div>
+            )}
+          </div>
 
             <div className="p-6 border-t border-gray-200 bg-gray-50">
               <div className="flex justify-end">
-                <button
+            <button
                   className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={handleDeploy}
                   disabled={deploying}
-                >
+            >
                   {deploying ? (
                     <div className="flex items-center">
                       <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
@@ -563,7 +563,7 @@ export default function LLMDashboard() {
                   ) : (
                     'Deploy'
                   )}
-                </button>
+            </button>
               </div>
             </div>
           </div>

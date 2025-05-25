@@ -1,12 +1,15 @@
 import React from 'react';
 
+type Account = { id: string; name: string };
+type Props = { onSelect?: (a: Account) => void };
+
 const accounts = [
   { id: 'acc1', name: 'Account A' },
   { id: 'acc2', name: 'Account B' },
   { id: 'acc3', name: 'Account C' },
 ];
 
-export default function AccountPage({ onSelect }) {
+export default function AccountPage({ onSelect }: Props) {
   return (
     <div className="p-8">
       <h2 className="text-2xl font-bold mb-4">Select an Account</h2>

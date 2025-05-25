@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ChevronDown, ChevronRight, LayoutGrid, List as ListIcon } from 'lucide-react';
-import SchemaModal from './SchemaModal';
-import SchemaPreviewModal from './SchemaPreviewModal';
+import SchemaModal from '../Modals/SchemaModal';
+import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 
 const FIELD_TYPES = ['string', 'number', 'boolean', 'object', 'array', 'enum'];
 

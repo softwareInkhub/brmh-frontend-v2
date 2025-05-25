@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw } from 'lucide-react';
-import NamespacePreviewModal from './NamespacePreviewModal';
+import NamespacePreviewModal from '../Modals/NamespacePreviewModal';
 
 interface SidePanelProps {
   namespaces: any[];

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DynamicForm } from './SchemaService';
+import { DynamicForm } from '../components/SchemaService';
 
 interface CreateDataModalProps {
   open: boolean;

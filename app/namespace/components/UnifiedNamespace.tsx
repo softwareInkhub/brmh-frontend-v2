@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Eye, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key, MoreVertical } from "react-feather";
-import UnifiedSchemaModal from './UnifiedSchemaModal';
+import UnifiedSchemaModal from '../Modals/UnifiedSchemaModal';
 import MethodTestModal from '@/app/components/MethodTestModal';
-import SchemaPreviewModal from './SchemaPreviewModal';
-import AccountPreviewModal from './AccountPreviewModal';
-import CreateDataModal from './CreateDataModal';
+import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
+import AccountPreviewModal from '../Modals/AccountPreviewModal';
+import CreateDataModal from '../Modals/CreateDataModal';
 import { useSidePanel } from "@/app/components/SidePanelContext";
 
 // --- Types ---
@@ -770,6 +770,24 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   };
 
   // --- UI ---
+  useEffect(() => {
+    if (showModal.type === 'namespace') {
+      if (showModal.data) {
+        setNamespaceForm({
+          "namespace-name": showModal.data["namespace-name"] || '',
+          "namespace-url": showModal.data["namespace-url"] || '',
+          tags: showModal.data.tags || [],
+        });
+      } else {
+        setNamespaceForm({
+          "namespace-name": '',
+          "namespace-url": '',
+          tags: [],
+        });
+      }
+    }
+  }, [showModal]);
+
   return (
     <div className={`p-0 transition-all duration-200 ${isCollapsed ? 'ml-10' : 'ml-10'}`}>
       {/* Header */}
@@ -1235,6 +1253,17 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   </div>
                 )}
               </div>
+              {showModal.data && showModal.data.schemaId && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Schema ID</label>
+                  <input
+                    type="text"
+                    value={showModal.data.schemaId}
+                    readOnly
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-700 text-sm"
+                  />
+                </div>
+              )}
             </div>
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50 rounded-b-2xl">

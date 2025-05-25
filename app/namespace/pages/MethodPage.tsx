@@ -1,12 +1,15 @@
 import React from 'react';
 
+type Method = { id: string; name: string };
+type Props = { onSelect?: (m: Method) => void };
+
 const methods = [
   { id: 'm1', name: 'GET /users' },
   { id: 'm2', name: 'POST /login' },
   { id: 'm3', name: 'DELETE /item' },
 ];
 
-export default function MethodPage({ onSelect }) {
+export default function MethodPage({ onSelect }: Props) {
   return (
     <div className="p-8">
       <h2 className="text-2xl font-bold mb-4">Select a Method</h2>
