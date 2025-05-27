@@ -21,6 +21,8 @@ interface Method {
   "sample-response"?: Record<string, unknown>;
   "request-schema"?: Record<string, unknown>;
   "response-schema"?: Record<string, unknown>;
+  "namespace-name"?: string;
+  "namespace-account-name"?: string;
 }
 
 interface MethodPreviewModalProps {
@@ -28,7 +30,7 @@ interface MethodPreviewModalProps {
   onClose: () => void;
   method: Method | null;
   onTest?: (method: Method) => void;
-  onTable?: (method: Method) => void;
+  onTable?: (method: Method, tableName: string) => void;
   onEdit?: (method: Method) => void;
   onDelete?: (method: Method) => void;
   onRegisterWebhook?: (method: Method) => void;
@@ -53,6 +55,8 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [allWebhooks, setAllWebhooks] = useState<any[]>([]);
   const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [tableNameInput, setTableNameInput] = useState('');
 
   // Fetch all webhooks and filter for this method
   useEffect(() => {
@@ -81,6 +85,23 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
     };
     if (isOpen && method) fetchAllWebhooks();
   }, [isOpen, method]);
+
+  // Helper to generate default table name
+  const getDefaultTableName = () => {
+    if (!method) return '';
+    // Use placeholders if not present
+    const ns = method["namespace-name"] || 'namespace';
+    const acc = method["namespace-account-name"] || 'account';
+    const mth = method["namespace-method-name"] || 'method';
+    return `${ns}_${acc}_${mth}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  };
+
+  useEffect(() => {
+    if (showTableModal && method) {
+      setTableNameInput(getDefaultTableName());
+    }
+    // eslint-disable-next-line
+  }, [showTableModal, method]);
 
   const handleAddWebhook = async () => {
     setWebhookLoading(true);
@@ -139,6 +160,28 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
     } catch (error) {
       console.error('Error deleting webhook:', error);
       toast.error('Failed to delete webhook: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  const handleTableCreation = async (tableName: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/unified/table/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create table');
+      }
+
+      const result = await response.json();
+      toast.success(`Table "${tableName}" created successfully!`);
+      if (onTable) onTable(currentMethod, tableName);
+    } catch (error) {
+      console.error('Error creating table:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create table');
     }
   };
 
@@ -299,7 +342,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
           <button
             title="Table"
             className="p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-            onClick={() => onTable && onTable(currentMethod)}
+            onClick={() => setShowTableModal(true)}
           >
             <Database size={18} />
           </button>
@@ -331,6 +374,37 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
             <Trash2 size={18} />
           </button>
         </div>
+        {/* Table Name Modal */}
+        {showTableModal && (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowTableModal(false)}>
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold mb-4">Choose Table Name</h3>
+              <input
+                type="text"
+                className="w-full border border-gray-200 rounded px-3 py-2 text-sm mb-4"
+                value={tableNameInput}
+                onChange={e => setTableNameInput(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  onClick={() => setShowTableModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={() => {
+                    setShowTableModal(false);
+                    handleTableCreation(tableNameInput);
+                  }}
+                >
+                  Create Table
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

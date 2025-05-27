@@ -7,6 +7,7 @@ import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 import AccountPreviewModal from '../Modals/AccountPreviewModal';
 import CreateDataModal from '../Modals/CreateDataModal';
 import { useSidePanel } from "@/app/components/SidePanelContext";
+import { toast } from 'react-hot-toast';
 
 // --- Types ---
 interface KeyValuePair {
@@ -66,9 +67,10 @@ interface MethodPreviewModalProps {
   onEdit: (method: Method) => void;
   onDelete: (method: Method) => void;
   onTest: (method: Method) => void;
+  onTable?: (method: Method, tableName: string) => Promise<void>;
 }
 
-const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ method, onClose, onEdit, onDelete, onTest }) => {
+const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ method, onClose, onEdit, onDelete, onTest, onTable }) => {
   const [showWebhookForm, setShowWebhookForm] = React.useState(false);
   const [webhookRoute, setWebhookRoute] = React.useState('');
   const [webhookTable, setWebhookTable] = React.useState('');
@@ -792,7 +794,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
     <div className={`p-0 transition-all duration-200 ${isCollapsed ? 'ml-10' : 'ml-10'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Unified Management</h2>
+        <h2 className="text-xl font-semibold">Namesapce</h2>
         <div className="flex items-center gap-4">
           <div className="relative">
             <input
@@ -935,7 +937,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                               {method.tags && method.tags.length > 0 && method.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
-                              <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod(method)}><Eye size={12} /></button>
+                              <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": ns["namespace-name"], "namespace-account-name": (namespaceDetailsMap[ns["namespace-id"]]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-red-600" onClick={() => handleDeleteMethod(method)}><Trash2 size={12} /></button>
                             </div>
@@ -1690,6 +1692,20 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             setTestingMethod(method);
             setIsMethodTestModalOpen(true);
             setPreviewMethod(null);
+          }}
+          onTable={async (method, tableName) => {
+            try {
+              const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tableName })
+              });
+              if (!res.ok) throw new Error('Failed to create table');
+              await res.json();
+              toast.success('Table created successfully!');
+            } catch (err) {
+              toast.error('Failed to create table');
+            }
           }}
         />
       )}

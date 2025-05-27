@@ -52,7 +52,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/app/components/ui/pagination"
-import { cn } from "@/lib/utils"
+import { cn } from "../../../lib/utils"
 
 interface Policy {
   PolicyName: string;

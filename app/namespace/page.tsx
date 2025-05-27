@@ -19,6 +19,8 @@ import UnifiedSchemaModal from './Modals/UnifiedSchemaModal';
 import SchemaPreviewModal from './Modals/SchemaPreviewModal';
 import { useSidePanel } from "../components/SidePanelContext";
 import SchemaCreatePage from './pages/SchemaCreatePage';
+import AccountPage from './pages/AccountPage';
+import MethodPage from './pages/MethodPage';
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -104,6 +106,7 @@ export default function NamespacePage() {
 
   // New state for UnifiedSchemaModal
   const [showSchemaModal, setShowSchemaModal] = useState(false);
+  const [editingSchema, setEditingSchema] = useState<any>(null);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -112,6 +115,15 @@ export default function NamespacePage() {
   const methods = Object.fromEntries(
     Object.entries(namespaceDetailsMap).map(([nsId, v]) => [nsId, v.methods])
   );
+
+  // New state for AccountPage
+  const [accountPageData, setAccountPageData] = useState<{ key: string; account: any; namespace: any }[]>([]);
+
+  // New state for MethodPage
+  const [methodPageData, setMethodPageData] = useState<{ key: string; method: any; namespace: any }[]>([]);
+
+  // New state for LLM Terminal placement
+  const [llmPlacement, setLlmPlacement] = useState<'right' | 'bottom'>('right');
 
   // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
@@ -158,7 +170,7 @@ export default function NamespacePage() {
       setSelectedSchemaId(data.id);
     }
   };
-  const handleSidePanelAdd = (type: 'namespace' | 'account' | 'schema' | 'method', parentData?: any) => {
+  const handleSidePanelAdd = (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage', parentData?: any) => {
     if (type === 'namespace') {
       setNamespaceModal({ isOpen: true, namespace: null });
     } else if (type === 'account') {
@@ -167,6 +179,26 @@ export default function NamespacePage() {
       setMethodModal({ isOpen: true, method: null });
     } else if (type === 'schema') {
       setShowSchemaModal(true);
+    } else if (type === 'accountPage' && parentData?.account) {
+      const key = `accountPage-${parentData.account['namespace-account-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Account: ${parentData.account['namespace-account-name']}` }]);
+      }
+      setActiveTab(key);
+      setAccountPageData(prev => {
+        if (prev.find(p => p.key === key)) return prev;
+        return [...prev, { key, account: parentData.account, namespace: parentData.namespace }];
+      });
+    } else if (type === 'methodPage' && parentData?.method) {
+      const key = `methodPage-${parentData.method['namespace-method-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Method: ${parentData.method['namespace-method-name']}` }]);
+      }
+      setActiveTab(key);
+      setMethodPageData(prev => {
+        if (prev.find(p => p.key === key)) return prev;
+        return [...prev, { key, method: parentData.method, namespace: parentData.namespace }];
+      });
     }
   };
 
@@ -261,12 +293,10 @@ export default function NamespacePage() {
     setSaveMessage('');
   };
 
-  // Function to open modal from LLMTerminal
+  // Function to open schema modal from LLMTerminal
   const openSchemaModal = (name: string, schema: any) => {
-    setSchemaName(name);
-    setJsonSchema(JSON.stringify(schema, null, 2));
-    setFields(schemaToFields(schema));
-    setShowModal(true);
+    setEditingSchema({ schemaName: name, schema });
+    setShowSchemaModal(true);
   };
 
   // On mount, update from localStorage if available
@@ -628,6 +658,22 @@ export default function NamespacePage() {
                   : tab
               ));
             }} />}
+            {/* Render AccountPage for each open account tab */}
+            {accountPageData.map(({ key, account, namespace }) => (
+              activeTab === key && (
+                <React.Suspense fallback={<div>Loading...</div>} key={key}>
+                  <AccountPage account={account} namespace={namespace} />
+                </React.Suspense>
+              )
+            ))}
+            {/* Render MethodPage for each open method tab */}
+            {methodPageData.map(({ key, method, namespace }) => (
+              activeTab === key && (
+                <React.Suspense fallback={<div>Loading...</div>} key={key}>
+                  <MethodPage method={method} namespace={namespace} />
+                </React.Suspense>
+              )
+            ))}
             {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
               <NewTabContent onOpenTab={handleOpenTab} />
             )}
@@ -641,7 +687,7 @@ export default function NamespacePage() {
                 <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
             )}
           </div>
-          <LLMTerminal openSchemaModal={openSchemaModal} />
+          <LLMTerminal openSchemaModal={openSchemaModal} placement="right" />
           <SchemaModal
             key={showModal ? schemaName : 'closed'}
             showModal={showModal}
@@ -781,6 +827,7 @@ export default function NamespacePage() {
         showModal={showSchemaModal}
         setShowModal={setShowSchemaModal}
         onSuccess={() => setShowSchemaModal(false)}
+        editingSchema={editingSchema}
       />
 
       <SchemaPreviewModal

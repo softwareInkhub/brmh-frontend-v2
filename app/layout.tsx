@@ -21,18 +21,18 @@ export default function RootLayout({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <html lang="en">
+    <html lang="en" className="overflow-hidden">
       <body 
-        className={inter.className}
+        className={inter.className + ' overflow-hidden'}
         suppressHydrationWarning={true}
       >
         <QueryClientProvider client={queryClient}>
           <SidePanelProvider>
-            <div className="flex min-h-screen bg-gray-50">
+            <div className="flex min-h-screen bg-gray-50 overflow-hidden">
               <Sidebar />
-              <div className="flex-1 min-h-screen">
+              <div className="flex-1 min-h-screen overflow-hidden">
                 <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
-                <main className="w-full min-h-screen">
+                <main className="w-full min-h-screen overflow-hidden">
                   {children}
                 </main>
               </div>
