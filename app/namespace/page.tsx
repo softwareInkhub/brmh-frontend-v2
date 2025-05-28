@@ -23,6 +23,8 @@ import AllAccountPage from './pages/AllAccountPage';
 import AllMethodPage from './pages/AllMethodPage';
 import AccountPage from './pages/AccountPage';
 import MethodPage from './pages/MethodPage';
+import AllSchemaPage from './pages/AllSchemaPage';
+import SingleNamespacePage from './pages/SingleNamespacePage';
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -124,6 +126,12 @@ export default function NamespacePage() {
 
   // Add state for schema page tabs
   const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any }[]>([]);
+
+  // Add state for all schemas tabs
+  const [allSchemasTabs, setAllSchemasTabs] = useState<{ key: string; namespace?: any }[]>([]);
+
+  // Add state for single namespace tabs
+  const [singleNamespaceTabs, setSingleNamespaceTabs] = useState<{ key: string; namespace: any }[]>([]);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -260,6 +268,28 @@ export default function NamespacePage() {
       setMethodPageTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, method: parentData.method, namespace: parentData.namespace }];
+      });
+      return;
+    } else if (type === 'allSchemas') {
+      const key = parentData ? `allSchemas-${parentData['namespace-id']}` : 'allSchemas';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Schemas: ${parentData['namespace-name']}` : 'All Schemas' }]);
+      }
+      setActiveTab(key);
+      setAllSchemasTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'singleNamespace') {
+      const key = `singleNamespace-${parentData['namespace-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData['namespace-name'] }]);
+      }
+      setActiveTab(key);
+      setSingleNamespaceTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
       });
       return;
     }
@@ -782,6 +812,22 @@ export default function NamespacePage() {
                     }
                   }}
                 />
+              </div>
+            ))}
+            {allSchemasTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllSchemaPage namespace={namespace} />
+              </div>
+            ))}
+            {singleNamespaceTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
               </div>
             ))}
             {activeTab !== 'overview' &&

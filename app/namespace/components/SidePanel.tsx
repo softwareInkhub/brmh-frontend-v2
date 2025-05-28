@@ -8,7 +8,7 @@ interface SidePanelProps {
   schemas: any[];
   methods: Record<string, any[]>; // namespaceId -> methods
   onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
-  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods', parentData?: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace', parentData?: any) => void;
   fetchNamespaceDetails: (namespaceId: string) => void;
   selectedSchemaId?: string | null;
   onEditSchema?: (schema: any) => void;
@@ -85,7 +85,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
     : [];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 h-full flex flex-col shadow-sm p-0 overflow-y-auto select-none">
+    <aside className="w-64 bg-white border-r border-gray-100 h-full flex flex-col shadow-sm p-0 overflow-y-auto select-none scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 custom-scrollbar">
       {/* Header */}
       <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
         <LayoutDashboard className="text-blue-600" size={20} />
@@ -138,8 +138,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
               <div key={ns['namespace-id']} className="mb-1">
                 <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                   <button
-                    className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold"
-                    onClick={() => toggleNs(ns['namespace-id'])}
+                    className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold hover:underline cursor-pointer"
+                    onClick={() => {
+                      toggleNs(ns['namespace-id']);
+                      onAdd('singleNamespace', ns);
+                    }}
+                    type="button"
                   >
                     {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     <Folder size={16} className="text-blue-500" />
@@ -255,8 +259,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                     <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                         <button
-                          className="flex items-center gap-1 group"
-                          onClick={() => toggleSection(ns['namespace-id'], 'schemas')}
+                          className="flex items-center gap-1 group hover:underline cursor-pointer"
+                          onClick={() => {
+                            toggleSection(ns['namespace-id'], 'schemas');
+                            onAdd('allSchemas', ns);
+                          }}
                           type="button"
                         >
                           {expandedSection[ns['namespace-id']]?.schemas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -268,7 +275,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         <button
                           onClick={() => onAdd('schema', ns)}
                           className="p-1 rounded hover:bg-purple-50"
-                          title="Create Schema for Namespace"
+                          title="Add Schema"
                           type="button"
                         >
                           <Plus size={14} className="text-purple-500" />
@@ -319,4 +326,18 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
   );
 };
 
-export default SidePanel; 
+export default SidePanel;
+
+/* Custom scrollbar styles for 3px width */
+<style jsx global>{`
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f3f4f6;
+  }
+`}</style> 

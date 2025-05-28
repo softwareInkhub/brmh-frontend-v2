@@ -2,29 +2,35 @@ import React, { useEffect, useState } from 'react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-export default function AllSchemaPage() {
+export default function AllSchemaPage({ namespace }: { namespace?: any }) {
   const [schemas, setSchemas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchAllSchemas = async () => {
+    const fetchSchemas = async () => {
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE_URL}/unified/schema`);
         const data = await res.json();
-        setSchemas(Array.isArray(data) ? data : []);
+        setSchemas(Array.isArray(data)
+          ? (namespace
+              ? data.filter((s: any) => s.namespaceId === namespace['namespace-id'])
+              : data)
+          : []);
       } catch (err) {
         setSchemas([]);
       } finally {
         setLoading(false);
       }
     };
-    fetchAllSchemas();
-  }, []);
+    fetchSchemas();
+  }, [namespace]);
 
   return (
     <div className="p-8 w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">All Schemas</h2>
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">
+        All Schemas{namespace ? `: ${namespace['namespace-name']}` : ''}
+      </h2>
       {loading ? (
         <div>Loading...</div>
       ) : (
