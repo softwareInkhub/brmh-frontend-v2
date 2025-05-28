@@ -19,6 +19,8 @@ import UnifiedSchemaModal from './Modals/UnifiedSchemaModal';
 import SchemaPreviewModal from './Modals/SchemaPreviewModal';
 import { useSidePanel } from "../components/SidePanelContext";
 import SchemaCreatePage from './pages/SchemaCreatePage';
+import AllAccountPage from './pages/AllAccountPage';
+import AllMethodPage from './pages/AllMethodPage';
 import AccountPage from './pages/AccountPage';
 import MethodPage from './pages/MethodPage';
 
@@ -106,7 +108,22 @@ export default function NamespacePage() {
 
   // New state for UnifiedSchemaModal
   const [showSchemaModal, setShowSchemaModal] = useState(false);
-  const [editingSchema, setEditingSchema] = useState<any>(null);
+
+  // Add state for all accounts/methods tabs
+  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any }[]>([]);
+  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any }[]>([]);
+
+  // Add state for account/method tabs
+  const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any }[]>([]);
+  const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
+
+  // Add state for LLMTerminal
+  const [llmTerminalOpen, setLlmTerminalOpen] = useState(false);
+  const [llmTerminalPlacement, setLlmTerminalPlacement] = useState<'right'>('right');
+  const [llmTerminalWidth, setLlmTerminalWidth] = useState(500);
+
+  // Add state for schema page tabs
+  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any }[]>([]);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -115,15 +132,6 @@ export default function NamespacePage() {
   const methods = Object.fromEntries(
     Object.entries(namespaceDetailsMap).map(([nsId, v]) => [nsId, v.methods])
   );
-
-  // New state for AccountPage
-  const [accountPageData, setAccountPageData] = useState<{ key: string; account: any; namespace: any }[]>([]);
-
-  // New state for MethodPage
-  const [methodPageData, setMethodPageData] = useState<{ key: string; method: any; namespace: any }[]>([]);
-
-  // New state for LLM Terminal placement
-  const [llmPlacement, setLlmPlacement] = useState<'right' | 'bottom'>('right');
 
   // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
@@ -164,13 +172,32 @@ export default function NamespacePage() {
     } else if (type === 'account') {
       setPreviewAccount(data);
     } else if (type === 'method') {
-      setPreviewMethod(data);
+      // Open a tab for the method, do not open a modal
+      const key = `methodPage-${data['namespace-method-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Method: ${data['namespace-method-name']}` }]);
+      }
+      setActiveTab(key);
+      setMethodPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, method: data, namespace: namespaces.find(ns => ns['namespace-id'] === data['namespace-id']) }];
+      });
+      return;
     } else if (type === 'schema') {
-      setPreviewSchema(data);
+      const key = `schema-preview-${data.id}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: data.schemaName || 'Schema Preview' }]);
+      }
+      setActiveTab(key);
+      setSchemaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, schema: data.schema, mode: 'preview', initialSchemaName: data.schemaName, namespace: data.namespace }];
+      });
       setSelectedSchemaId(data.id);
+      return;
     }
   };
-  const handleSidePanelAdd = (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage', parentData?: any) => {
+  const handleSidePanelAdd = (type: string, parentData?: any) => {
     if (type === 'namespace') {
       setNamespaceModal({ isOpen: true, namespace: null });
     } else if (type === 'account') {
@@ -178,27 +205,63 @@ export default function NamespacePage() {
     } else if (type === 'method') {
       setMethodModal({ isOpen: true, method: null });
     } else if (type === 'schema') {
-      setShowSchemaModal(true);
+      const ns = parentData || namespaces[0];
+      const nsId = ns?.['namespace-id'] || '';
+      const nsName = ns?.['namespace-name'] || '';
+      const key = `schema-create-${nsId}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: nsName ? `New Schema: ${nsName}` : 'New Schema' }]);
+      }
+      setActiveTab(key);
+      setSchemaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, mode: 'create', namespace: ns }];
+      });
+      return;
+    } else if (type === 'allAccounts') {
+      const key = parentData ? `allAccounts-${parentData['namespace-id']}` : 'allAccounts';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Accounts: ${parentData['namespace-name']}` : 'All Accounts' }]);
+      }
+      setActiveTab(key);
+      setAllAccountsTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'allMethods') {
+      const key = parentData ? `allMethods-${parentData['namespace-id']}` : 'allMethods';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Methods: ${parentData['namespace-name']}` : 'All Methods' }]);
+      }
+      setActiveTab(key);
+      setAllMethodsTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
     } else if (type === 'accountPage' && parentData?.account) {
       const key = `accountPage-${parentData.account['namespace-account-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
         setTabs([...tabs, { key, label: `Account: ${parentData.account['namespace-account-name']}` }]);
       }
       setActiveTab(key);
-      setAccountPageData(prev => {
-        if (prev.find(p => p.key === key)) return prev;
+      setAccountPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, account: parentData.account, namespace: parentData.namespace }];
       });
+      return;
     } else if (type === 'methodPage' && parentData?.method) {
       const key = `methodPage-${parentData.method['namespace-method-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
         setTabs([...tabs, { key, label: `Method: ${parentData.method['namespace-method-name']}` }]);
       }
       setActiveTab(key);
-      setMethodPageData(prev => {
-        if (prev.find(p => p.key === key)) return prev;
+      setMethodPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, method: parentData.method, namespace: parentData.namespace }];
       });
+      return;
     }
   };
 
@@ -293,10 +356,12 @@ export default function NamespacePage() {
     setSaveMessage('');
   };
 
-  // Function to open schema modal from LLMTerminal
+  // Function to open modal from LLMTerminal
   const openSchemaModal = (name: string, schema: any) => {
-    setEditingSchema({ schemaName: name, schema });
-    setShowSchemaModal(true);
+    setSchemaName(name);
+    setJsonSchema(JSON.stringify(schema, null, 2));
+    setFields(schemaToFields(schema));
+    setShowModal(true);
   };
 
   // On mount, update from localStorage if available
@@ -424,6 +489,12 @@ export default function NamespacePage() {
     if (activeTab === key) {
       setActiveTab('overview');
     }
+    // Remove closed tab's state from all tab arrays
+    setAllAccountsTabs(prev => prev.filter(t => t.key !== key));
+    setAllMethodsTabs(prev => prev.filter(t => t.key !== key));
+    setAccountPageTabs(prev => prev.filter(t => t.key !== key));
+    setMethodPageTabs(prev => prev.filter(t => t.key !== key));
+    setSchemaPageTabs(prev => prev.filter(t => t.key !== key));
   };
 
   // --- NewTabContent moved inside component to access handleOpenTab ---
@@ -570,7 +641,10 @@ export default function NamespacePage() {
           )}
         </div>
         {/* Main Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto transition-all duration-200">
+        <div 
+          className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
+          style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
+        >
           {/* Tab Section (always flush left) */}
           <div className="flex items-center border-b bg-white px-4 py-2">
             <div className="flex items-center gap-1">
@@ -658,25 +732,58 @@ export default function NamespacePage() {
                   : tab
               ));
             }} />}
-            {/* Render AccountPage for each open account tab */}
-            {accountPageData.map(({ key, account, namespace }) => (
-              activeTab === key && (
-                <React.Suspense fallback={<div>Loading...</div>} key={key}>
-                  <AccountPage account={account} namespace={namespace} />
-                </React.Suspense>
-              )
-            ))}
-            {/* Render MethodPage for each open method tab */}
-            {methodPageData.map(({ key, method, namespace }) => (
-              activeTab === key && (
-                <React.Suspense fallback={<div>Loading...</div>} key={key}>
-                  <MethodPage method={method} namespace={namespace} />
-                </React.Suspense>
-              )
-            ))}
             {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
               <NewTabContent onOpenTab={handleOpenTab} />
             )}
+            {allAccountsTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllAccountPage namespace={namespace} />
+              </div>
+            ))}
+            {allMethodsTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllMethodPage namespace={namespace} />
+              </div>
+            ))}
+            {accountPageTabs.map(({ key, account, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AccountPage account={account} namespace={namespace} />
+              </div>
+            ))}
+            {methodPageTabs.map(({ key, method, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <MethodPage method={method} namespace={namespace} />
+              </div>
+            ))}
+            {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <SchemaCreatePage
+                  initialSchema={mode === 'preview' ? schema : undefined}
+                  initialSchemaName={initialSchemaName}
+                  namespace={namespace}
+                  onSuccess={() => {
+                    if (mode === 'create' && namespace?.['namespace-id']) {
+                      fetchNamespaceDetails(namespace['namespace-id']);
+                    }
+                  }}
+                />
+              </div>
+            ))}
             {activeTab !== 'overview' &&
               activeTab !== 'namespace' &&
               activeTab !== 'schemaService' &&
@@ -687,30 +794,38 @@ export default function NamespacePage() {
                 <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
             )}
           </div>
-          <LLMTerminal openSchemaModal={openSchemaModal} placement="right" />
-          <SchemaModal
-            key={showModal ? schemaName : 'closed'}
-            showModal={showModal}
-            setShowModal={setShowModal}
-            resetForm={resetForm}
-            editingSchemaId={null}
-            schemaName={schemaName}
-            setSchemaName={setSchemaName}
-            fields={fields}
-            setFields={setFields}
-            collapsedNodes={collapsedNodes}
-            setCollapsedNodes={setCollapsedNodes}
-            rawFields={rawFields}
-            setRawFields={setRawFields}
-            handleConvertRawFields={() => {}}
-            rawFieldsError={rawFieldsError}
-            jsonSchema={jsonSchema}
-            setJsonSchema={setJsonSchema}
-            handleJsonChange={handleJsonChange}
-            jsonError={jsonError}
-            onSave={handleSchemaModalSave}
-            isSaving={false}
-            NestedFieldsEditor={NestedFieldsEditor}
+          <LLMTerminal 
+            open={llmTerminalOpen}
+            setOpen={setLlmTerminalOpen}
+            placement={llmTerminalPlacement}
+            setPlacement={setLlmTerminalPlacement}
+            width={llmTerminalWidth}
+            setWidth={setLlmTerminalWidth}
+            openSchemaModal={openSchemaModal}
+          />
+          <SchemaPreviewModal
+            open={!!previewSchema}
+            onClose={() => setPreviewSchema(null)}
+            schema={previewSchema}
+            onEdit={schema => {
+              setShowSchemaModal(true);
+              setPreviewSchema(null);
+            }}
+            onDelete={async (schema) => {
+              if (confirm('Are you sure you want to delete this schema?')) {
+                try {
+                  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
+                    method: 'DELETE',
+                  });
+                  if (!response.ok) throw new Error('Failed to delete schema');
+                  setSchemas(schemas => schemas.filter(s => s.id !== schema.id));
+                  setPreviewSchema(null);
+                } catch (error) {
+                  console.error('Error deleting schema:', error);
+                  alert('Failed to delete schema');
+                }
+              }
+            }}
           />
           <MethodPreviewModal
             isOpen={!!previewMethod}
@@ -827,7 +942,6 @@ export default function NamespacePage() {
         showModal={showSchemaModal}
         setShowModal={setShowSchemaModal}
         onSuccess={() => setShowSchemaModal(false)}
-        editingSchema={editingSchema}
       />
 
       <SchemaPreviewModal

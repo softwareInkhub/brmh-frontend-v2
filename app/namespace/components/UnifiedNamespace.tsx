@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Eye, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key, MoreVertical } from "react-feather";
+import { FileCode } from 'lucide-react';
 import UnifiedSchemaModal from '../Modals/UnifiedSchemaModal';
 import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
@@ -398,6 +399,9 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [dataForm, setDataForm] = useState<any>({});
   const [dataTableName, setDataTableName] = useState('');
   const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
+
+  // Add state for schema modal namespace context
+  const [schemaModalNamespace, setSchemaModalNamespace] = useState<any>(null);
 
   // --- Fetch Data ---
   const fetchData = useCallback(async () => {
@@ -850,10 +854,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
           {error.namespaces && <div className="text-red-500">{error.namespaces}</div>}
 
           <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 justify-start' : 'space-y-2'}>
-            {filteredNamespaces.map(ns => (
+            {filteredNamespaces.map((ns, idx) => (
               <React.Fragment key={ns["namespace-id"]}>
                 <div
-                  className="bg-white rounded-lg shadow border border-gray-100 p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full"
+                  className={`bg-white rounded-lg shadow border border-gray-100 p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full ${expandedNamespaceId === ns["namespace-id"] ? 'border-2 border-blue-500 shadow-lg' : ''}`}
                   onClick={() => handleNamespaceClick(ns)}
                   style={{ minWidth: 0 }}
                 >
@@ -889,21 +893,25 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     </div>
                   )}
                 </div>
-                {expandedNamespaceId === ns["namespace-id"] && (
-                  <div className="col-span-full bg-gray-50 rounded-lg p-3 mt-1 mb-2">
+              </React.Fragment>
+            ))}
+          </div>
+          {/* Expanded details below the grid */}
+          {expandedNamespaceId && (
+            <div className="w-full bg-gray-50 rounded-lg p-3 mt-4 mb-2 shadow-lg border border-blue-100">
                     {/* Accounts */}
                     <div className="mb-2">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><Users size={14}/> Accounts</span>
                         <button className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded-full bg-blue-50" onClick={() => { setEditingAccount(null); setAccountForm({ "namespace-account-name": '', "namespace-account-url-override": '', tags: [], "namespace-account-header": [], variables: [] }); setShowAccountModal(true); }}>Add Account</button>
                       </div>
-                      {loadingDetails && !namespaceDetailsMap[ns["namespace-id"]] ? (
+                {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-400 text-xs">Loading accounts...</div>
-                      ) : (namespaceDetailsMap[ns["namespace-id"]]?.accounts.length === 0 ? (
+                ) : (namespaceDetailsMap[expandedNamespaceId]?.accounts.length === 0 ? (
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No accounts found.</div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                          {namespaceDetailsMap[ns["namespace-id"]]?.accounts.map(account => (
+                    {namespaceDetailsMap[expandedNamespaceId]?.accounts.map(account => (
                             <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
@@ -924,20 +932,20 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><Terminal size={14}/> Methods</span>
                         <button className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded-full bg-blue-50" onClick={() => { setEditingMethod(null); setMethodForm({ "namespace-method-name": '', "namespace-method-type": 'GET', "namespace-method-url-override": '', tags: [], "namespace-method-queryParams": [], "namespace-method-header": [], "save-data": false, "isInitialized": false, "sample-request": '', "sample-response": '', "request-schema": '', "response-schema": '' }); setShowMethodModal(true); }}>Add Method</button>
                       </div>
-                      {loadingDetails && !namespaceDetailsMap[ns["namespace-id"]] ? (
+                {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-400 text-xs">Loading methods...</div>
-                      ) : (namespaceDetailsMap[ns["namespace-id"]]?.methods.length === 0 ? (
+                ) : (namespaceDetailsMap[expandedNamespaceId]?.methods.length === 0 ? (
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
                       ) : (
                         <div className="space-y-2">
-                          {namespaceDetailsMap[ns["namespace-id"]]?.methods.map(method => (
+                    {namespaceDetailsMap[expandedNamespaceId]?.methods.map(method => (
                             <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
                               {method.tags && method.tags.length > 0 && method.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
-                              <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": ns["namespace-name"], "namespace-account-name": (namespaceDetailsMap[ns["namespace-id"]]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
+                        <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-red-600" onClick={() => handleDeleteMethod(method)}><Trash2 size={12} /></button>
                             </div>
@@ -945,105 +953,41 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* Schemas Section */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">Schemas</h3>
+              {/* Schemas for selected namespace */}
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><FileCode size={14}/> Schemas</span>
             <button
-              onClick={() => setShowUnifiedSchemaModal(true)}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 rounded-full bg-purple-50 font-semibold"
+                    onClick={() => { setSchemaModalNamespace(ns); setShowUnifiedSchemaModal(true); }}
             >
-              <Plus size={14} className="mr-1" /> Add Schema
+                    + Create Schema
             </button>
           </div>
-
-          {loading.schemas && <div className="text-gray-500">Loading schemas...</div>}
-          {error.schemas && <div className="text-red-500">{error.schemas}</div>}
-
-          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 justify-start' : 'space-y-2'}>
-            {filteredSchemas.map((schema) => {
-              const metaId = schema['brmh-schema-table-data-id'];
-              const isTableActive = metaId && tableMetaStatusById[metaId] === 'ACTIVE';
+                {
+                  (() => {
+                    const ns = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                    const nsSchemaIds = ns && Array.isArray((ns as any).schemaIds) ? (ns as any).schemaIds : [];
+                    if (!Array.isArray(nsSchemaIds)) return null;
+                    const nsSchemas = schemas.filter(s => nsSchemaIds.includes(s.id));
+                    if (nsSchemas.length === 0) {
+                      return <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No schemas found.</div>;
+                    }
               return (
-                <div key={schema.id} className="bg-white rounded-lg shadow-sm border border-gray-100 p-3 cursor-pointer hover:bg-blue-50 transition-all relative group flex items-start justify-between max-w-xs w-full" onClick={() => setPreviewSchema(schema)}>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-gray-900 truncate">{schema.schemaName}</h4>
-                    <p className="text-xs text-gray-500">
-                      {schema.originalType}{schema.isArray ? ' (Array)' : ''}
-                    </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {nsSchemas.map(schema => (
+                          <div key={schema.id} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
+                            <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
+                            <span className="text-xs text-gray-500">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {!isTableActive && (
-                      <button
-                        className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-blue-700 transition"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setPendingTableSchema(schema);
-                          setTableNameInput(schema.schemaName || '');
-                          setTableNameError('');
-                          setShowTableNameModal(true);
-                        }}
-                      >
-                        Create Table
-                      </button>
-                    )}
-                    <div className="relative">
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          setDropdownOpen(dropdownOpen === schema.id ? null : schema.id);
-                        }}
-                        className="p-1 text-gray-400 hover:text-blue-600"
-                      >
-                        <MoreVertical size={18} />
-                      </button>
-                      {dropdownOpen === schema.id && (
-                        <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow-lg z-10">
-                          <button
-                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                            onClick={e => { e.stopPropagation(); setPreviewSchema(schema); setDropdownOpen(null); }}
-                          >
-                            View
-                          </button>
-                          <button
-                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                            onClick={e => { e.stopPropagation(); setShowModal({ type: 'schema', data: schema }); setDropdownOpen(null); }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                            onClick={e => { e.stopPropagation(); handleDelete('schema', schema.id); setDropdownOpen(null); }}
-                          >
-                            Delete
-                          </button>
-                          <button
-                            className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setDataFormSchema(schema.schema);
-                              setDataTableName(schema.tableName || schema.schemaName);
-                              setShowDataModal(true);
-                              setDropdownOpen(null);
-                            }}
-                          >
-                            Create Data
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                        ))}
                 </div>
               );
-            })}
+                  })()
+                }
           </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1288,10 +1232,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
       )}
 
       <UnifiedSchemaModal
-        showModal={showModal.type === 'schema'}
-        setShowModal={show => setShowModal(show ? { type: 'schema', data: showModal.data } : { type: null, data: null })}
-        onSuccess={fetchData}
-        editingSchema={showModal.data || null}
+        showModal={showUnifiedSchemaModal}
+        setShowModal={setShowUnifiedSchemaModal}
+        onSuccess={refreshData}
+        namespace={schemaModalNamespace}
       />
 
       {/* Account Modal */}

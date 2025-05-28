@@ -3,12 +3,15 @@ import {Sparkles } from 'lucide-react';
 
 interface LLMTerminalProps {
   openSchemaModal: (name: string, schema: any) => void;
-  placement?: 'right' | 'bottom';
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  placement: 'right';
+  setPlacement: (placement: 'right') => void;
+  width: number;
+  setWidth: (width: number) => void;
 }
 
-const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 'right' }) => {
-  const [open, setOpen] = useState(false);
-  const [currentPlacement, setCurrentPlacement] = useState<'right' | 'bottom'>(placement);
+const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpen, placement, setPlacement, width, setWidth }) => {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,9 +27,6 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
   const [rawFields, setRawFields] = useState('');
   const [rawFieldsError, setRawFieldsError] = useState<string | null>(null);
-  const [width, setWidth] = useState(540);
-  const minWidth = 400;
-  const maxWidth = 1100;
   const [height, setHeight] = useState(420);
   const minHeight = 220;
   const maxHeight = 700;
@@ -51,6 +51,9 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
     methods: `Generate API method definitions for CRUD operations on todos in a Todo app. Return a JSON object where each key is the method name and each value is an object with 'method' (HTTP verb), 'path' (endpoint), and 'handler' (handler name). Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createTodo": { "method": "POST", "path": "/todos", "handler": "createTodoHandler" },\n  "getTodos": { "method": "GET", "path": "/todos", "handler": "getTodosHandler" }\n}`,
     handlers: `Generate AWS Lambda handler functions in Node.js for a Todo app using DynamoDB. Return a single JSON object. Each key should be the handler name (e.g., "createTodoHandler", "getTodosHandler", "updateTodoHandler", "deleteTodoHandler"), and each value should be the complete handler code as a string. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createTodoHandler": "// code here as a string",\n  "getTodosHandler": "// code here as a string",\n  "updateTodoHandler": "// code here as a string",\n  "deleteTodoHandler": "// code here as a string"\n}`
   });
+
+  const minWidth = 400;
+  const maxWidth = 1100;
 
   const handleTabPrompt = async (tab: string) => {
     setLoading(true);
@@ -197,24 +200,15 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
 
   const startResize = (e: React.MouseEvent) => {
     isResizing.current = true;
-    if (currentPlacement === 'right') {
     document.body.style.cursor = 'ew-resize';
-    } else {
-      document.body.style.cursor = 'ns-resize';
-    }
     e.preventDefault();
   };
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!isResizing.current) return;
-      if (currentPlacement === 'right') {
       const newWidth = window.innerWidth - e.clientX;
       setWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
-      } else {
-        const newHeight = window.innerHeight - e.clientY;
-        setHeight(Math.max(minHeight, Math.min(maxHeight, newHeight)));
-      }
     };
     const onMouseUp = () => {
       isResizing.current = false;
@@ -226,7 +220,7 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [currentPlacement]);
+  }, []);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -257,16 +251,14 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
     <>
       {/* Floating Action Button */}
       <button
-        className={`fixed z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl w-12 h-12 flex items-center justify-center text-3xl transition-all duration-300 border-2 border-white ${currentPlacement === 'right' ? 'bottom-8 right-8' : 'right-8 bottom-8'}`}
+        className={`fixed z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl w-12 h-12 flex items-center justify-center text-3xl transition-all duration-300 border-2 border-white bottom-8 right-8`}
         style={{ boxShadow: '0 8px 32px 0 rgba(0,80,180,0.18)' }}
         onClick={() => setOpen(true)}
         aria-label="Open LLM Terminal"
       >
         <Sparkles size={28} className="drop-shadow-lg" />
       </button>
-
-      {/* Sliding Drawer */}
-      {currentPlacement === 'right' ? (
+      {/* Right-side Drawer Only */}
       <div
         className={`fixed top-0 right-0 h-full z-50 transition-transform duration-500 ${open ? 'translate-x-0' : 'translate-x-full'} rounded-l-2xl border-l border-blue-100 shadow-2xl bg-white`}
         style={{
@@ -285,177 +277,159 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-4 bg-white border-b-2 border-blue-500 rounded-t-lg">
             <span className="text-lg font-bold text-blue-700 tracking-wide">BRMH LLM Terminal</span>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">Placement:</span>
-                  <button
-                    className={`px-2 py-1 rounded-l border border-gray-300 text-xs ${(currentPlacement as 'right' | 'bottom') === 'right' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-white text-gray-700'}`}
-                    onClick={() => setCurrentPlacement('right')}
-                    style={{ borderRight: 'none' }}
-                  >
-                    Right
-                  </button>
-                  <button
-                    className={`px-2 py-1 rounded-r border border-gray-300 text-xs ${(currentPlacement as 'right' | 'bottom') === 'bottom' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-white text-gray-700'}`}
-                    onClick={() => setCurrentPlacement('bottom')}
-                  >
-                    Bottom
-                  </button>
-                </div>
             <button
-                  className="text-gray-400 hover:text-blue-500 text-2xl transition ml-2"
+              className="text-gray-400 hover:text-blue-500 text-2xl transition ml-2"
               onClick={() => setOpen(false)}
               aria-label="Close Terminal"
             >
               &times;
             </button>
-              </div>
+          </div>
+          {/* Tab bar */}
+          <div className="border-b border-blue-200 bg-white px-4">
+            <div className="flex gap-2 pt-2">
+              {tabList.map(tab => (
+                <button
+                  key={tab.key}
+                  className={`px-4 py-1 rounded-t-md text-sm font-medium transition-colors duration-150 ${activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                  onClick={() => setActiveTab(tab.key as any)}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-            {/* Tab bar */}
-            <div className="border-b border-blue-200 bg-white px-4">
-              <div className="flex gap-2 pt-2">
-                {tabList.map(tab => (
-                  <button
-                    key={tab.key}
-                    className={`px-4 py-1 rounded-t-md text-sm font-medium transition-colors duration-150 ${activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
-                    onClick={() => setActiveTab(tab.key as any)}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
           </div>
           {/* Terminal Body */}
           <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-              {activeTab === 'methods' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Methods Prompt</label>
-                    <div className="relative">
+            {activeTab === 'methods' && (
+              <div className="p-4">
+                <div className="mb-4">
+                  <label className="text-gray-700 mb-2 text-sm font-semibold">Methods Prompt</label>
+                  <div className="relative">
               <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
                 rows={3}
-                        value={prompts.methods}
-                        onChange={e => setPrompts(prev => ({ ...prev, methods: e.target.value }))}
-                        placeholder="Describe the API methods you want to create..."
+                      value={prompts.methods}
+                      onChange={e => setPrompts(prev => ({ ...prev, methods: e.target.value }))}
+                      placeholder="Describe the API methods you want to create..."
               />
               <button
                 className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('methods')}
-                        disabled={loading}
+                      onClick={() => handleTabPrompt('methods')}
+                      disabled={loading}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
             </div>
-                  </div>
-                  {Object.keys(methods).length > 0 ? (
-                    <div className="space-y-4">
-                      {Object.entries(methods).map(([name, method]: [string, any]) => (
-                        <div key={name} className="bg-white rounded-lg shadow p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <h3 className="font-bold text-blue-700">{name}</h3>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
-                              {method.method}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600 mb-2">
-                            <span className="font-mono bg-gray-100 px-2 py-1 rounded">{method.path}</span>
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Handler: <span className="font-mono">{method.handler}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-gray-400 text-lg">No methods available</div>
-                  )}
                 </div>
-              )}
-              {activeTab === 'handlers' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Handlers Prompt</label>
-                    <div className="relative">
-                      <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                        rows={3}
-                        value={prompts.handlers}
-                        onChange={e => setPrompts(prev => ({ ...prev, handlers: e.target.value }))}
-                        placeholder="Describe the handlers you want to create..."
-                      />
+                {Object.keys(methods).length > 0 ? (
+                  <div className="space-y-4">
+                    {Object.entries(methods).map(([name, method]: [string, any]) => (
+                      <div key={name} className="bg-white rounded-lg shadow p-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <h3 className="font-bold text-blue-700">{name}</h3>
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                            {method.method}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">
+                          <span className="font-mono bg-gray-100 px-2 py-1 rounded">{method.path}</span>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Handler: <span className="font-mono">{method.handler}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-gray-400 text-lg">No methods available</div>
+                )}
+              </div>
+            )}
+            {activeTab === 'handlers' && (
+              <div className="p-4">
+                <div className="mb-4">
+                  <label className="text-gray-700 mb-2 text-sm font-semibold">Handlers Prompt</label>
+                  <div className="relative">
+                    <textarea
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
+                      rows={3}
+                      value={prompts.handlers}
+                      onChange={e => setPrompts(prev => ({ ...prev, handlers: e.target.value }))}
+                      placeholder="Describe the handlers you want to create..."
+                    />
                   <button
-                        className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('handlers')}
-                        disabled={loading}
+                      className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                      onClick={() => handleTabPrompt('handlers')}
+                      disabled={loading}
                   >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </button>
-                </div>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    className={`px-2 py-1 rounded text-xs border ${showRawHandlers ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-700 border-gray-300'}`}
+                    onClick={() => setShowRawHandlers(v => !v)}
+                  >
+                    {showRawHandlers ? 'Hide Raw Output' : 'Show Raw Output'}
+                  </button>
+                </div>
+                {showRawHandlers && rawHandlersOutput && (
+                  <pre className="bg-gray-100 rounded p-3 mb-4 text-xs overflow-x-auto max-h-60 border border-blue-100 shadow-inner">
+                    {rawHandlersOutput}
+                  </pre>
+                )}
+                {Object.keys(handlers).length > 0 ? (
+                  <div className="space-y-4">
+                    {Object.entries(handlers).map(([name, code]: [string, any]) => (
+                      <div key={name} className="bg-white rounded-lg shadow">
+                        <div className="border-b border-gray-200 p-4">
+                          <h3 className="font-bold text-blue-700">{name}</h3>
+                        </div>
+                        <pre className="p-4 bg-gray-50 text-sm overflow-x-auto">
+                          <code>{code}</code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-gray-400 text-lg">No handlers available</div>
+                )}
+              </div>
+            )}
+            {activeTab === 'schema' && (
+              <div className="p-4">
+                <div className="mb-4">
+                  <label className="text-gray-700 mb-2 text-sm font-semibold">Schema Prompt</label>
+                  <div className="relative">
+                    <textarea
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
+                      rows={3}
+                      value={prompts.schema}
+                      onChange={e => setPrompts(prev => ({ ...prev, schema: e.target.value }))}
+                      placeholder="Describe the schemas you want to create..."
+                    />
                     <button
-                      className={`px-2 py-1 rounded text-xs border ${showRawHandlers ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-700 border-gray-300'}`}
-                      onClick={() => setShowRawHandlers(v => !v)}
+                      className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                      onClick={() => handleTabPrompt('schema')}
+                      disabled={loading}
                     >
-                      {showRawHandlers ? 'Hide Raw Output' : 'Show Raw Output'}
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
                     </button>
                   </div>
-                  {showRawHandlers && rawHandlersOutput && (
-                    <pre className="bg-gray-100 rounded p-3 mb-4 text-xs overflow-x-auto max-h-60 border border-blue-100 shadow-inner">
-                      {rawHandlersOutput}
-                    </pre>
-                  )}
-                  {Object.keys(handlers).length > 0 ? (
-                    <div className="space-y-4">
-                      {Object.entries(handlers).map(([name, code]: [string, any]) => (
-                        <div key={name} className="bg-white rounded-lg shadow">
-                          <div className="border-b border-gray-200 p-4">
-                            <h3 className="font-bold text-blue-700">{name}</h3>
-                          </div>
-                          <pre className="p-4 bg-gray-50 text-sm overflow-x-auto">
-                            <code>{code}</code>
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-gray-400 text-lg">No handlers available</div>
-                  )}
                 </div>
-              )}
-              {activeTab === 'schema' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Schema Prompt</label>
-                    <div className="relative">
-                      <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                        rows={3}
-                        value={prompts.schema}
-                        onChange={e => setPrompts(prev => ({ ...prev, schema: e.target.value }))}
-                        placeholder="Describe the schemas you want to create..."
-                      />
-                      <button
-                        className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('schema')}
-                        disabled={loading}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  {/* Existing schema content */}
-                  {generatedSchemas.length > 0 && (
+                {/* Existing schema content */}
+                {generatedSchemas.length > 0 && (
                   <div className="mt-8">
-                      <div className="font-semibold text-gray-700 mb-2">Generated Schemas</div>
-                      {generatedSchemas.map((item, idx) => (
+                    <div className="font-semibold text-gray-700 mb-2">Generated Schemas</div>
+                    {generatedSchemas.map((item, idx) => (
                       <div
                         key={idx}
                         className="bg-white shadow rounded p-3 my-2 cursor-pointer hover:bg-blue-50 border border-blue-100"
@@ -467,7 +441,7 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
                             className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded shadow"
                             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                               e.stopPropagation();
-                                openSchemaModal(item.name, item.schema);
+                              openSchemaModal(item.name, item.schema);
                             }}
                           >
                             Create
@@ -478,237 +452,14 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, placement = 
                     ))}
                   </div>
                 )}
-                </div>
+              </div>
             )}
-              {activeTab !== 'schema' && (
-                <div className="p-8 text-center text-gray-400 text-lg">Coming soon...</div>
-              )}
-            </div>
+            {activeTab !== 'schema' && (
+              <div className="p-8 text-center text-gray-400 text-lg">Coming soon...</div>
+            )}
           </div>
         </div>
-      ) : (
-        <div
-          className={`fixed bottom-0 z-50 transition-transform duration-500 ${open ? 'translate-y-0' : 'translate-y-full'} rounded-t-2xl border-t border-blue-100 shadow-2xl bg-white`}
-          style={{
-            left: '336px',
-            width: 'calc(100vw - 336px)',
-            height: `${height}px`,
-            background: '#fafaff',
-            boxShadow: '0 -8px 32px 0 rgba(0,80,180,0.15), 0 2px 8px 0 rgba(0,0,0,0.04)'
-          }}
-        >
-          {/* Draggable Resizer */}
-          <div
-            className="absolute top-0 left-0 w-full h-2 cursor-ns-resize z-50 bg-transparent hover:bg-blue-100 transition"
-            onMouseDown={startResize}
-            style={{ borderTop: '2px solid #3b82f6', borderTopLeftRadius: '1rem', borderTopRightRadius: '1rem' }}
-          />
-          <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 bg-white border-b-2 border-blue-500 rounded-t-lg">
-              <span className="text-lg font-bold text-blue-700 tracking-wide">BRMH LLM Terminal</span>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">Placement:</span>
-                  <button
-                    className={`px-2 py-1 rounded-l border border-gray-300 text-xs ${(currentPlacement as 'right' | 'bottom') === 'right' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-white text-gray-700'}`}
-                    onClick={() => setCurrentPlacement('right')}
-                    style={{ borderRight: 'none' }}
-                  >
-                    Right
-                  </button>
-                  <button
-                    className={`px-2 py-1 rounded-r border border-gray-300 text-xs ${(currentPlacement as 'right' | 'bottom') === 'bottom' ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-white text-gray-700'}`}
-                    onClick={() => setCurrentPlacement('bottom')}
-                  >
-                    Bottom
-                  </button>
-                </div>
-                <button
-                  className="text-gray-400 hover:text-blue-500 text-2xl transition ml-2"
-                  onClick={() => setOpen(false)}
-                  aria-label="Close Terminal"
-                >
-                  &times;
-                </button>
-              </div>
-            </div>
-            {/* Tab bar */}
-            <div className="border-b border-blue-200 bg-white px-4">
-              <div className="flex gap-2 pt-2">
-                {tabList.map(tab => (
-                  <button
-                    key={tab.key}
-                    className={`px-4 py-1 rounded-t-md text-sm font-medium transition-colors duration-150 ${activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
-                    onClick={() => setActiveTab(tab.key as any)}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Terminal Body */}
-            <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-              {activeTab === 'methods' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Methods Prompt</label>
-                    <div className="relative">
-                      <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                        rows={3}
-                        value={prompts.methods}
-                        onChange={e => setPrompts(prev => ({ ...prev, methods: e.target.value }))}
-                        placeholder="Describe the API methods you want to create..."
-                      />
-                      <button
-                        className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('methods')}
-                        disabled={loading}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  {Object.keys(methods).length > 0 ? (
-                    <div className="space-y-4">
-                      {Object.entries(methods).map(([name, method]: [string, any]) => (
-                        <div key={name} className="bg-white rounded-lg shadow p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <h3 className="font-bold text-blue-700">{name}</h3>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
-                              {method.method}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600 mb-2">
-                            <span className="font-mono bg-gray-100 px-2 py-1 rounded">{method.path}</span>
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Handler: <span className="font-mono">{method.handler}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-gray-400 text-lg">No methods available</div>
-                  )}
-                </div>
-              )}
-              {activeTab === 'handlers' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Handlers Prompt</label>
-                    <div className="relative">
-                      <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                        rows={3}
-                        value={prompts.handlers}
-                        onChange={e => setPrompts(prev => ({ ...prev, handlers: e.target.value }))}
-                        placeholder="Describe the handlers you want to create..."
-                      />
-                      <button
-                        className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('handlers')}
-                        disabled={loading}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <button
-                      className={`px-2 py-1 rounded text-xs border ${showRawHandlers ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-700 border-gray-300'}`}
-                      onClick={() => setShowRawHandlers(v => !v)}
-                    >
-                      {showRawHandlers ? 'Hide Raw Output' : 'Show Raw Output'}
-                    </button>
-                  </div>
-                  {showRawHandlers && rawHandlersOutput && (
-                    <pre className="bg-gray-100 rounded p-3 mb-4 text-xs overflow-x-auto max-h-60 border border-blue-100 shadow-inner">
-                      {rawHandlersOutput}
-                    </pre>
-                  )}
-                  {Object.keys(handlers).length > 0 ? (
-                    <div className="space-y-4">
-                      {Object.entries(handlers).map(([name, code]: [string, any]) => (
-                        <div key={name} className="bg-white rounded-lg shadow">
-                          <div className="border-b border-gray-200 p-4">
-                            <h3 className="font-bold text-blue-700">{name}</h3>
-                          </div>
-                          <pre className="p-4 bg-gray-50 text-sm overflow-x-auto">
-                            <code>{code}</code>
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-gray-400 text-lg">No handlers available</div>
-                  )}
-                </div>
-              )}
-              {activeTab === 'schema' && (
-                <div className="p-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Schema Prompt</label>
-                    <div className="relative">
-                      <textarea
-                        className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                        rows={3}
-                        value={prompts.schema}
-                        onChange={e => setPrompts(prev => ({ ...prev, schema: e.target.value }))}
-                        placeholder="Describe the schemas you want to create..."
-                      />
-                      <button
-                        className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                        onClick={() => handleTabPrompt('schema')}
-                        disabled={loading}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  {/* Existing schema content */}
-                  {generatedSchemas.length > 0 && (
-              <div className="mt-8">
-                      <div className="font-semibold text-gray-700 mb-2">Generated Schemas</div>
-                {generatedSchemas.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white shadow rounded p-3 my-2 cursor-pointer hover:bg-blue-50 border border-blue-100"
-                    onClick={() => setSelectedSchema(item)}
-                  >
-                          <div className="flex justify-between items-center">
-                    <div className="font-bold text-blue-700">{item.name}</div>
-                            <button
-                              className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded shadow"
-                              onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                e.stopPropagation();
-                                openSchemaModal(item.name, item.schema);
-                              }}
-                            >
-                              Create
-                            </button>
-                          </div>
-                          <pre className="text-xs text-gray-500 truncate">{JSON.stringify(item.schema, null, 2)}</pre>
-                  </div>
-                ))}
-              </div>
-                  )}
-                </div>
-              )}
-              {activeTab !== 'schema' && (
-                <div className="p-8 text-center text-gray-400 text-lg">Coming soon...</div>
-              )}
-              </div>
-          </div>
-        </div>
-      )}
+      </div>
       {/* Overlay when open */}
       {open && (
         <div

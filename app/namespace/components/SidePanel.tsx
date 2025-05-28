@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw, LayoutDashboard } from 'lucide-react';
 import NamespacePreviewModal from '../Modals/NamespacePreviewModal';
 
 interface SidePanelProps {
@@ -8,7 +8,7 @@ interface SidePanelProps {
   schemas: any[];
   methods: Record<string, any[]>; // namespaceId -> methods
   onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
-  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage', parentData?: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods', parentData?: any) => void;
   fetchNamespaceDetails: (namespaceId: string) => void;
   selectedSchemaId?: string | null;
   onEditSchema?: (schema: any) => void;
@@ -87,19 +87,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
   return (
     <aside className="w-64 bg-white border-r border-gray-100 h-full flex flex-col shadow-sm p-0 overflow-y-auto select-none">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Database className="text-blue-600" size={20} />
-          <span className="font-bold text-lg text-gray-900">BRMH Namespace</span>
-        </div>
-        {/* <button
-          onClick={() => onAdd('namespace')}
-          className="ml-2 p-1 rounded hover:bg-blue-50"
-          title="Add Namespace"
-          type="button"
-        >
-          <Plus size={16} className="text-blue-500" />
-        </button> */}
+      <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
+        <LayoutDashboard className="text-blue-600" size={20} />
+        <span className="font-bold text-lg text-gray-900">Dashboard</span>
       </div>
       {/* Search/Filter/Add Row */}
       <div className="flex items-center px-3 py-2 space-x-2 border-b border-gray-100 bg-white">
@@ -164,8 +154,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                     <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                         <button
-                          className="flex items-center gap-1 group"
-                          onClick={() => toggleSection(ns['namespace-id'], 'accounts')}
+                          className="flex items-center gap-1 group hover:underline cursor-pointer"
+                          onClick={() => {
+                            toggleSection(ns['namespace-id'], 'accounts');
+                            onAdd('allAccounts', ns);
+                          }}
                           type="button"
                         >
                           {expandedSection[ns['namespace-id']]?.accounts ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -188,7 +181,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                           {(accounts[ns['namespace-id']] || []).map(acc => (
                             <button
                               key={acc['namespace-account-id']}
-                              onClick={() => onItemClick('account', acc)}
+                              onClick={() => onAdd('accountPage', { account: acc, namespace: ns })}
                               className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
                             >
                               <User size={16} className="text-blue-500" />
@@ -211,8 +204,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                     <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                         <button
-                          className="flex items-center gap-1 group"
-                          onClick={() => toggleSection(ns['namespace-id'], 'methods')}
+                          className="flex items-center gap-1 group hover:underline cursor-pointer"
+                          onClick={() => {
+                            toggleSection(ns['namespace-id'], 'methods');
+                            onAdd('allMethods', ns);
+                          }}
                           type="button"
                         >
                           {expandedSection[ns['namespace-id']]?.methods ? <ChevronDown size={14} /> : <ChevronRight size={14} />}

@@ -44,11 +44,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:50
 
 interface SchemaCreatePageProps {
   onSchemaNameChange?: (name: string) => void;
+  namespace?: any;
+  initialSchema?: any;
+  initialSchemaName?: string;
+  onSuccess?: () => void;
 }
 
-export default function SchemaCreatePage({ onSchemaNameChange }: SchemaCreatePageProps) {
-  const [schemaName, setSchemaName] = useState('');
-  const [fields, setFields] = useState<any[]>([]);
+export default function SchemaCreatePage({ onSchemaNameChange, namespace, initialSchema, initialSchemaName, onSuccess }: SchemaCreatePageProps) {
+  const [schemaName, setSchemaName] = useState(initialSchemaName || '');
+  const [fields, setFields] = useState<any[]>(initialSchema ? schemaToFields(initialSchema) : []);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
   const [rawFields, setRawFields] = useState('');
   const [rawFieldsError, setRawFieldsError] = useState<string | null>(null);
@@ -82,9 +86,46 @@ export default function SchemaCreatePage({ onSchemaNameChange }: SchemaCreatePag
 
   // When raw fields are converted, update both fields and JSON
   const handleConvertRawFields = () => {
-    // Dummy: just clear error for now and set fields to []
+    try {
+      const lines = rawFields.split('\n').map(l => l.trim()).filter(Boolean);
+      const parsedFields = lines.map(line => {
+        // Remove comments
+        const commentIndex = line.indexOf('//');
+        if (commentIndex !== -1) line = line.slice(0, commentIndex).trim();
+        // Match: name: type;
+        const match = line.match(/^([a-zA-Z0-9_]+):\s*(.+?);?$/);
+        if (!match) throw new Error(`Invalid field: ${line}`);
+        const name = match[1];
+        let typeStr = match[2].replace(/;$/, '').trim(); // Remove trailing semicolon
+        let type: string = typeStr;
+        let allowNull = false;
+        let enumValues: string[] | undefined = undefined;
+        // Handle nullable types
+        if (typeStr.includes('null')) {
+          allowNull = true;
+          typeStr = typeStr.replace(/\|?\s*null\s*\|?/g, '').trim();
+        }
+        // Handle enums (values in quotes separated by |)
+        const enumMatch = typeStr.split('|').map(v => v.trim()).filter(Boolean);
+        if (enumMatch.length > 1 && enumMatch.every(v => /^".*"$/.test(v))) {
+          enumValues = enumMatch.map(v => v.replace(/"/g, ''));
+          type = 'enum';
+        } else {
+          // Map JS/TS types to JSON Schema types
+          if (typeStr === 'Date') type = 'string';
+          else if (typeStr === 'number' || typeStr === 'int' || typeStr === 'float') type = 'number';
+          else if (typeStr === 'boolean') type = 'boolean';
+          else if (typeStr === 'string') type = 'string';
+          else type = typeStr;
+        }
+        return { name, type, allowNull, enumValues };
+      });
+      setFields(parsedFields);
+      console.log('Parsed fields:', parsedFields);
     setRawFieldsError(null);
-    setFields([]); // You can implement a real parser if needed
+    } catch (err: any) {
+      setRawFieldsError(err.message || 'Failed to parse fields.');
+    }
   };
 
   const handleValidate = async () => {
@@ -129,7 +170,7 @@ export default function SchemaCreatePage({ onSchemaNameChange }: SchemaCreatePag
         methodId: null,
         schemaName: schemaName.trim(),
         methodName: null,
-        namespaceId: null,
+        namespaceId: namespace?.['namespace-id'] || null,
         schemaType: null,
         schema: parsedSchema
       };
@@ -152,6 +193,7 @@ export default function SchemaCreatePage({ onSchemaNameChange }: SchemaCreatePag
       setFields([]);
       setRawFields('');
       setCollapsedNodes(new Set());
+      if (onSuccess) onSuccess();
     } catch (error: any) {
       setSaveMessage(error.message || 'Failed to save schema.');
     } finally {
@@ -162,6 +204,11 @@ export default function SchemaCreatePage({ onSchemaNameChange }: SchemaCreatePag
   return (
     <div className="h-full w-full flex flex-col bg-white">
       <div className="px-8 mb-6 mt-4">
+        {namespace && (
+          <div className="mb-2 text-sm text-gray-600">
+            <span className="font-semibold">Namespace:</span> {namespace['namespace-name']}
+          </div>
+        )}
         <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="schema-name">
           Schema Name <span className="text-red-500">*</span>
         </label>

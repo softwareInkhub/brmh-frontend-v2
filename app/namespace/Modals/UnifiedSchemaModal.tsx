@@ -6,6 +6,8 @@ interface UnifiedSchemaModalProps {
   setShowModal: (show: boolean) => void;
   onSuccess: () => void;
   editingSchema?: any;
+  namespace?: any;
+  method?: any;
 }
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
@@ -49,7 +51,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess, editingSchema }) => {
+const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess, editingSchema, namespace, method }) => {
   const [schemaName, setSchemaName] = useState('');
   const [fields, setFields] = useState<any[]>([]);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -137,16 +139,14 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
     setIsSaving(true);
     setSaveMessage('');
     try {
-      console.log('Creating schema:', { schemaName: schemaName.trim(), schema: parsedSchema });
       const payload = {
-        methodId: null,
+        methodId: method?.['namespace-method-id'] || null,
         schemaName: schemaName.trim(),
-        methodName: null,
-        namespaceId: null,
+        methodName: method?.['namespace-method-name'] || null,
+        namespaceId: namespace?.['namespace-id'] || null,
         schemaType: null,
         schema: parsedSchema
       };
-      console.log('Schema creation payload:', payload);
       const response = await fetch(`${API_BASE_URL}/unified/schema`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,7 +154,6 @@ const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setS
       });
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Schema creation error:', errorText);
         throw new Error(errorText || 'Failed to save schema');
       }
       setSaveMessage('Schema created successfully!');
