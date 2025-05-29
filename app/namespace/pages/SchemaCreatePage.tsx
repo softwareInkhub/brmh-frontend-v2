@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NestedFieldsEditor, schemaToFields } from '../components/SchemaService';
+import RecursiveDataForm from '../../components/common/RecursiveDataForm';
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
   const properties: Record<string, any> = {};
@@ -65,6 +66,40 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'edit' | 'createData'>('edit');
+  const [createDataResult, setCreateDataResult] = useState<string | null>(null);
+  const [formData, setFormData] = useState<any>({});
+  const [tableName, setTableName] = useState<string | null>(null);
+  const [showTableModal, setShowTableModal] = useState(false);
+  const [newTableName, setNewTableName] = useState(schemaName || '');
+  const [tableCreateError, setTableCreateError] = useState<string | null>(null);
+  const [creatingTable, setCreatingTable] = useState(false);
+  const [schemaObj, setSchemaObj] = useState<any>(null);
+  const [showRawFields, setShowRawFields] = useState(false);
+
+  React.useEffect(() => {
+    if (!schemaName) return;
+    const fetchSchemaObj = async () => {
+      try {
+        const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
+        if (resSchemas.ok) {
+          const schemas = await resSchemas.json();
+          const found = schemas.find((s: any) => s.schemaName === schemaName);
+          if (found) {
+            setSchemaObj(found);
+            setTableName(found.tableName || null);
+          } else {
+            setSchemaObj(null);
+            setTableName(null);
+          }
+        }
+      } catch {
+        setSchemaObj(null);
+        setTableName(null);
+      }
+    };
+    fetchSchemaObj();
+  }, [schemaName]);
 
   // Bidirectional sync: update JSON from fields
   React.useEffect(() => {
@@ -203,110 +238,275 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
-      <div className="px-8 mb-6 mt-4">
-        {namespace && (
-          <div className="mb-2 text-sm text-gray-600">
-            <span className="font-semibold">Namespace:</span> {namespace['namespace-name']}
-          </div>
-        )}
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="schema-name">
-          Schema Name <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="schema-name"
-          className="border border-gray-300 p-2 rounded-lg text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
-          placeholder="Schema Name (required)"
-          value={schemaName}
-          onChange={e => {
-            setSchemaName(e.target.value);
-            if (onSchemaNameChange) onSchemaNameChange(e.target.value);
-          }}
-          required
-        />
+      {/* Tab Switcher */}
+      <div className="flex gap-2 mb-4 px-8">
+        <button
+          onClick={() => setActiveTab('edit')}
+          className={`px-4 py-2 rounded-t-lg ${activeTab === 'edit' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
+        >
+          Edit Schema
+        </button>
+        <button
+          onClick={() => setActiveTab('createData')}
+          className={`px-4 py-2 rounded-t-lg ${activeTab === 'createData' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
+          title={!tableName ? "Create and activate a table for this schema first" : ""}
+        >
+          Create Data
+        </button>
       </div>
-      <div className="flex-1 flex flex-row min-h-0 min-w-0 w-full px-8 pb-8">
-        {/* Form Editor */}
-        <div className="flex-1 min-h-0 min-w-0 pr-6">
-          <div className="font-semibold mb-2 text-base text-gray-800">Form Editor</div>
-          <div className="border-b border-gray-200 mb-2" />
-          <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
-        </div>
-        {/* JSON Tree (raw fields + JSON schema) */}
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-          <div className="mb-2">
-            <div className="font-semibold text-xs text-gray-700 mb-1">Paste TypeScript/Raw Fields</div>
-            <textarea
-              className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
-              placeholder={`Paste fields like:\nid: string;\nemail: string;\nrole: \"ADMIN\" | \"USER\";\ndepartmentId: string | null;`}
-              value={rawFields}
-              onChange={e => setRawFields(e.target.value)}
-              rows={4}
-              style={{ minHeight: 60 }}
-            />
-            <button
-              className="mt-1 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold border border-blue-600 transition"
-              onClick={handleConvertRawFields}
-              type="button"
-            >
-              Convert to JSON Schema
-            </button>
-            {rawFieldsError && (
-              <div className="text-xs text-red-600 mt-1">{rawFieldsError}</div>
+
+      {/* Edit Schema Tab */}
+      {activeTab === 'edit' && (
+        <>
+          <div className="px-8 mb-6 mt-4">
+            {namespace && (
+              <div className="mb-2 text-sm text-gray-600">
+                <span className="font-semibold">Namespace:</span> {namespace['namespace-name']}
+              </div>
             )}
-          </div>
-          <div className="flex items-center mb-2 gap-2">
-            <div className="font-semibold flex-1 text-base text-gray-800">JSON Schema Editor</div>
-            <button
-              className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs border border-gray-300 font-semibold transition"
-              onClick={() => {
-                try {
-                  setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
-                } catch {}
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="schema-name">
+              Schema Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="schema-name"
+              className="border border-gray-300 p-2 rounded-lg text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
+              placeholder="Schema Name (required)"
+              value={schemaName}
+              onChange={e => {
+                setSchemaName(e.target.value);
+                if (onSchemaNameChange) onSchemaNameChange(e.target.value);
               }}
-              title="Format JSON"
+              required
+            />
+          </div>
+          <div className="flex-1 flex flex-row min-h-0 min-w-0 w-full px-8 pb-8">
+            {/* Form Editor */}
+            <div className="flex-1 min-h-0 min-w-0 pr-6">
+              <div className="font-semibold mb-2 text-base text-gray-800">Form Editor</div>
+              <div className="border-b border-gray-200 mb-2" />
+              <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
+            </div>
+            {/* JSON Tree (raw fields + JSON schema) */}
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+              <div className="mb-2">
+                <div
+                  className="font-semibold text-xs text-gray-700 mb-1 flex items-center cursor-pointer select-none"
+                  onClick={() => setShowRawFields(v => !v)}
+                  style={{ userSelect: 'none' }}
+                >
+                  <span>Paste TypeScript/Raw Fields</span>
+                  <span className="ml-2 text-blue-500">{showRawFields ? '▲' : '▼'}</span>
+                </div>
+                {showRawFields && (
+                  <>
+                    <textarea
+                      className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+                      placeholder={`Paste fields like:\nid: string;\nemail: string;\nrole: \"ADMIN\" | \"USER\";\ndepartmentId: string | null;`}
+                      value={rawFields}
+                      onChange={e => setRawFields(e.target.value)}
+                      rows={4}
+                      style={{ minHeight: 60 }}
+                    />
+                    <button
+                      className="mt-1 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold border border-blue-600 transition"
+                      onClick={handleConvertRawFields}
+                      type="button"
+                    >
+                      Convert to JSON Schema
+                    </button>
+                    {rawFieldsError && (
+                      <div className="text-xs text-red-600 mt-1">{rawFieldsError}</div>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="flex items-center mb-2 gap-2">
+                <div className="font-semibold flex-1 text-base text-gray-800">JSON Schema Editor</div>
+                <button
+                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs border border-gray-300 font-semibold transition"
+                  onClick={() => {
+                    try {
+                      setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
+                    } catch {}
+                  }}
+                  title="Format JSON"
+                >
+                  Format
+                </button>
+              </div>
+              <div className="text-xs text-gray-500 mb-1">
+                <span>OpenAPI 3.0+ spec: Use type: <code>[\"string\", \"null\"]</code> for nullable fields, and <code>required: [\"field1\", ...]</code> for required fields.</span>
+              </div>
+              <textarea
+                className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition flex-1 min-h-0"
+                value={jsonSchema}
+                onChange={handleJsonChange}
+                rows={16}
+                style={{ minHeight: 180, maxHeight: '100%', overflow: 'auto' }}
+              />
+              {jsonError && <div className="text-xs text-red-600 mt-1">{jsonError}</div>}
+            </div>
+          </div>
+          {/* Sticky action buttons */}
+          <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-4 bg-white pt-2 pb-1 border-t border-gray-100 px-8">
+            <button
+              className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
+              onClick={handleValidate}
             >
-              Format
+              Validate
+            </button>
+            <button
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
+              disabled={isSaving}
+              onClick={handleSave}
+            >
+              {isSaving ? 'Saving...' : 'Create'}
             </button>
           </div>
-          <div className="text-xs text-gray-500 mb-1">
-            <span>OpenAPI 3.0+ spec: Use type: <code>[\"string\", \"null\"]</code> for nullable fields, and <code>required: [\"field1\", ...]</code> for required fields.</span>
-          </div>
-          <textarea
-            className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition flex-1 min-h-0"
-            value={jsonSchema}
-            onChange={handleJsonChange}
-            rows={16}
-            style={{ minHeight: 180, maxHeight: '100%', overflow: 'auto' }}
-          />
-          {jsonError && <div className="text-xs text-red-600 mt-1">{jsonError}</div>}
-        </div>
-      </div>
-      {/* Sticky action buttons */}
-      <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-4 bg-white pt-2 pb-1 border-t border-gray-100 px-8">
-        <button
-          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-          onClick={handleValidate}
-        >
-          Validate
-        </button>
-        <button
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
-          disabled={isSaving}
-          onClick={handleSave}
-        >
-          {isSaving ? 'Saving...' : 'Create'}
-        </button>
-      </div>
-      {validationResult && (
-        <div className="mt-2 px-8">
-          <div className="font-semibold text-sm">Validation Result:</div>
-          <pre className="bg-gray-100 p-2 rounded text-xs">
-            {JSON.stringify(validationResult, null, 2)}
-          </pre>
-        </div>
+          {validationResult && (
+            <div className="mt-2 px-8">
+              <div className="font-semibold text-sm">Validation Result:</div>
+              <pre className="bg-gray-100 p-2 rounded text-xs">
+                {JSON.stringify(validationResult, null, 2)}
+              </pre>
+            </div>
+          )}
+          {saveMessage && (
+            <div className="mt-2 text-blue-700 font-semibold text-sm px-8">{saveMessage}</div>
+          )}
+        </>
       )}
-      {saveMessage && (
-        <div className="mt-2 text-blue-700 font-semibold text-sm px-8">{saveMessage}</div>
+
+      {/* Create Data Tab */}
+      {activeTab === 'createData' && (
+        <div className="px-8 pb-8">
+          <h2 className="text-lg font-semibold mb-4">Create Data for Table: <span className="text-blue-600">{schemaObj?.tableName || '(no table)'}</span></h2>
+          {!schemaObj?.tableName ? (
+            <div>
+              <div className="text-red-600 mb-2">No table exists for this schema. Please create a table first.</div>
+              <button
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                onClick={() => {
+                  setShowTableModal(true);
+                  setNewTableName(schemaName || '');
+                  setTableCreateError(null);
+                }}
+              >
+                Create Table
+              </button>
+              {/* Modal */}
+              {showTableModal && (
+                <div className="fixed inset-0 flex items-center justify-center z-50">
+                  <div className="absolute inset-0 bg-black bg-opacity-30 backdrop-blur-sm"></div>
+                  <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md relative z-10 border border-gray-200">
+                    <button
+                      className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowTableModal(false)}
+                    >✕</button>
+                    <h2 className="text-lg font-semibold mb-4">Create Table for Schema</h2>
+                    <label className="block text-sm font-medium mb-2">Table Name</label>
+                    <input
+                      className="border border-gray-300 p-2 rounded-lg w-full mb-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400"
+                      value={newTableName}
+                      onChange={e => setNewTableName(e.target.value)}
+                      placeholder="Enter table name"
+                      autoFocus
+                    />
+                    {tableCreateError && <div className="text-xs text-red-600 mb-2">{tableCreateError}</div>}
+                    <button
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
+                      disabled={creatingTable}
+                      onClick={async () => {
+                        setCreatingTable(true);
+                        setTableCreateError(null);
+                        try {
+                          // Fetch schemaId by schemaName
+                          const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
+                          if (!resSchemas.ok) throw new Error('Failed to fetch schemas');
+                          const schemas = await resSchemas.json();
+                          const found = schemas.find((s: any) => s.schemaName === schemaName);
+                          if (!found) throw new Error('Schema not found');
+                          const schemaId = found.id || found.schemaId;
+                          if (!schemaId) throw new Error('Schema ID not found');
+                          // Create table
+                          const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              schemaId,
+                              tableName: newTableName.trim(),
+                            }),
+                          });
+                          if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.error || 'Failed to create table');
+                          }
+                          setShowTableModal(false);
+                          // Refetch the schema to get the updated tableName and meta id
+                          try {
+                            const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
+                            if (resSchemas.ok) {
+                              const schemas = await resSchemas.json();
+                              const found = schemas.find((s: any) => s.schemaName === schemaName);
+                              if (found && found.tableName) {
+                                setSchemaObj(found);
+                                setTableName(found.tableName);
+                              }
+                              // Optionally, store meta id or other fields if needed
+                              // if (found && found['brmh-schema-table-data-id']) { /* setMetaId(found['brmh-schema-table-data-id']); */ }
+                            }
+                          } catch {}
+                        } catch (err: any) {
+                          setTableCreateError(err.message);
+                        } finally {
+                          setCreatingTable(false);
+                        }
+                      }}
+                    >
+                      {creatingTable ? 'Creating...' : 'Create Table'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <form
+              onSubmit={async e => {
+                e.preventDefault();
+                setCreateDataResult(null);
+                try {
+                  const res = await fetch(`${API_BASE_URL}/unified/schema/table/${schemaObj.tableName}/items`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item: formData }),
+                  });
+                  if (!res.ok) throw new Error('Failed to create data');
+                  setCreateDataResult('Data created successfully!');
+                  setFormData({});
+                } catch (err: any) {
+                  setCreateDataResult('Error: ' + err.message);
+                }
+              }}
+              className="max-w-xl"
+            >
+              <RecursiveDataForm
+                schema={JSON.parse(jsonSchema)}
+                value={formData}
+                onChange={setFormData}
+                required={JSON.parse(jsonSchema).required}
+              />
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-4"
+              >
+                Create
+              </button>
+              {createDataResult && (
+                <div className="mt-2 text-sm">{createDataResult}</div>
+              )}
+            </form>
+          )}
+        </div>
       )}
     </div>
   );

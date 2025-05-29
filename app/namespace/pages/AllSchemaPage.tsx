@@ -1,8 +1,82 @@
 import React, { useEffect, useState } from 'react';
+import { Eye, Edit, Trash2 } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-export default function AllSchemaPage({ namespace }: { namespace?: any }) {
+const schemaApis = [
+  {
+    method: 'POST',
+    path: '/schema/generate',
+    description: 'Generate schema from data',
+    details: 'Request body: { ... }\nResponse: { ... }'
+  },
+  {
+    method: 'POST',
+    path: '/schema/validate',
+    description: 'Validate schema',
+    details: 'Request body: { ... }\nResponse: { ... }'
+  },
+  {
+    method: 'POST',
+    path: '/schema',
+    description: 'Save schema',
+    details: 'Request body: { ... }\nResponse: { ... }'
+  },
+  {
+    method: 'GET',
+    path: '/schema',
+    description: 'List all schemas',
+    details: 'Response: [ { ... }, ... ]'
+  },
+  {
+    method: 'GET',
+    path: '/schema/{schemaId}',
+    description: 'Get schema by ID',
+    details: 'Response: { ... }'
+  },
+];
+
+function ApiAccordion() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  return (
+    <div className="mt-8 border-t pt-4">
+      <h3 className="text-xl font-bold mb-4 text-gray-900">Schema API Endpoints</h3>
+      <div>
+        {schemaApis.map((api, idx) => (
+          <div key={`${api.method}-${api.path}`} className="mb-2 border rounded bg-white shadow-sm">
+            <button
+              className="w-full flex items-center justify-between px-4 py-2 focus:outline-none"
+              onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
+            >
+              <span className="flex items-center gap-3">
+                <span
+                  className={`px-2 py-1 rounded text-xs font-bold ${
+                    api.method === 'GET'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-green-500 text-white'
+                  }`}
+                >
+                  {api.method}
+                </span>
+                <span className="font-mono text-sm text-gray-800">{api.path}</span>
+                <span className="ml-2 text-gray-500 text-xs">{api.description}</span>
+              </span>
+              <span className="text-gray-400">{openIndex === idx ? '▲' : '▼'}</span>
+            </button>
+            {openIndex === idx && (
+              <div className="px-6 py-3 bg-gray-50 border-t text-sm text-gray-700 whitespace-pre-wrap">
+                {api.details}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?: any, onViewSchema?: (schema: any, ns?: any) => void }) {
   const [schemas, setSchemas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,22 +108,32 @@ export default function AllSchemaPage({ namespace }: { namespace?: any }) {
       {loading ? (
         <div>Loading...</div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-4">
           {schemas.map(schema => (
-            <div key={schema.id} className="border border-gray-200 rounded-md p-2 flex flex-col gap-1 min-w-0 bg-white" style={{ width: '260px', margin: '0' }}>
-              <div className="flex items-center gap-2">
+            <div
+              key={schema.id}
+              className="border border-gray-200 rounded-xl p-4 flex flex-col gap-2 min-w-0 bg-white shadow-sm hover:shadow-md transition-shadow"
+              style={{ width: '260px', margin: '0' }}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-base font-semibold text-gray-900 truncate">{schema.schemaName}</span>
-              </div>
-              <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{schema.namespaceName || schema.namespaceId}</span></div>
-              <div className="flex gap-2 mt-1">
-                <button className="text-blue-600 hover:text-blue-800 p-1" title="View">View</button>
-                <button className="text-green-600 hover:text-green-800 p-1" title="Edit">Edit</button>
-                <button className="text-red-600 hover:text-red-800 p-1" title="Delete">Delete</button>
+                <div className="flex gap-2">
+                  <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => onViewSchema && onViewSchema(schema, namespace)}>
+                    <Eye size={18} />
+                  </button>
+                  <button className="text-green-600 hover:text-green-800 p-1" title="Edit">
+                    <Edit size={18} />
+                  </button>
+                  <button className="text-red-600 hover:text-red-800 p-1" title="Delete">
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+      <ApiAccordion />
     </div>
   );
 } 

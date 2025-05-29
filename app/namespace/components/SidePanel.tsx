@@ -256,31 +256,31 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                       )}
                     </div>
                     {/* Schemas */}
-                    <div>
+      <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
-                        <button
+          <button
                           className="flex items-center gap-1 group hover:underline cursor-pointer"
                           onClick={() => {
                             toggleSection(ns['namespace-id'], 'schemas');
                             onAdd('allSchemas', ns);
                           }}
-                          type="button"
-                        >
+            type="button"
+          >
                           {expandedSection[ns['namespace-id']]?.schemas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Schemas</span>
                           <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
                             <Plus size={14} className="text-purple-400" />
                           </span>
-                        </button>
-                        <button
+          </button>
+          <button
                           onClick={() => onAdd('schema', ns)}
-                          className="p-1 rounded hover:bg-purple-50"
-                          title="Add Schema"
-                          type="button"
-                        >
-                          <Plus size={14} className="text-purple-500" />
-                        </button>
-                      </div>
+            className="p-1 rounded hover:bg-purple-50"
+            title="Add Schema"
+            type="button"
+          >
+            <Plus size={14} className="text-purple-500" />
+          </button>
+        </div>
                       {expandedSection[ns['namespace-id']]?.schemas && (
                         <div className="space-y-1">
                           {(
@@ -290,23 +290,23 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                                 ns.schemaIds.includes(s.id)
                             ) || []
                           ).map(schema => (
-                            <button
+                      <button
                               key={schema.id}
                               onClick={() => onItemClick('schema', schema)}
                               className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
-                            >
+                      >
                               <FileCode size={16} className="text-purple-500" />
                               <span>{schema.schemaName}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                      </button>
+                ))}
           </div>
+        )}
+      </div>
+        </div>
+        )}
+      </div>
+            ))}
+        </div>
         )}
       </div>
       <NamespacePreviewModal
@@ -326,7 +326,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
   );
 };
 
-export default SidePanel;
+export default SidePanel; 
 
 /* Custom scrollbar styles for 3px width */
 <style jsx global>{`

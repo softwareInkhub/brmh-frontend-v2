@@ -2,12 +2,33 @@ import { useSidePanel } from "./SidePanelContext";
 import { ChevronLeft, ChevronRight } from "react-feather";
 import { useState } from "react";
 
+const SIDEBAR_WIDTH = 80;
+const SIDEPANEL_WIDTH = 256;
+
 export default function FooterWithCollapseButton() {
   const { isCollapsed, toggle } = useSidePanel();
   const [bottomTerminalOpen, setBottomTerminalOpen] = useState(false);
 
   return (
     <>
+      {bottomTerminalOpen && (
+        <div
+          className="fixed bg-[#0e1621] text-white z-40 shadow-lg flex items-center justify-center transition-all"
+          style={{
+            left: isCollapsed ? SIDEBAR_WIDTH : SIDEBAR_WIDTH + SIDEPANEL_WIDTH,
+            width: isCollapsed
+              ? `calc(100% - ${SIDEBAR_WIDTH}px)`
+              : `calc(100% - ${SIDEBAR_WIDTH + SIDEPANEL_WIDTH}px)`,
+            bottom: 0,
+            minHeight: 180,
+            height: 220,
+            margin: 0,
+            padding: 0,
+          }}
+        >
+          <div className="w-full text-center py-8 text-gray-300">Bottom Terminal (empty)</div>
+        </div>
+      )}
       <footer className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 shadow-lg z-50 flex justify-between items-center px-8 py-1 gap-1">
         {/* Collapse/Expand Button */}
         <button
@@ -29,12 +50,6 @@ export default function FooterWithCollapseButton() {
           </button>
         </div>
       </footer>
-      {bottomTerminalOpen && (
-        <div className="fixed left-0 bottom-12 w-full bg-gray-900 text-white z-50 shadow-lg flex items-center justify-center" style={{ minHeight: 180 }}>
-          {/* Empty terminal placeholder */}
-          <div className="w-full text-center py-8 text-gray-300">Bottom Terminal (empty)</div>
-        </div>
-      )}
     </>
   );
 } 

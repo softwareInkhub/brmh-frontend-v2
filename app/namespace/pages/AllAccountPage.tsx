@@ -3,7 +3,7 @@ import { Eye, Pencil, Trash2, User } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
-function AllAccountPage({ namespace }: { namespace?: any }) {
+function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewAccount?: (account: any, ns?: any) => void }) {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +52,7 @@ function AllAccountPage({ namespace }: { namespace?: any }) {
               </div>
               <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
               <div className="flex gap-2 mt-1">
-                <button className="text-blue-600 hover:text-blue-800 p-1" title="View"><Eye size={16} /></button>
+                <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => onViewAccount && onViewAccount(acc, acc.namespace)}><Eye size={16} /></button>
                 <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
                 <button className="text-red-600 hover:text-red-800 p-1" title="Delete"><Trash2 size={16} /></button>
               </div>

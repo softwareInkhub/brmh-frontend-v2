@@ -25,6 +25,7 @@ import AccountPage from './pages/AccountPage';
 import MethodPage from './pages/MethodPage';
 import AllSchemaPage from './pages/AllSchemaPage';
 import SingleNamespacePage from './pages/SingleNamespacePage';
+import MethodTestPage from './pages/MethodTestPage';
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -132,6 +133,9 @@ export default function NamespacePage() {
 
   // Add state for single namespace tabs
   const [singleNamespaceTabs, setSingleNamespaceTabs] = useState<{ key: string; namespace: any }[]>([]);
+
+  // Add state for method test tabs
+  const [methodTestTabs, setMethodTestTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -770,7 +774,20 @@ export default function NamespacePage() {
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <AllAccountPage namespace={namespace} />
+                <AllAccountPage
+                  namespace={namespace}
+                  onViewAccount={(account, ns) => {
+                    const tabKey = `accountPage-${account['namespace-account-id']}`;
+                    if (!tabs.find(tab => tab.key === tabKey)) {
+                      setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}` }]);
+                    }
+                    setActiveTab(tabKey);
+                    setAccountPageTabs(prev => {
+                      if (prev.find(t => t.key === tabKey)) return prev;
+                      return [...prev, { key: tabKey, account, namespace: ns }];
+                    });
+                  }}
+                />
               </div>
             ))}
             {allMethodsTabs.map(({ key, namespace }) => (
@@ -778,7 +795,20 @@ export default function NamespacePage() {
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <AllMethodPage namespace={namespace} />
+                <AllMethodPage
+                  namespace={namespace}
+                  onViewMethod={(method, ns) => {
+                    const tabKey = `methodPage-${method['namespace-method-id']}`;
+                    if (!tabs.find(tab => tab.key === tabKey)) {
+                      setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}` }]);
+                    }
+                    setActiveTab(tabKey);
+                    setMethodPageTabs(prev => {
+                      if (prev.find(t => t.key === tabKey)) return prev;
+                      return [...prev, { key: tabKey, method, namespace: ns }];
+                    });
+                  }}
+                />
               </div>
             ))}
             {accountPageTabs.map(({ key, account, namespace }) => (
@@ -794,7 +824,29 @@ export default function NamespacePage() {
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <MethodPage method={method} namespace={namespace} />
+                <MethodPage
+                  method={method}
+                  namespace={namespace}
+                  onTest={(m, ns) => {
+                    const testKey = `methodTest-${m['namespace-method-id']}`;
+                    if (!tabs.find(tab => tab.key === testKey)) {
+                      setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}` }]);
+                    }
+                    setActiveTab(testKey);
+                    setMethodTestTabs(prev => {
+                      if (prev.find(t => t.key === testKey)) return prev;
+                      return [...prev, { key: testKey, method: m, namespace: ns }];
+                    });
+                  }}
+                />
+              </div>
+            ))}
+            {methodTestTabs.map(({ key, method, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <MethodTestPage method={method} namespace={namespace} />
               </div>
             ))}
             {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace }) => (
@@ -819,7 +871,20 @@ export default function NamespacePage() {
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <AllSchemaPage namespace={namespace} />
+                <AllSchemaPage
+                  namespace={namespace}
+                  onViewSchema={(schema, ns) => {
+                    const tabKey = `schema-preview-${schema.id}`;
+                    if (!tabs.find(tab => tab.key === tabKey)) {
+                      setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview' }]);
+                    }
+                    setActiveTab(tabKey);
+                    setSchemaPageTabs(prev => {
+                      if (prev.find(t => t.key === tabKey)) return prev;
+                      return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns }];
+                    });
+                  }}
+                />
               </div>
             ))}
             {singleNamespaceTabs.map(({ key, namespace }) => (
