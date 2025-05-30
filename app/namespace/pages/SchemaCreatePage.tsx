@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NestedFieldsEditor, schemaToFields } from '../components/SchemaService';
 import RecursiveDataForm from '../../components/common/RecursiveDataForm';
+import Ajv from 'ajv';
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
   const properties: Record<string, any> = {};
@@ -76,6 +77,8 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [creatingTable, setCreatingTable] = useState(false);
   const [schemaObj, setSchemaObj] = useState<any>(null);
   const [showRawFields, setShowRawFields] = useState(false);
+  const [formErrors, setFormErrors] = useState<string | null>(null);
+  const isEditing = !!initialSchema || !!initialSchemaName;
 
   React.useEffect(() => {
     if (!schemaName) return;
@@ -209,26 +212,46 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         schemaType: null,
         schema: parsedSchema
       };
-      const response = await fetch(`${API_BASE_URL}/unified/schema`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to save schema');
-      }
-      setSaveMessage('Schema created successfully!');
-      setSchemaName('');
-      setJsonSchema(`{
+
+      // If we're editing and have a schema object with an ID, update it
+      if (isEditing && schemaObj && (schemaObj.id || schemaObj.schemaId)) {
+        const schemaId = schemaObj.id || schemaObj.schemaId;
+        console.log('Updating schema with ID:', schemaId);
+        const response = await fetch(`${API_BASE_URL}/unified/schema/${schemaId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Failed to update schema');
+        }
+        setSaveMessage('Schema updated successfully!');
+        if (onSuccess) onSuccess();
+      } else {
+        // Create new schema
+        console.log('Creating new schema');
+        const response = await fetch(`${API_BASE_URL}/unified/schema`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Failed to save schema');
+        }
+        setSaveMessage('Schema created successfully!');
+        setSchemaName('');
+        setJsonSchema(`{
   "type": "object",
   "properties": {},
   "required": []
 }`);
-      setFields([]);
-      setRawFields('');
-      setCollapsedNodes(new Set());
-      if (onSuccess) onSuccess();
+        setFields([]);
+        setRawFields('');
+        setCollapsedNodes(new Set());
+        if (onSuccess) onSuccess();
+      }
     } catch (error: any) {
       setSaveMessage(error.message || 'Failed to save schema.');
     } finally {
@@ -246,13 +269,15 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         >
           Edit Schema
         </button>
-        <button
-          onClick={() => setActiveTab('createData')}
-          className={`px-4 py-2 rounded-t-lg ${activeTab === 'createData' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
-          title={!tableName ? "Create and activate a table for this schema first" : ""}
-        >
-          Create Data
-        </button>
+        {isEditing && (
+          <button
+            onClick={() => setActiveTab('createData')}
+            className={`px-4 py-2 rounded-t-lg ${activeTab === 'createData' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
+            title={!tableName ? "Create and activate a table for this schema first" : ""}
+          >
+            Create Data
+          </button>
+        )}
       </div>
 
       {/* Edit Schema Tab */}
@@ -360,7 +385,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               disabled={isSaving}
               onClick={handleSave}
             >
-              {isSaving ? 'Saving...' : 'Create'}
+              {isEditing ? (isSaving ? 'Saving...' : 'Edit') : (isSaving ? 'Saving...' : 'Create')}
             </button>
           </div>
           {validationResult && (
@@ -378,7 +403,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       )}
 
       {/* Create Data Tab */}
-      {activeTab === 'createData' && (
+      {isEditing && activeTab === 'createData' && (
         <div className="px-8 pb-8">
           <h2 className="text-lg font-semibold mb-4">Create Data for Table: <span className="text-blue-600">{schemaObj?.tableName || '(no table)'}</span></h2>
           {!schemaObj?.tableName ? (
@@ -474,6 +499,29 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               onSubmit={async e => {
                 e.preventDefault();
                 setCreateDataResult(null);
+                setFormErrors(null);
+
+                // Type validation using ajv
+                const ajv = new Ajv();
+                let schema;
+                try {
+                  schema = JSON.parse(jsonSchema);
+                } catch {
+                  setFormErrors('Invalid JSON schema.');
+                  return;
+                }
+                const validate = ajv.compile(schema);
+                const valid = validate(formData);
+
+                if (!valid) {
+                  setFormErrors(
+                    validate.errors?.map(err => `${err.instancePath || err.schemaPath} ${err.message}`).join(', ') ||
+                    'Validation failed'
+                  );
+                  return;
+                }
+
+                // If valid, proceed to submit
                 try {
                   const res = await fetch(`${API_BASE_URL}/unified/schema/table/${schemaObj.tableName}/items`, {
                     method: 'POST',
@@ -501,6 +549,9 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               >
                 Create
               </button>
+              {formErrors && (
+                <div className="mt-2 text-sm text-red-600">{formErrors}</div>
+              )}
               {createDataResult && (
                 <div className="mt-2 text-sm">{createDataResult}</div>
               )}
