@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Send, RefreshCw, Copy, Download, Check, ChevronDown, Save } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import SchemaCreatePage from './SchemaCreatePage';
 import { schemaToFields, NestedFieldsEditor } from '@/app/namespace/components/SchemaService';
 
 interface AccountHeader {
@@ -268,11 +267,13 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   };
 
   const handleSaveSchema = () => {
-    setSchemaName(methodName);
-    setJsonSchema(JSON.stringify(schemaTabValue, null, 2));
-    setFields(schemaToFields(schemaTabValue));
-    if (onOpenSchemaTab && schemaTabValue) {
-      onOpenSchemaTab(schemaTabValue, methodName);
+    if (!response || !response.body) {
+      toast.error('No response data available to save as schema');
+      return;
+    }
+    const generatedSchema = generateResponseSchema(response.body);
+    if (onOpenSchemaTab) {
+      onOpenSchemaTab(generatedSchema, methodName);
     }
   };
 

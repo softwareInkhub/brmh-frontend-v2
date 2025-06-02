@@ -80,25 +80,48 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
   const [schemas, setSchemas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchSchemas = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/unified/schema`);
+      const data = await res.json();
+      setSchemas(Array.isArray(data)
+        ? (namespace
+            ? data.filter((s: any) => s.namespaceId === namespace['namespace-id'])
+            : data)
+        : []);
+    } catch (err) {
+      setSchemas([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchSchemas = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/unified/schema`);
-        const data = await res.json();
-        setSchemas(Array.isArray(data)
-          ? (namespace
-              ? data.filter((s: any) => s.namespaceId === namespace['namespace-id'])
-              : data)
-          : []);
-      } catch (err) {
-        setSchemas([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchSchemas();
   }, [namespace]);
+
+  const handleDelete = async (schemaId: string) => {
+    if (!confirm('Are you sure you want to delete this schema?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/unified/schema/${schemaId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        // Remove the deleted schema from the state
+        setSchemas(prevSchemas => prevSchemas.filter(s => s.id !== schemaId));
+      } else {
+        const error = await res.json();
+        alert(`Failed to delete schema: ${error.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      alert('Failed to delete schema. Please try again.');
+    }
+  };
 
   return (
     <div className="p-8 w-full">
@@ -124,7 +147,11 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
                   <button className="text-green-600 hover:text-green-800 p-1" title="Edit">
                     <Edit size={18} />
                   </button>
-                  <button className="text-red-600 hover:text-red-800 p-1" title="Delete">
+                  <button 
+                    className="text-red-600 hover:text-red-800 p-1" 
+                    title="Delete"
+                    onClick={() => handleDelete(schema.id)}
+                  >
                     <Trash2 size={18} />
                   </button>
                 </div>

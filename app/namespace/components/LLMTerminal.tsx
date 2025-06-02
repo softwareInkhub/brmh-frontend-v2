@@ -45,11 +45,16 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
   ];
   const [activeTab, setActiveTab] = useState<'methods' | 'handlers' | 'schema' | 'test'>('schema');
 
+  const [projectName, setProjectName] = useState('');
+  const [desiredHandlers, setDesiredHandlers] = useState('');
+  const [desiredEntities, setDesiredEntities] = useState('');
+  const [desiredOperations, setDesiredOperations] = useState('');
+
   const [prompts, setPrompts] = useState({
-    namespace: `Generate a namespace for a Todo app. Return a JSON object with 'name' and 'description' fields. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "name": "TodoApp",\n  "description": "A namespace for managing todo lists and items."\n}`,
-    schema: `Generate JSON schemas for the entities in a Todo app (e.g., Todo, User). Return a JSON object where each key is the entity name and each value is the JSON schema for that entity. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "Todo": { "type": "object", "properties": { "id": {"type": "string"}, "title": {"type": "string"} }, "required": ["id", "title"] },\n  "User": { "type": "object", "properties": { "id": {"type": "string"}, "username": {"type": "string"} }, "required": ["id", "username"] }\n}`,
-    methods: `Generate API method definitions for CRUD operations on todos in a Todo app. Return a JSON object where each key is the method name and each value is an object with 'method' (HTTP verb), 'path' (endpoint), and 'handler' (handler name). Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createTodo": { "method": "POST", "path": "/todos", "handler": "createTodoHandler" },\n  "getTodos": { "method": "GET", "path": "/todos", "handler": "getTodosHandler" }\n}`,
-    handlers: `Generate AWS Lambda handler functions in Node.js for a Todo app using DynamoDB. Return a single JSON object. Each key should be the handler name (e.g., "createTodoHandler", "getTodosHandler", "updateTodoHandler", "deleteTodoHandler"), and each value should be the complete handler code as a string. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createTodoHandler": "// code here as a string",\n  "getTodosHandler": "// code here as a string",\n  "updateTodoHandler": "// code here as a string",\n  "deleteTodoHandler": "// code here as a string"\n}`
+    namespace: `Generate a namespace for the project: "{projectName}". Return a JSON object with 'name' and 'description' fields. The name should be concise and descriptive, and the description should clearly explain the purpose of the namespace. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "name": "ECommerceApp",\n  "description": "A namespace for managing an e-commerce platform with products, orders, and user management."\n}`,
+    schema: `Generate JSON schemas for the entities in the project: "{projectName}". The entities should include: {entities}. Return a JSON object where each key is the entity name and each value is the JSON schema for that entity. Include appropriate data types, validation rules, and relationships between entities. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "Product": { "type": "object", "properties": { "id": {"type": "string"}, "name": {"type": "string"}, "price": {"type": "number"}, "stock": {"type": "integer"} }, "required": ["id", "name", "price"] },\n  "Order": { "type": "object", "properties": { "id": {"type": "string"}, "userId": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}} }, "required": ["id", "userId", "items"] }\n}`,
+    methods: `Generate API method definitions for CRUD operations on the entities in the project: "{projectName}". The operations should include: {operations}. Return a JSON object where each key is the method name and each value is an object with 'method' (HTTP verb), 'path' (endpoint), and 'handler' (handler name). Include appropriate HTTP methods (GET, POST, PUT, DELETE) and RESTful paths. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createProduct": { "method": "POST", "path": "/products", "handler": "createProductHandler" },\n  "getProducts": { "method": "GET", "path": "/products", "handler": "getProductsHandler" },\n  "updateProduct": { "method": "PUT", "path": "/products/:id", "handler": "updateProductHandler" },\n  "deleteProduct": { "method": "DELETE", "path": "/products/:id", "handler": "deleteProductHandler" }\n}`,
+    handlers: `Generate AWS Lambda handler functions in Node.js for the project: "{projectName}". The handlers should include: {handlers}. Return a single JSON object. Each key should be the handler name, and each value should be the complete handler code as a string. Include proper error handling, input validation, and DynamoDB operations. Do NOT include any explanation, markdown, or code fences—just the JSON object.\n\nExample:\n{\n  "createProductHandler": "// code here as a string",\n  "getProductsHandler": "// code here as a string",\n  "updateProductHandler": "// code here as a string",\n  "deleteProductHandler": "// code here as a string"\n}`
   });
 
   const minWidth = 400;
@@ -61,10 +66,25 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
     setResponse(null);
     if (tab === 'handlers') setRawHandlersOutput(null);
     try {
+      let prompt = prompts[tab as keyof typeof prompts];
+      prompt = prompt.replace('{projectName}', projectName);
+      
+      switch(tab) {
+        case 'handlers':
+          prompt = prompt.replace('{handlers}', desiredHandlers);
+          break;
+        case 'schema':
+          prompt = prompt.replace('{entities}', desiredEntities);
+          break;
+        case 'methods':
+          prompt = prompt.replace('{operations}', desiredOperations);
+          break;
+      }
+      
       const res = await fetch('http://localhost:5000/llm/generate-schema', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompts[tab as keyof typeof prompts] }),
+        body: JSON.stringify({ prompt }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -304,6 +324,26 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
             {activeTab === 'methods' && (
               <div className="p-4">
                 <div className="mb-4">
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={projectName}
+                      onChange={e => setProjectName(e.target.value)}
+                      placeholder="Enter your project name..."
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Operations</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={desiredOperations}
+                      onChange={e => setDesiredOperations(e.target.value)}
+                      placeholder="e.g., create, read, update, delete operations"
+                    />
+                  </div>
                   <label className="text-gray-700 mb-2 text-sm font-semibold">Methods Prompt</label>
                   <div className="relative">
               <textarea
@@ -351,6 +391,26 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
             {activeTab === 'handlers' && (
               <div className="p-4">
                 <div className="mb-4">
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={projectName}
+                      onChange={e => setProjectName(e.target.value)}
+                      placeholder="Enter your project name..."
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Handlers</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={desiredHandlers}
+                      onChange={e => setDesiredHandlers(e.target.value)}
+                      placeholder="e.g., create, read, update, delete handlers"
+                    />
+                  </div>
                   <label className="text-gray-700 mb-2 text-sm font-semibold">Handlers Prompt</label>
                   <div className="relative">
                     <textarea
@@ -405,6 +465,26 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
             {activeTab === 'schema' && (
               <div className="p-4">
                 <div className="mb-4">
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={projectName}
+                      onChange={e => setProjectName(e.target.value)}
+                      placeholder="Enter your project name..."
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Entities</label>
+                    <input
+                      type="text"
+                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+                      value={desiredEntities}
+                      onChange={e => setDesiredEntities(e.target.value)}
+                      placeholder="e.g., User, Product, Order"
+                    />
+                  </div>
                   <label className="text-gray-700 mb-2 text-sm font-semibold">Schema Prompt</label>
                   <div className="relative">
                     <textarea

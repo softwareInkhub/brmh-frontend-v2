@@ -126,7 +126,7 @@ export default function NamespacePage() {
   const [llmTerminalWidth, setLlmTerminalWidth] = useState(500);
 
   // Add state for schema page tabs
-  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any }[]>([]);
+  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
 
   // Add state for all schemas tabs
   const [allSchemasTabs, setAllSchemasTabs] = useState<{ key: string; namespace?: any }[]>([]);
@@ -622,6 +622,19 @@ export default function NamespacePage() {
     );
   }
 
+  // Add this handler function:
+  const handleOpenSchemaTabFromTest = (schema: any, schemaName: any, namespace: any, methodId?: string) => {
+    const key = `schema-create-from-test-${schemaName}`;
+    if (!tabs.find(tab => tab.key === key)) {
+      setTabs([...tabs, { key, label: `Create Schema: ${schemaName}` }]);
+    }
+    setActiveTab(key);
+    setSchemaPageTabs(prev => {
+      if (prev.find(t => t.key === key)) return prev;
+      return [...prev, { key, schema, mode: 'create', initialSchemaName: schemaName, namespace, methodId }];
+    });
+  };
+
   return (
     <div className="bg-[#f7f8fa] min-h-screen">
       <div className="flex h-screen ml-20">
@@ -846,18 +859,24 @@ export default function NamespacePage() {
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <MethodTestPage method={method} namespace={namespace} />
+                <MethodTestPage
+                  method={method}
+                  namespace={namespace}
+                  onOpenSchemaTab={(schema, schemaName) => handleOpenSchemaTabFromTest(schema, schemaName, namespace, method['namespace-method-id'])}
+                />
               </div>
             ))}
-            {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace }) => (
+            {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace, methodId }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <SchemaCreatePage
-                  initialSchema={mode === 'preview' ? schema : undefined}
+                  initialSchema={schema}
                   initialSchemaName={initialSchemaName}
                   namespace={namespace}
+                  mode={mode === 'create' ? 'create' : 'edit'}
+                  methodId={methodId}
                   onSuccess={() => {
                     if (mode === 'create' && namespace?.['namespace-id']) {
                       fetchNamespaceDetails(namespace['namespace-id']);
