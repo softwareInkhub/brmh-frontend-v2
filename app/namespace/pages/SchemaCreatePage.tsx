@@ -223,11 +223,12 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         schema: parsedSchema
       };
 
+      let schemaId;
       // If we're editing and have a schema object with an ID, update it
       if (isEditing && schemaObj && (schemaObj.id || schemaObj.schemaId)) {
-        const schemaId = schemaObj.id || schemaObj.schemaId;
-        console.log('Updating schema with ID:', schemaId);
-        const response = await fetch(`${API_BASE_URL}/unified/schema/${schemaId}`, {
+        const existingSchemaId = schemaObj.id || schemaObj.schemaId;
+        console.log('Updating schema with ID:', existingSchemaId);
+        const response = await fetch(`${API_BASE_URL}/unified/schema/${existingSchemaId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -236,36 +237,195 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
           const errorText = await response.text();
           throw new Error(errorText || 'Failed to update schema');
         }
+        const updatedSchema = await response.json();
+        schemaId = updatedSchema.id || updatedSchema.schemaId;
         setSaveMessage('Schema updated successfully!');
-        if (onSuccess) onSuccess();
       } else {
         // Create new schema
         console.log('Creating new schema');
-      const response = await fetch(`${API_BASE_URL}/unified/schema`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to save schema');
+        const response = await fetch(`${API_BASE_URL}/unified/schema`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Failed to save schema');
+        }
+        const newSchema = await response.json();
+        schemaId = newSchema.id || newSchema.schemaId;
+        setSaveMessage('Schema created successfully!');
       }
-      setSaveMessage('Schema created successfully!');
-      setSchemaName('');
-      setJsonSchema(`{
+
+      // Update method with schema ID if methodId exists
+      if (methodId && schemaId) {
+        try {
+          const methodRes = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`);
+          const methodData = await methodRes.json();
+          const methodDataToUpdate = methodData.data ? methodData.data : methodData;
+          
+          const requestBody = {
+            "namespace-method-name": methodDataToUpdate["namespace-method-name"],
+            "namespace-method-type": methodDataToUpdate["namespace-method-type"],
+            "namespace-method-url-override": methodDataToUpdate["namespace-method-url-override"] || '',
+            "namespace-method-queryParams": methodDataToUpdate["namespace-method-queryParams"] || [],
+            "namespace-method-header": methodDataToUpdate["namespace-method-header"] || [],
+            "save-data": !!methodDataToUpdate["save-data"],
+            "isInitialized": !!methodDataToUpdate["isInitialized"],
+            "tags": methodDataToUpdate["tags"] || [],
+            "namespace-method-tableName": methodDataToUpdate["namespace-method-tableName"] || '',
+            "tableName": methodDataToUpdate["tableName"] || '',
+            "schemaId": schemaId,
+            "namespace-id": methodDataToUpdate["namespace-id"]
+          };
+
+          const updateResponse = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (!updateResponse.ok) {
+            console.error('Failed to update method with schema ID');
+          }
+        } catch (err) {
+          console.error('Error updating method with schema ID:', err);
+        }
+      }
+
+      if (!isEditing) {
+        setSchemaName('');
+        setJsonSchema(`{
   "type": "object",
   "properties": {},
   "required": []
 }`);
-      setFields([]);
-      setRawFields('');
-      setCollapsedNodes(new Set());
-        if (onSuccess) onSuccess();
+        setFields([]);
+        setRawFields('');
+        setCollapsedNodes(new Set());
       }
+      if (onSuccess) onSuccess();
     } catch (error: any) {
       setSaveMessage(error.message || 'Failed to save schema.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCreateTable = async () => {
+    console.log('=== STARTING TABLE CREATION ===');
+    setCreatingTable(true);
+    setTableCreateError(null);
+    try {
+      console.log('1. Fetching schemas...');
+      // 1. Fetch schemaId by schemaName
+      const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
+      if (!resSchemas.ok) throw new Error('Failed to fetch schemas');
+      const schemas = await resSchemas.json();
+      console.log('Schemas fetched:', schemas);
+      
+      const found = schemas.find((s: any) => s.schemaName === schemaName);
+      if (!found) throw new Error('Schema not found');
+      const schemaId = found.id || found.schemaId;
+      if (!schemaId) throw new Error('Schema ID not found');
+      console.log('Found schema:', found);
+
+      // Get methodId from schema data if not provided in props
+      const methodIdToUse = methodId || found.methodId;
+      console.log('Using methodId:', methodIdToUse);
+
+      console.log('2. Creating table...');
+      // 2. Create table
+      const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schemaId,
+          tableName: newTableName.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to create table');
+      }
+      console.log('Table created successfully');
+
+      // 3. Update method with table name if methodId exists
+      if (methodIdToUse) {
+        console.log('3. Updating method with table name. MethodId:', methodIdToUse);
+        try {
+          const methodRes = await fetch(`${API_BASE_URL}/unified/methods/${methodIdToUse}`);
+          console.log('Method fetch response status:', methodRes.status);
+          const methodData = await methodRes.json();
+          console.log('Current method data:', methodData);
+          
+          const methodDataToUpdate = methodData.data ? methodData.data : methodData;
+          console.log('Method data to update:', methodDataToUpdate);
+          
+          // Save updated method
+          console.log('Sending PUT request to update method...');
+          const requestBody = {
+            "namespace-method-name": methodDataToUpdate["namespace-method-name"],
+            "namespace-method-type": methodDataToUpdate["namespace-method-type"],
+            "namespace-method-url-override": methodDataToUpdate["namespace-method-url-override"] || '',
+            "namespace-method-queryParams": methodDataToUpdate["namespace-method-queryParams"] || [],
+            "namespace-method-header": methodDataToUpdate["namespace-method-header"] || [],
+            "save-data": !!methodDataToUpdate["save-data"],
+            "isInitialized": !!methodDataToUpdate["isInitialized"],
+            "tags": methodDataToUpdate["tags"] || [],
+            "namespace-method-tableName": newTableName.trim(),
+            "tableName": newTableName.trim(),
+            "schemaId": methodDataToUpdate["schemaId"],
+            "namespace-id": methodDataToUpdate["namespace-id"]
+          };
+          console.log('Request body:', JSON.stringify(requestBody, null, 2));
+          
+          const updateResponse = await fetch(`${API_BASE_URL}/unified/methods/${methodIdToUse}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          });
+          console.log('Method update response status:', updateResponse.status);
+          
+          if (!updateResponse.ok) {
+            const errorText = await updateResponse.text();
+            console.error('Failed to update method:', errorText);
+            throw new Error(errorText || 'Failed to update method');
+          }
+          
+          const updatedMethodData = await updateResponse.json();
+          console.log('Successfully updated method data:', updatedMethodData);
+        } catch (err) {
+          console.error('Failed to update method with table name:', err);
+          // Don't throw error here, as table was created successfully
+        }
+      } else {
+        console.log('No methodId available, skipping method update');
+      }
+
+      setShowTableModal(false);
+      console.log('4. Refetching schema to get updated tableName...');
+      // Refetch the schema to get the updated tableName
+      try {
+        const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
+        if (resSchemas.ok) {
+          const schemas = await resSchemas.json();
+          const found = schemas.find((s: any) => s.schemaName === schemaName);
+          if (found && found.tableName) {
+            console.log('Found updated schema with table name:', found);
+            setSchemaObj(found);
+            setTableName(found.tableName);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to refetch schema:', err);
+      }
+      console.log('=== TABLE CREATION COMPLETED ===');
+    } catch (err: any) {
+      console.error('=== TABLE CREATION FAILED ===', err);
+      setTableCreateError(err.message);
+    } finally {
+      setCreatingTable(false);
     }
   };
 
@@ -473,72 +633,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                     <button
                       className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
                       disabled={creatingTable}
-                      onClick={async () => {
-                        setCreatingTable(true);
-                        setTableCreateError(null);
-                        try {
-                          // Fetch schemaId by schemaName
-                          const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
-                          if (!resSchemas.ok) throw new Error('Failed to fetch schemas');
-                          const schemas = await resSchemas.json();
-                          const found = schemas.find((s: any) => s.schemaName === schemaName);
-                          if (!found) throw new Error('Schema not found');
-                          const schemaId = found.id || found.schemaId;
-                          if (!schemaId) throw new Error('Schema ID not found');
-                          // Create table
-                          const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              schemaId,
-                              tableName: newTableName.trim(),
-                            }),
-                          });
-                          if (!res.ok) {
-                            const err = await res.json();
-                            throw new Error(err.error || 'Failed to create table');
-                          }
-                          setShowTableModal(false);
-                          // Refetch the schema to get the updated tableName and meta id
-                          try {
-                            const resSchemas = await fetch(`${API_BASE_URL}/unified/schema`);
-                            if (resSchemas.ok) {
-                              const schemas = await resSchemas.json();
-                              const found = schemas.find((s: any) => s.schemaName === schemaName);
-                              if (found && found.tableName) {
-                                setSchemaObj(found);
-                                setTableName(found.tableName);
-                                if (methodId && found && found.tableName) {
-                                  try {
-                                    const methodRes = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`);
-                                    const methodData = await methodRes.json();
-                                    const updatedMethod = {
-                                      ...methodData,
-                                      data: {
-                                        ...methodData.data,
-                                        'namespace-method-tableName': found.tableName,
-                                      },
-                                    };
-                                    await fetch(`${API_BASE_URL}/unified/methods/${methodId}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify(updatedMethod),
-                                    });
-                                  } catch (err) {
-                                    console.error('Failed to update method with table name', err);
-                                  }
-                                }
-                              }
-                              // Optionally, store meta id or other fields if needed
-                              // if (found && found['brmh-schema-table-data-id']) { /* setMetaId(found['brmh-schema-table-data-id']); */ }
-                            }
-                          } catch {}
-                        } catch (err: any) {
-                          setTableCreateError(err.message);
-                        } finally {
-                          setCreatingTable(false);
-                        }
-                      }}
+                      onClick={handleCreateTable}
                     >
                       {creatingTable ? 'Creating...' : 'Create Table'}
                     </button>

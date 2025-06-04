@@ -4,7 +4,7 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 
 type Method = { id: string; name: string };
 type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void };
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const methods = [
   { id: 'm1', name: 'GET /users' },
   { id: 'm2', name: 'POST /login' },
@@ -51,11 +51,26 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
     e.preventDefault();
     setSaveMsg('');
     try {
-      // PATCH/PUT request to update method
-      const res = await fetch(`/api/namespace/method`, {
+      // Use the correct endpoint and body structure
+      const methodId = editMethod["namespace-method-id"];
+      const requestBody = {
+        "namespace-method-name": editMethod["namespace-method-name"],
+        "namespace-method-type": editMethod["namespace-method-type"],
+        "namespace-method-url-override": editMethod["namespace-method-url-override"] || '',
+        "namespace-method-queryParams": editMethod["namespace-method-queryParams"] || [],
+        "namespace-method-header": editMethod["namespace-method-header"] || [],
+        "save-data": !!editMethod["save-data"],
+        "isInitialized": !!editMethod["isInitialized"],
+        "tags": editMethod["tags"] || [],
+        "namespace-method-tableName": editMethod["namespace-method-tableName"] || '',
+        "tableName": editMethod["tableName"] || '',
+        "schemaId": editMethod["schemaId"] || '',
+        "namespace-id": editMethod["namespace-id"] || ''
+      };
+      const res = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editMethod),
+        body: JSON.stringify(requestBody),
       });
       if (res.ok) {
         setSaveMsg('Method updated successfully!');
@@ -139,6 +154,10 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                 <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Link2 size={16} className="text-pink-400" /> URL Override</div>
                 <div className="text-base text-gray-700">{editMethod["namespace-method-url-override"] || <span className="italic text-gray-400">None</span>}</div>
               </div>
+              <div>
+                <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Sliders size={16} className="text-blue-400" /> Table Name</div>
+                <div className="text-base text-gray-700">{editMethod["namespace-method-tableName"] || editMethod["tableName"] || <span className="italic text-gray-400">null</span>}</div>
+              </div>
               <div className="sm:col-span-2">
                 <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Tag size={16} className="text-yellow-400" /> Tags</div>
                 <div className="flex flex-wrap gap-2">
@@ -164,8 +183,11 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                 </div>
               </div>
               <div className="sm:col-span-2 flex items-center gap-2 mt-2">
-                <CheckCircle size={18} className={editMethod['save-data'] ? 'text-green-500' : 'text-gray-300'} />
-                <span className={editMethod['save-data'] ? 'text-green-700 font-semibold' : 'text-gray-400'}>Save Data</span>
+                <div className="flex flex-col">
+                  <CheckCircle size={18} className={editMethod['save-data'] ? 'text-green-500' : 'text-gray-300'} />
+                  <span className={editMethod['save-data'] ? 'text-green-700 font-semibold' : 'text-gray-400'}>Save Data</span>
+                  <span className="text-xs text-gray-500 mt-1">Table Name: {editMethod["namespace-method-tableName"] || editMethod["tableName"] || <span className="italic text-gray-400">null</span>}</span>
+                </div>
               </div>
             </div>
           </>
@@ -252,8 +274,12 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                   checked={!!editMethod['save-data']}
                   onChange={e => handleInput('save-data', e.target.checked)}
                   id="save-data-checkbox"
+                  disabled={!(editMethod["namespace-method-tableName"] || editMethod["tableName"])}
                 />
                 <label htmlFor="save-data-checkbox" className="text-xs font-medium text-gray-700">Save Data</label>
+                {!(editMethod["namespace-method-tableName"] || editMethod["tableName"]) && (
+                  <span className="text-xs text-red-500 ml-2">Create a table first to enable saving data.</span>
+                )}
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

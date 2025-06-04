@@ -41,6 +41,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   const namespaceMethodUrlOverride = method?.['namespace-method-url-override'] || '';
   const saveData = !!method?.['save-data'];
   const methodId = method?.['namespace-method-id'] || '';
+  const tableName = method?.['namespace-method-tableName'] || method?.['tableName'] || '';
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
@@ -141,12 +142,20 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       setLoading(true);
       setResponse(null);
       setActiveButton(isPaginated ? 'loop' : 'send');
+
+      // Only show error if user wants to save data but tableName is missing
+      if (saveData && !tableName) {
+        setError('Table name is required to save data. You can still test the method, but data will not be saved.');
+      }
+
       const endpoint = isPaginated
         ? `${API_BASE_URL}/unified/execute/paginated`
         : `${API_BASE_URL}/unified/execute`;
+
       const formHeaders = Object.fromEntries(
         headers.filter(h => h.key && h.key.trim() !== '').map(h => [h.key.trim(), h.value])
       );
+
       const requestData = {
         method: methodType,
         url: url,
@@ -165,9 +174,15 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
           }
         } : {}),
         ...(activeTab === 'body' && requestBody ? { body: tryParseJSON(requestBody) } : {}),
-        tableName: `${namespaceName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${selectedAccount['namespace-account-name'].toLowerCase().replace(/[^a-z0-9]/g, '_')}_${methodName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        saveData: saveData
+        ...(saveData && tableName ? {
+          tableName: tableName,
+          saveData: true,
+          schemaId: method?.['schemaId'] || null
+        } : {
+          saveData: false
+        })
       };
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
