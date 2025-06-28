@@ -70,8 +70,8 @@ const MethodModal: React.FC<MethodModalProps> = ({ isOpen, onClose, method, name
     try {
       const isEdit = !!form["namespace-method-id"];
       const url = isEdit
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/methods/${form["namespace-method-id"]}`
-        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/methods`;
+        ? `http://localhost:5001/unified/methods/${form["namespace-method-id"]}`
+        : `http://localhost:5001/unified/namespaces/${namespaceId}/methods`;
 
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',

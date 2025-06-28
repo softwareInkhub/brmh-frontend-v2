@@ -32,7 +32,7 @@ interface Response {
   executionId?: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5001';
 
 export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: { method: any, namespace: any, onOpenSchemaTab?: (schema: any, schemaName: string) => void }) {
   const namespaceId = namespace?.['namespace-id'] || '';

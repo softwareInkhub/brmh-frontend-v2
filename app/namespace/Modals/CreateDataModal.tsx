@@ -9,7 +9,7 @@ interface CreateDataModalProps {
   onSuccess?: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_URL = 'http://localhost:5001';
 
 // Recursive schema form
 function RenderSchemaForm({ schema, formData, setFormData, path = '' }: { schema: any, formData: any, setFormData: (d: any) => void, path?: string }) {

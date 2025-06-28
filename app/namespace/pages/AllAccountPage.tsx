@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, Pencil, Trash2, User } from 'lucide-react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5001';
 
 function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewAccount?: (account: any, ns?: any) => void }) {
   const [accounts, setAccounts] = useState<any[]>([]);

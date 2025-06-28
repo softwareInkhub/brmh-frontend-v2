@@ -17,7 +17,7 @@ type Field = {
   enumValues?: string[];
 };
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_URL = 'http://localhost:5001';
 
 // Recursive field form
 function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCollapsedNodes, nodePath }: { fields: Field[]; onChange: (fields: Field[]) => void; level?: number; collapsedNodes: Set<string>; setCollapsedNodes: (s: Set<string>) => void; nodePath: string }) {

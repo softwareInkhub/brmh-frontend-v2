@@ -22,7 +22,7 @@ const Tables = () => {
   const [tables, setTables] = useState<TableMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BASE_URL = 'http://localhost:5001';
   const router = useRouter();
 
   const fetchTables = async () => {

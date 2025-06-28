@@ -56,8 +56,8 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, account, n
     try {
       const isEdit = !!form["namespace-account-id"];
       const url = isEdit
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${form["namespace-account-id"]}`
-        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/accounts`;
+        ? `http://localhost:5001/unified/accounts/${form["namespace-account-id"]}`
+        : `http://localhost:5001/unified/namespaces/${namespaceId}/accounts`;
 
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',

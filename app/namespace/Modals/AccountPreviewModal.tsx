@@ -134,7 +134,7 @@ const AccountPreviewModal: React.FC<AccountPreviewModalProps> = ({ isOpen, onClo
               if (window.confirm('Are you sure you want to delete this account?')) {
                 try {
                   const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${account['namespace-account-id']}`,
+                    `http://localhost:5001/unified/accounts/${account['namespace-account-id']}`,
                     { method: 'DELETE' }
                   );
                   if (!response.ok) throw new Error('Failed to delete account');

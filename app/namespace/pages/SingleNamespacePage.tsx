@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState } from 'react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5001';
 
 export default function SingleNamespacePage({ namespaceId, initialNamespace }: { namespaceId: string, initialNamespace?: any }) {
   const [namespace, setNamespace] = useState<any>(initialNamespace || null);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5001';
 
 const schemaApis = [
   {

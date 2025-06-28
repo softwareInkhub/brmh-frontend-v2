@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Database, Globe, Users, Code } from 'react-feather';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API_BASE_URL = 'http://localhost:5001';
 
 export interface KeyValuePair {
   key: string;

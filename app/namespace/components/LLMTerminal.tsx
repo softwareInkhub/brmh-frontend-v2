@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {Sparkles } from 'lucide-react';
+import {Sparkles, Zap, Code, Database, Globe, Play, Save, Copy, ExternalLink } from 'lucide-react';
 
 interface LLMTerminalProps {
   openSchemaModal: (name: string, schema: any) => void;
@@ -37,13 +37,23 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
   const [showRawHandlers, setShowRawHandlers] = useState(false);
   const [rawHandlersOutput, setRawHandlersOutput] = useState<string | null>(null);
 
+  // New state for automated features
+  const [automationMode, setAutomationMode] = useState<'schema' | 'lambda' | 'namespace'>('schema');
+  const [userPrompt, setUserPrompt] = useState('');
+  const [namespaceName, setNamespaceName] = useState('');
+  const [methodName, setMethodName] = useState('');
+  const [generatedLambdaConfig, setGeneratedLambdaConfig] = useState<any>(null);
+  const [lambdaUrl, setLambdaUrl] = useState<string | null>(null);
+  const [automationResult, setAutomationResult] = useState<any>(null);
+
   const tabList = [
-    { key: 'methods', label: 'Methods' },
-    { key: 'handlers', label: 'Handlers' },
-    { key: 'schema', label: 'Schema' },
-    { key: 'test', label: 'Test' },
+    { key: 'automation', label: 'AI Automation', icon: Sparkles },
+    { key: 'methods', label: 'Methods', icon: Globe },
+    { key: 'handlers', label: 'Handlers', icon: Code },
+    { key: 'schema', label: 'Schema', icon: Database },
+    { key: 'test', label: 'Test', icon: Play },
   ];
-  const [activeTab, setActiveTab] = useState<'methods' | 'handlers' | 'schema' | 'test'>('schema');
+  const [activeTab, setActiveTab] = useState<'automation' | 'methods' | 'handlers' | 'schema' | 'test'>('automation');
 
   const [projectName, setProjectName] = useState('');
   const [desiredHandlers, setDesiredHandlers] = useState('');
@@ -59,6 +69,160 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
 
   const minWidth = 400;
   const maxWidth = 1100;
+
+  // New function for automated schema generation
+  const handleAutomatedSchemaGeneration = async () => {
+    if (!userPrompt.trim()) {
+      setError('Please enter a description of the API endpoint you want to create');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+    setAutomationResult(null);
+
+    try {
+      const res = await fetch(`http://localhost:5001/llm/generate-schema-from-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userPrompt,
+          namespaceName: namespaceName || 'Default',
+          methodName: methodName || 'Auto-generated'
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAutomationResult(data.data);
+        setResponse(JSON.stringify(data.data, null, 2));
+        
+        // Extract schemas for display
+        const schemas = [];
+        if (data.data.requestSchema) {
+          schemas.push({ name: `${data.data.schemaName || 'Request'} Schema`, schema: data.data.requestSchema });
+        }
+        if (data.data.responseSchema) {
+          schemas.push({ name: `${data.data.schemaName || 'Response'} Schema`, schema: data.data.responseSchema });
+        }
+        setGeneratedSchemas(schemas);
+        
+        // Set method configuration
+        if (data.data.methodConfig) {
+          setMethods({ [data.data.methodConfig.method]: data.data.methodConfig });
+        }
+        
+        // Set handler code
+        if (data.data.lambdaHandler) {
+          setHandlers({ [data.data.methodConfig?.method || 'handler']: data.data.lambdaHandler });
+        }
+      } else {
+        setError(data.error || 'Failed to generate schema');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to generate schema');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // New function for Lambda function generation with URL
+  const handleLambdaGeneration = async () => {
+    if (!automationResult) {
+      setError('Please generate a schema first');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`http://localhost:5001/llm/generate-lambda-with-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schemaData: automationResult,
+          namespaceName: namespaceName || 'Default',
+          methodName: methodName || 'Auto-generated'
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGeneratedLambdaConfig(data.lambdaConfig);
+        setLambdaUrl(data.estimatedUrl);
+        setResponse(JSON.stringify(data, null, 2));
+      } else {
+        setError(data.error || 'Failed to generate Lambda function');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to generate Lambda function');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // New function for complete namespace automation
+  const handleNamespaceAutomation = async () => {
+    if (!userPrompt.trim() || !namespaceName.trim()) {
+      setError('Please enter both a description and namespace name');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+    setAutomationResult(null);
+
+    try {
+      const res = await fetch(`http://localhost:5001/llm/automate-namespace-creation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userPrompt,
+          namespaceName
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAutomationResult(data.data);
+        setResponse(JSON.stringify(data.data, null, 2));
+        
+        // Extract schemas
+        if (data.data.schemas) {
+          setGeneratedSchemas(data.data.schemas.map((s: any) => ({ name: s.name, schema: s.schema })));
+        }
+        
+        // Extract methods
+        if (data.data.methods) {
+          const methodMap = {};
+          data.data.methods.forEach((m: any) => {
+            methodMap[m.name] = m;
+          });
+          setMethods(methodMap);
+        }
+        
+        // Extract handlers
+        if (data.data.methods) {
+          const handlerMap = {};
+          data.data.methods.forEach((m: any) => {
+            if (m.lambdaHandler) {
+              handlerMap[m.name] = m.lambdaHandler;
+            }
+          });
+          setHandlers(handlerMap);
+        }
+      } else {
+        setError(data.error || 'Failed to automate namespace creation');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to automate namespace creation');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleTabPrompt = async (tab: string) => {
     setLoading(true);
@@ -199,355 +363,592 @@ const LLMTerminal: React.FC<LLMTerminalProps> = ({ openSchemaModal, open, setOpe
           setHandlers({});
         }
       } else {
-        setError(data.error || 'Failed to generate schema');
+        setError(data.error || 'Failed to generate content');
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to generate schema');
+      setError(e.message || 'Failed to generate content');
     } finally {
       setLoading(false);
     }
   };
 
   const resetForm = () => {
-    setSchemaName('');
-    setJsonSchema('{}');
-    setFields([]);
-    setJsonError(null);
-    setRawFields('');
-    setRawFieldsError(null);
-    setCollapsedNodes(new Set());
+    setPrompt('');
+    setResponse(null);
+    setError(null);
+    setGeneratedSchemas([]);
+    setSubSchemas([]);
+    setNamespaceData(null);
+    setMethods({});
+    setHandlers({});
+    setRawHandlersOutput(null);
+    setAutomationResult(null);
+    setGeneratedLambdaConfig(null);
+    setLambdaUrl(null);
   };
 
   const startResize = (e: React.MouseEvent) => {
-    isResizing.current = true;
-    document.body.style.cursor = 'ew-resize';
     e.preventDefault();
-  };
-
-  useEffect(() => {
+    isResizing.current = true;
     const onMouseMove = (e: MouseEvent) => {
-      if (!isResizing.current) return;
-      const newWidth = window.innerWidth - e.clientX;
-      setWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
+      if (isResizing.current) {
+        const newWidth = Math.max(minWidth, Math.min(maxWidth, e.clientX - 20));
+        setWidth(newWidth);
+      }
     };
     const onMouseUp = () => {
       isResizing.current = false;
-      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
     };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, []);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const cached = localStorage.getItem('llmTerminalCache');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed.handlers) setHandlers(parsed.handlers);
-        if (parsed.methods) setMethods(parsed.methods);
-        if (parsed.generatedSchemas) setGeneratedSchemas(parsed.generatedSchemas);
-        if (parsed.prompts) setPrompts(parsed.prompts);
-      } catch {}
-    }
-  }, []);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
 
-  // Save to localStorage on change
-  useEffect(() => {
-    const cache = {
-      handlers,
-      methods,
-      generatedSchemas,
-      prompts,
-    };
-    localStorage.setItem('llmTerminalCache', JSON.stringify(cache));
-  }, [handlers, methods, generatedSchemas, prompts]);
+  const openLambdaUrl = (url: string) => {
+    window.open(url, '_blank');
+  };
+
+  if (!open) return null;
 
   return (
-    <>
-      {/* Floating Action Button */}
-      <button
-        className={`fixed z-50 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl w-12 h-12 flex items-center justify-center text-3xl transition-all duration-300 border-2 border-white bottom-8 right-8`}
-        style={{ boxShadow: '0 8px 32px 0 rgba(0,80,180,0.18)' }}
-        onClick={() => setOpen(true)}
-        aria-label="Open LLM Terminal"
-      >
-        <Sparkles size={28} className="drop-shadow-lg" />
-      </button>
-      {/* Right-side Drawer Only */}
-      <div
-        className={`fixed top-0 right-0 h-full z-50 transition-transform duration-500 ${open ? 'translate-x-0' : 'translate-x-full'} rounded-l-2xl border-l border-blue-100 shadow-2xl bg-white`}
-        style={{
-          width: `${width}px`,
-          background: '#fafaff',
-          boxShadow: '-8px 0 32px 0 rgba(0,80,180,0.15), 0 2px 8px 0 rgba(0,0,0,0.04)'
-        }}
-      >
-        {/* Draggable Resizer */}
-        <div
-          className="absolute left-0 top-0 h-full w-2 cursor-ew-resize z-50 bg-transparent hover:bg-blue-100 transition"
-          onMouseDown={startResize}
-          style={{ borderLeft: '2px solid #3b82f6', borderTopLeftRadius: '1rem', borderBottomLeftRadius: '1rem' }}
-        />
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-4 bg-white border-b-2 border-blue-500 rounded-t-lg">
-            <span className="text-lg font-bold text-blue-700 tracking-wide">BRMH LLM Terminal</span>
-            <button
-              className="text-gray-400 hover:text-blue-500 text-2xl transition ml-2"
-              onClick={() => setOpen(false)}
-              aria-label="Close Terminal"
-            >
-              &times;
-            </button>
-          </div>
-          {/* Tab bar */}
-          <div className="border-b border-blue-200 bg-white px-4">
-            <div className="flex gap-2 pt-2">
-              {tabList.map(tab => (
-                <button
-                  key={tab.key}
-                  className={`px-4 py-1 rounded-t-md text-sm font-medium transition-colors duration-150 ${activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}
-                  onClick={() => setActiveTab(tab.key as any)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Terminal Body */}
-          <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-            {activeTab === 'methods' && (
-              <div className="p-4">
-                <div className="mb-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={projectName}
-                      onChange={e => setProjectName(e.target.value)}
-                      placeholder="Enter your project name..."
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Operations</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={desiredOperations}
-                      onChange={e => setDesiredOperations(e.target.value)}
-                      placeholder="e.g., create, read, update, delete operations"
-                    />
-                  </div>
-                  <label className="text-gray-700 mb-2 text-sm font-semibold">Methods Prompt</label>
-                  <div className="relative">
-              <textarea
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                rows={3}
-                      value={prompts.methods}
-                      onChange={e => setPrompts(prev => ({ ...prev, methods: e.target.value }))}
-                      placeholder="Describe the API methods you want to create..."
-              />
-              <button
-                className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                      onClick={() => handleTabPrompt('methods')}
-                      disabled={loading}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-                </div>
-                {Object.keys(methods).length > 0 ? (
-                  <div className="space-y-4">
-                    {Object.entries(methods).map(([name, method]: [string, any]) => (
-                      <div key={name} className="bg-white rounded-lg shadow p-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-bold text-blue-700">{name}</h3>
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm">
-                            {method.method}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">
-                          <span className="font-mono bg-gray-100 px-2 py-1 rounded">{method.path}</span>
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Handler: <span className="font-mono">{method.handler}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center text-gray-400 text-lg">No methods available</div>
-                )}
-              </div>
-            )}
-            {activeTab === 'handlers' && (
-              <div className="p-4">
-                <div className="mb-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={projectName}
-                      onChange={e => setProjectName(e.target.value)}
-                      placeholder="Enter your project name..."
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Handlers</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={desiredHandlers}
-                      onChange={e => setDesiredHandlers(e.target.value)}
-                      placeholder="e.g., create, read, update, delete handlers"
-                    />
-                  </div>
-                  <label className="text-gray-700 mb-2 text-sm font-semibold">Handlers Prompt</label>
-                  <div className="relative">
-                    <textarea
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                      rows={3}
-                      value={prompts.handlers}
-                      onChange={e => setPrompts(prev => ({ ...prev, handlers: e.target.value }))}
-                      placeholder="Describe the handlers you want to create..."
-                    />
-                  <button
-                      className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                      onClick={() => handleTabPrompt('handlers')}
-                      disabled={loading}
-                  >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <button
-                    className={`px-2 py-1 rounded text-xs border ${showRawHandlers ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-700 border-gray-300'}`}
-                    onClick={() => setShowRawHandlers(v => !v)}
-                  >
-                    {showRawHandlers ? 'Hide Raw Output' : 'Show Raw Output'}
-                  </button>
-                </div>
-                {showRawHandlers && rawHandlersOutput && (
-                  <pre className="bg-gray-100 rounded p-3 mb-4 text-xs overflow-x-auto max-h-60 border border-blue-100 shadow-inner">
-                    {rawHandlersOutput}
-                  </pre>
-                )}
-                {Object.keys(handlers).length > 0 ? (
-                  <div className="space-y-4">
-                    {Object.entries(handlers).map(([name, code]: [string, any]) => (
-                      <div key={name} className="bg-white rounded-lg shadow">
-                        <div className="border-b border-gray-200 p-4">
-                          <h3 className="font-bold text-blue-700">{name}</h3>
-                        </div>
-                        <pre className="p-4 bg-gray-50 text-sm overflow-x-auto">
-                          <code>{code}</code>
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center text-gray-400 text-lg">No handlers available</div>
-                )}
-              </div>
-            )}
-            {activeTab === 'schema' && (
-              <div className="p-4">
-                <div className="mb-4">
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Project Name</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={projectName}
-                      onChange={e => setProjectName(e.target.value)}
-                      placeholder="Enter your project name..."
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="text-gray-700 mb-2 text-sm font-semibold">Desired Entities</label>
-                    <input
-                      type="text"
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
-                      value={desiredEntities}
-                      onChange={e => setDesiredEntities(e.target.value)}
-                      placeholder="e.g., User, Product, Order"
-                    />
-                  </div>
-                  <label className="text-gray-700 mb-2 text-sm font-semibold">Schema Prompt</label>
-                  <div className="relative">
-                    <textarea
-                      className="bg-gray-100 text-gray-800 rounded-lg p-2 w-full mb-2 text-sm resize-none border-2 border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200 transition-all duration-200 font-mono shadow-sm pr-12"
-                      rows={3}
-                      value={prompts.schema}
-                      onChange={e => setPrompts(prev => ({ ...prev, schema: e.target.value }))}
-                      placeholder="Describe the schemas you want to create..."
-                    />
-                    <button
-                      className="absolute bottom-4 right-2 bg-blue-500 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                      onClick={() => handleTabPrompt('schema')}
-                      disabled={loading}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                {/* Existing schema content */}
-                {generatedSchemas.length > 0 && (
-                  <div className="mt-8">
-                    <div className="font-semibold text-gray-700 mb-2">Generated Schemas</div>
-                    {generatedSchemas.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white shadow rounded p-3 my-2 cursor-pointer hover:bg-blue-50 border border-blue-100"
-                        onClick={() => setSelectedSchema(item)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="font-bold text-blue-700">{item.name}</div>
-                          <button
-                            className="ml-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded shadow"
-                            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                              e.stopPropagation();
-                              openSchemaModal(item.name, item.schema);
-                            }}
-                          >
-                            Create
-                          </button>
-                        </div>
-                        <pre className="text-xs text-gray-500 truncate">{JSON.stringify(item.schema, null, 2)}</pre>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {activeTab !== 'schema' && (
-              <div className="p-8 text-center text-gray-400 text-lg">Coming soon...</div>
-            )}
-          </div>
+    <div
+      className={`fixed top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-50 flex flex-col`}
+      style={{ width: `${width}px` }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center space-x-2">
+          <Sparkles className="w-5 h-5 text-purple-600" />
+          <h3 className="text-lg font-semibold text-gray-900">AI Assistant</h3>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setOpen(false)}
+            className="p-1 hover:bg-gray-200 rounded"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       </div>
-      {/* Overlay when open */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40 bg-transparent"
-          onClick={() => setOpen(false)}
-        />
-      )}
-    </>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200">
+        {tabList.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`flex items-center space-x-1 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-purple-500 text-purple-600 bg-purple-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab === 'automation' && (
+          <div className="h-full flex flex-col p-4 space-y-4">
+            {/* Automation Mode Selection */}
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setAutomationMode('schema')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  automationMode === 'schema'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Single Schema
+              </button>
+              <button
+                onClick={() => setAutomationMode('lambda')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  automationMode === 'lambda'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Schema + Lambda
+              </button>
+              <button
+                onClick={() => setAutomationMode('namespace')}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  automationMode === 'namespace'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Complete Namespace
+              </button>
+            </div>
+
+            {/* Input Fields */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {automationMode === 'namespace' ? 'Namespace Name' : 'Namespace Name (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={namespaceName}
+                  onChange={(e) => setNamespaceName(e.target.value)}
+                  placeholder="e.g., UserManagement, ECommerceAPI"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {automationMode === 'schema' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Method Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={methodName}
+                    onChange={(e) => setMethodName(e.target.value)}
+                    placeholder="e.g., registerUser, getProducts"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Describe your API endpoint
+                </label>
+                <textarea
+                  value={userPrompt}
+                  onChange={(e) => setUserPrompt(e.target.value)}
+                  placeholder={
+                    automationMode === 'namespace' 
+                      ? "Describe the complete API system you want to create, e.g., 'Create a complete e-commerce API with user management, product catalog, and order processing'"
+                      : "Describe the API endpoint you want to create, e.g., 'Create an API endpoint for user registration that accepts email, password, and name'"
+                  }
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-2">
+              <button
+                onClick={
+                  automationMode === 'namespace' 
+                    ? handleNamespaceAutomation 
+                    : automationMode === 'lambda' 
+                    ? handleAutomatedSchemaGeneration 
+                    : handleAutomatedSchemaGeneration
+                }
+                disabled={loading || !userPrompt.trim() || (automationMode === 'namespace' && !namespaceName.trim())}
+                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>
+                  {automationMode === 'namespace' 
+                    ? 'Generate Complete Namespace' 
+                    : automationMode === 'lambda' 
+                    ? 'Generate Schema' 
+                    : 'Generate Schema'
+                  }
+                </span>
+              </button>
+
+              {automationMode === 'lambda' && automationResult && (
+                <button
+                  onClick={handleLambdaGeneration}
+                  disabled={loading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>Generate Lambda + URL</span>
+                </button>
+              )}
+            </div>
+
+            {/* Results Display */}
+            {automationResult && (
+              <div className="flex-1 overflow-auto">
+                <div className="space-y-4">
+                  {/* Schema Results */}
+                  {generatedSchemas.length > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Generated Schemas</h4>
+                      <div className="space-y-2">
+                        {generatedSchemas.map((schema, index) => (
+                          <div key={index} className="bg-white rounded border p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-sm">{schema.name}</span>
+                              <button
+                                onClick={() => openSchemaModal(schema.name, schema.schema)}
+                                className="text-purple-600 hover:text-purple-700 text-sm"
+                              >
+                                Open in Schema Editor
+                              </button>
+                            </div>
+                            <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto max-h-32">
+                              {JSON.stringify(schema.schema, null, 2)}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Method Configuration */}
+                  {Object.keys(methods).length > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Method Configuration</h4>
+                      <div className="space-y-2">
+                        {Object.entries(methods).map(([key, method]: [string, any]) => (
+                          <div key={key} className="bg-white rounded border p-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-medium text-sm">{method.method} {method.path}</span>
+                                <p className="text-xs text-gray-600 mt-1">{method.description}</p>
+                              </div>
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {method.method}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lambda Configuration */}
+                  {generatedLambdaConfig && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Lambda Function</h4>
+                      <div className="bg-white rounded border p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">Function Name:</span>
+                          <span className="text-sm text-gray-600">{generatedLambdaConfig.functionName}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">Runtime:</span>
+                          <span className="text-sm text-gray-600">{generatedLambdaConfig.runtime}</span>
+                        </div>
+                        {lambdaUrl && (
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm">Function URL:</span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-blue-600">{lambdaUrl}</span>
+                              <button
+                                onClick={() => openLambdaUrl(lambdaUrl)}
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => copyToClipboard(lambdaUrl)}
+                                className="text-gray-600 hover:text-gray-700"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Raw Response */}
+                  {response && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-gray-900">Raw Response</h4>
+                        <button
+                          onClick={() => copyToClipboard(response)}
+                          className="text-gray-600 hover:text-gray-700"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <pre className="text-xs bg-white p-3 rounded border overflow-auto max-h-64">
+                        {response}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-800 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                <span className="ml-2 text-gray-600">Generating...</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Existing tabs content */}
+        {activeTab === 'methods' && (
+          <div className="h-full flex flex-col p-4 space-y-4">
+            {/* Methods content - existing implementation */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g., ECommerceApp"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desired Operations</label>
+                <textarea
+                  value={desiredOperations}
+                  onChange={(e) => setDesiredOperations(e.target.value)}
+                  placeholder="e.g., CRUD operations for users, products, orders"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+              <button
+                onClick={() => handleTabPrompt('methods')}
+                disabled={loading || !projectName.trim() || !desiredOperations.trim()}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate Methods
+              </button>
+            </div>
+
+            {Object.keys(methods).length > 0 && (
+              <div className="flex-1 overflow-auto">
+                <h4 className="font-medium text-gray-900 mb-2">Generated Methods</h4>
+                <div className="space-y-2">
+                  {Object.entries(methods).map(([key, method]: [string, any]) => (
+                    <div key={key} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium text-sm">{key}</span>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {method.method} {method.path}
+                          </p>
+                        </div>
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          {method.method}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'handlers' && (
+          <div className="h-full flex flex-col p-4 space-y-4">
+            {/* Handlers content - existing implementation */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g., ECommerceApp"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desired Handlers</label>
+                <textarea
+                  value={desiredHandlers}
+                  onChange={(e) => setDesiredHandlers(e.target.value)}
+                  placeholder="e.g., createUser, getUser, updateUser, deleteUser"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+              <button
+                onClick={() => handleTabPrompt('handlers')}
+                disabled={loading || !projectName.trim() || !desiredHandlers.trim()}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate Handlers
+              </button>
+            </div>
+
+            {Object.keys(handlers).length > 0 && (
+              <div className="flex-1 overflow-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-gray-900">Generated Handlers</h4>
+                  <button
+                    onClick={() => setShowRawHandlers(!showRawHandlers)}
+                    className="text-sm text-purple-600 hover:text-purple-700"
+                  >
+                    {showRawHandlers ? 'Show Formatted' : 'Show Raw'}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(handlers).map(([key, handler]: [string, any]) => (
+                    <div key={key} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-sm">{key}</span>
+                        <button
+                          onClick={() => copyToClipboard(handler)}
+                          className="text-gray-600 hover:text-gray-700"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <pre className="text-xs bg-white p-2 rounded border overflow-auto max-h-32">
+                        {handler}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'schema' && (
+          <div className="h-full flex flex-col p-4 space-y-4">
+            {/* Schema content - existing implementation */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g., ECommerceApp"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desired Entities</label>
+                <textarea
+                  value={desiredEntities}
+                  onChange={(e) => setDesiredEntities(e.target.value)}
+                  placeholder="e.g., User, Product, Order, Comment"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+              <button
+                onClick={() => handleTabPrompt('schema')}
+                disabled={loading || !projectName.trim() || !desiredEntities.trim()}
+                className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate Schemas
+              </button>
+            </div>
+
+            {generatedSchemas.length > 0 && (
+              <div className="flex-1 overflow-auto">
+                <h4 className="font-medium text-gray-900 mb-2">Generated Schemas</h4>
+                <div className="space-y-2">
+                  {generatedSchemas.map((schema, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-sm">{schema.name}</span>
+                        <button
+                          onClick={() => openSchemaModal(schema.name, schema.schema)}
+                          className="text-purple-600 hover:text-purple-700 text-sm"
+                        >
+                          Open in Schema Editor
+                        </button>
+                      </div>
+                      <pre className="text-xs bg-white p-2 rounded border overflow-auto max-h-32">
+                        {JSON.stringify(schema.schema, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'test' && (
+          <div className="h-full flex flex-col p-4 space-y-4">
+            {/* Test content - existing implementation */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Custom Prompt</label>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Enter your custom prompt here..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleSend}
+                  disabled={loading || !prompt.trim()}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
+                <button
+                  onClick={resetForm}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            {response && (
+              <div className="flex-1 overflow-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-gray-900">Response</h4>
+                  <button
+                    onClick={() => copyToClipboard(response)}
+                    className="text-gray-600 hover:text-gray-700"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <pre className="text-xs bg-gray-100 p-3 rounded border overflow-auto max-h-64">
+                  {response}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Resize handle */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-purple-300"
+        onMouseDown={startResize}
+      />
+    </div>
   );
 };
 

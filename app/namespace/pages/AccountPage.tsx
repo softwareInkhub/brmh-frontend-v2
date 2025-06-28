@@ -72,7 +72,7 @@ export default function AccountPage({ account, namespace }: Props) {
     if (window.confirm('Are you sure you want to delete this account?')) {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${editAccount['namespace-account-id']}`,
+          `http://localhost:5001/unified/accounts/${editAccount['namespace-account-id']}`,
           { method: 'DELETE' }
         );
         if (!response.ok) throw new Error('Failed to delete account');

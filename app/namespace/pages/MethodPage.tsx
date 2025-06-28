@@ -4,7 +4,7 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 
 type Method = { id: string; name: string };
 type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void };
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+const API_BASE_URL = 'http://localhost:5001';
 const methods = [
   { id: 'm1', name: 'GET /users' },
   { id: 'm2', name: 'POST /login' },

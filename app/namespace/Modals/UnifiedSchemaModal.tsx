@@ -49,7 +49,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const API_BASE_URL = "http://localhost:5001";
 
 const UnifiedSchemaModal: React.FC<UnifiedSchemaModalProps> = ({ showModal, setShowModal, onSuccess, editingSchema, namespace, method }) => {
   const [schemaName, setSchemaName] = useState('');

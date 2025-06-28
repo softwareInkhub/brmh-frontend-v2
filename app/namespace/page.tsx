@@ -6,9 +6,10 @@ import Namespace from './components/Namespace';
 import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
+import EnhancedLLMTerminal from './components/EnhancedLLMTerminal';
 import SchemaModal from './Modals/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
-import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database } from 'lucide-react';
+import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database, Sparkles } from 'lucide-react';
 import AccountModal from './Modals/AccountModal';
 import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
@@ -26,6 +27,8 @@ import MethodPage from './pages/MethodPage';
 import AllSchemaPage from './pages/AllSchemaPage';
 import SingleNamespacePage from './pages/SingleNamespacePage';
 import MethodTestPage from './pages/MethodTestPage';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -147,25 +150,45 @@ export default function NamespacePage() {
 
   // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
+    console.log('Fetching namespaces and schemas...');
+    
     // Fetch namespaces
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces`)
-      .then(res => res.json())
-      .then(data => setNamespaces(Array.isArray(data) ? data : []))
-      .catch(() => setNamespaces([]));
+    fetch(`http://localhost:5001/unified/namespaces`)
+      .then(res => {
+        console.log('Namespaces response status:', res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log('Namespaces data received:', data);
+        setNamespaces(Array.isArray(data) ? data : []);
+      })
+      .catch(error => {
+        console.error('Error fetching namespaces:', error);
+        setNamespaces([]);
+      });
 
     // Fetch schemas
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/schema`)
-      .then(res => res.json())
-      .then(data => setSchemas(Array.isArray(data) ? data : []))
-      .catch(() => setSchemas([]));
+    fetch(`http://localhost:5001/unified/schema`)
+      .then(res => {
+        console.log('Schemas response status:', res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log('Schemas data received:', data);
+        setSchemas(Array.isArray(data) ? data : []);
+      })
+      .catch(error => {
+        console.error('Error fetching schemas:', error);
+        setSchemas([]);
+      });
   }, []);
 
   // Fetch accounts and methods for a namespace
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces/${namespaceId}/accounts`),
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces/${namespaceId}/methods`)
+        fetch(`http://localhost:5001/unified/namespaces/${namespaceId}/accounts`),
+        fetch(`http://localhost:5001/unified/namespaces/${namespaceId}/methods`)
       ]);
       const [accounts, methods] = await Promise.all([
         accountsRes.json(),
@@ -457,8 +480,8 @@ export default function NamespacePage() {
     try {
       const isEdit = !!namespace["namespace-id"];
       const url = isEdit
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`
-        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`;
+        ? `http://localhost:5001/unified/namespaces/${namespace["namespace-id"]}`
+        : `http://localhost:5001/unified/namespaces`;
       const method = isEdit ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
@@ -493,7 +516,7 @@ export default function NamespacePage() {
     if (!namespace || !namespace["namespace-id"]) return;
     if (!window.confirm('Are you sure you want to delete this namespace?')) return;
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`, {
+      const response = await fetch(`http://localhost:5001/unified/namespaces/${namespace["namespace-id"]}`, {
         method: 'DELETE',
       });
       if (!response.ok && response.status !== 204) {
@@ -636,303 +659,469 @@ export default function NamespacePage() {
   };
 
   return (
-    <div className="bg-[#f7f8fa] min-h-screen">
-      <div className="flex h-screen ml-20">
-        {/* SidePanel (always visible) */}
-        <div
-          style={{
-            width: isCollapsed ? 0 : 256,
-            minWidth: isCollapsed ? 0 : 256,
-            maxWidth: isCollapsed ? 0 : 256,
-            background: '#fff',
-            borderRight: isCollapsed ? 'none' : '1px solid #f0f0f0',
-            height: '100vh',
-            zIndex: 20,
-            overflow: isCollapsed ? 'hidden' : 'auto',
-            transition: 'width 0.2s, min-width 0.2s, max-width 0.2s',
-          }}
-        >
-          {!isCollapsed && (
-            <SidePanel
-              namespaces={namespaces}
-              accounts={accounts}
-              schemas={schemas}
-              methods={methods}
-              onItemClick={handleSidePanelClick}
-              onAdd={handleSidePanelAdd}
-              fetchNamespaceDetails={fetchNamespaceDetails}
-              selectedSchemaId={selectedSchemaId}
-              onEditSchema={schema => {
-                setShowSchemaModal(true);
-                setPreviewSchema(null);
-                setSelectedSchemaId(schema.id);
-              }}
-              onDeleteSchema={async (schema) => {
-                if (confirm('Are you sure you want to delete this schema?')) {
-                  try {
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
-                      method: 'DELETE',
-                    });
-                    if (!response.ok) throw new Error('Failed to delete schema');
-                    setSchemas(schemas => schemas.filter(s => s.id !== schema.id));
-                    setPreviewSchema(null);
-                    setSelectedSchemaId(null);
-                  } catch (error) {
-                    console.error('Error deleting schema:', error);
-                    alert('Failed to delete schema');
-                  }
-                }
-              }}
-              onDeleteNamespace={handleDeleteNamespace}
-            />
-          )}
-        </div>
-        {/* Main Content */}
-        <div 
-          className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
-          style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
-        >
-          {/* Tab Section (always flush left) */}
-          <div className="flex items-center border-b bg-white px-4 py-2">
-            <div className="flex items-center gap-1">
-              {tabs.map(tab => (
-                <div key={tab.key} className="flex items-center group">
-                  <button
-                    className={`px-4 py-2 text-sm rounded-t-lg transition
-                      ${activeTab === tab.key ? 'font-medium text-gray-700 border-b-2 border-blue-600 bg-white' : 'text-gray-700 hover:bg-gray-100'}
-                      ${tab.bold ? 'font-bold' : ''}
-                      ${tab.italic ? 'italic' : ''}
-                    `}
-                    onClick={() => setActiveTab(tab.key)}
-                  >
-                    {tab.label}
-                  </button>
-                  {tab.key !== 'overview' && (
+    <div className="relative h-full w-full">
+      {/* Floating AI Assistant Button */}
+      <button
+        className="fixed bottom-8 right-8 z-50 flex items-center gap-2 px-5 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all text-base font-semibold"
+        onClick={() => setLlmTerminalOpen(true)}
+        style={{ boxShadow: '0 4px 24px rgba(80,0,200,0.15)' }}
+      >
+        <Sparkles className="w-6 h-6" />
+        AI Assistant
+      </button>
+      <DndProvider backend={HTML5Backend}>
+        <div className="flex flex-col h-full w-full">
+          <div className="bg-[#f7f8fa] min-h-screen">
+            <div className="flex h-screen">
+              {/* SidePanel (always visible) */}
+              <div
+                style={{
+                  width: isCollapsed ? 0 : 256,
+                  minWidth: isCollapsed ? 0 : 256,
+                  maxWidth: isCollapsed ? 0 : 256,
+                  background: '#fff',
+                  borderRight: isCollapsed ? 'none' : '1px solid #f0f0f0',
+                  height: '100vh',
+                  zIndex: 20,
+                  overflow: isCollapsed ? 'hidden' : 'auto',
+                  transition: 'width 0.2s, min-width 0.2s, max-width 0.2s',
+                }}
+              >
+                {!isCollapsed && (
+                  <SidePanel
+                    namespaces={namespaces}
+                    accounts={accounts}
+                    schemas={schemas}
+                    methods={methods}
+                    onItemClick={handleSidePanelClick}
+                    onAdd={handleSidePanelAdd}
+                    fetchNamespaceDetails={fetchNamespaceDetails}
+                    selectedSchemaId={selectedSchemaId}
+                    onEditSchema={schema => {
+                      setShowSchemaModal(true);
+                      setPreviewSchema(null);
+                      setSelectedSchemaId(schema.id);
+                    }}
+                    onDeleteSchema={async (schema) => {
+                      if (confirm('Are you sure you want to delete this schema?')) {
+                        try {
+                          const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
+                            method: 'DELETE',
+                          });
+                          if (!response.ok) throw new Error('Failed to delete schema');
+                          setSchemas(schemas => schemas.filter(s => s.id !== schema.id));
+                          setPreviewSchema(null);
+                          setSelectedSchemaId(null);
+                        } catch (error) {
+                          console.error('Error deleting schema:', error);
+                          alert('Failed to delete schema');
+                        }
+                      }
+                    }}
+                    onDeleteNamespace={handleDeleteNamespace}
+                  />
+                )}
+              </div>
+              {/* Main Content */}
+              <div 
+                className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
+                style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
+              >
+                {/* Header with Dashboard title */}
+                <div className="flex items-center justify-between px-8 pt-8 pb-4 bg-[#f7f8fa]">
+                  <div>
+                    <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+                  </div>
+                  {/* Removed Open AI Assistant button, now floating globally */}
+                </div>
+                
+                {/* Tab Section (always flush left) */}
+                <div className="flex items-center border-b bg-white px-4 py-2">
+                  <div className="flex items-center gap-1">
+                    {tabs.map(tab => (
+                      <div key={tab.key} className="flex items-center group">
+                        <button
+                          className={`px-4 py-2 text-sm rounded-t-lg transition
+                            ${activeTab === tab.key ? 'font-medium text-gray-700 border-b-2 border-blue-600 bg-white' : 'text-gray-700 hover:bg-gray-100'}
+                            ${tab.bold ? 'font-bold' : ''}
+                            ${tab.italic ? 'italic' : ''}
+                          `}
+                          onClick={() => setActiveTab(tab.key)}
+                        >
+                          {tab.label}
+                        </button>
+                        {tab.key !== 'overview' && (
+                          <button
+                            className="ml-1 text-gray-400 hover:text-red-500 text-xs px-1 focus:outline-none"
+                            onClick={() => handleCloseTab(tab.key)}
+                            title="Close tab"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
                     <button
-                      className="ml-1 text-gray-400 hover:text-red-500 text-xs px-1 focus:outline-none"
-                      onClick={() => handleCloseTab(tab.key)}
-                      title="Close tab"
+                      className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full"
+                      onClick={handleAddTab}
                     >
-                      ×
+                      <Plus size={16} />
                     </button>
+                    <button className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                      <MoreHorizontal size={16} />
+                    </button>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <button className="px-3 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg">
+                      Testing Env <span className="ml-1">&#9660;</span>
+                    </button>
+                    <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
+                      <Menu size={18} />
+                    </button>
+                  </div>
+                </div>
+                {/* Main Tab Content with conditional left padding */}
+                <div className={`${isCollapsed ? 'pl-0' : 'pl-8'} pr-8 w-full pt-4 transition-all duration-200`}>
+                  {activeTab === 'overview' && (
+                    <UnifiedNamespace
+                      externalModalTrigger={sidePanelModal}
+                      onModalClose={() => setSidePanelModal(null)}
+                      fetchNamespaceDetails={fetchNamespaceDetails}
+                      namespaceDetailsMap={namespaceDetailsMap}
+                      setNamespaceDetailsMap={setNamespaceDetailsMap}
+                      refreshData={() => {
+                        // re-fetch all data
+                        setNamespaceDetailsMap({});
+                        // trigger fetchData in useEffect
+                        setNamespaces([]);
+                      }}
+                    />
+                  )}
+                  {activeTab === 'namespace' && <Namespace />}
+                  {activeTab === 'schemaService' && <SchemaService />}
+                  {activeTab === 'tables' && <Tables />}
+                  {activeTab === 'unifiedNamespace' && (
+                    <UnifiedNamespace
+                      externalModalTrigger={sidePanelModal}
+                      onModalClose={() => setSidePanelModal(null)}
+                      fetchNamespaceDetails={fetchNamespaceDetails}
+                      namespaceDetailsMap={namespaceDetailsMap}
+                      setNamespaceDetailsMap={setNamespaceDetailsMap}
+                      refreshData={() => {
+                        // re-fetch all data
+                        setNamespaceDetailsMap({});
+                        // trigger fetchData in useEffect
+                        setNamespaces([]);
+                      }}
+                    />
+                  )}
+                  {activeTab === 'schema' && <SchemaCreatePage onSchemaNameChange={name => {
+                    setTabs(tabs => tabs.map(tab =>
+                      tab.key === 'schema'
+                        ? { ...tab, label: name.trim() ? name : 'New Schema' }
+                        : tab
+                    ));
+                  }} />}
+                  {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
+                    <NewTabContent onOpenTab={handleOpenTab} />
+                  )}
+                  {allAccountsTabs.map(({ key, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <AllAccountPage
+                        namespace={namespace}
+                        onViewAccount={(account, ns) => {
+                          const tabKey = `accountPage-${account['namespace-account-id']}`;
+                          if (!tabs.find(tab => tab.key === tabKey)) {
+                            setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}` }]);
+                          }
+                          setActiveTab(tabKey);
+                          setAccountPageTabs(prev => {
+                            if (prev.find(t => t.key === tabKey)) return prev;
+                            return [...prev, { key: tabKey, account, namespace: ns }];
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {allMethodsTabs.map(({ key, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <AllMethodPage
+                        namespace={namespace}
+                        onViewMethod={(method, ns) => {
+                          const tabKey = `methodPage-${method['namespace-method-id']}`;
+                          if (!tabs.find(tab => tab.key === tabKey)) {
+                            setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}` }]);
+                          }
+                          setActiveTab(tabKey);
+                          setMethodPageTabs(prev => {
+                            if (prev.find(t => t.key === tabKey)) return prev;
+                            return [...prev, { key: tabKey, method, namespace: ns }];
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {accountPageTabs.map(({ key, account, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <AccountPage account={account} namespace={namespace} />
+                    </div>
+                  ))}
+                  {methodPageTabs.map(({ key, method, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <MethodPage
+                        method={method}
+                        namespace={namespace}
+                        onTest={(m, ns) => {
+                          const testKey = `methodTest-${m['namespace-method-id']}`;
+                          if (!tabs.find(tab => tab.key === testKey)) {
+                            setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}` }]);
+                          }
+                          setActiveTab(testKey);
+                          setMethodTestTabs(prev => {
+                            if (prev.find(t => t.key === testKey)) return prev;
+                            return [...prev, { key: testKey, method: m, namespace: ns }];
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {methodTestTabs.map(({ key, method, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <MethodTestPage
+                        method={method}
+                        namespace={namespace}
+                        onOpenSchemaTab={(schema, schemaName) => handleOpenSchemaTabFromTest(schema, schemaName, namespace, method['namespace-method-id'])}
+                      />
+                    </div>
+                  ))}
+                  {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace, methodId }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <SchemaCreatePage
+                        initialSchema={schema}
+                        initialSchemaName={initialSchemaName}
+                        namespace={namespace}
+                        mode={mode === 'create' ? 'create' : 'edit'}
+                        methodId={methodId}
+                        onSuccess={() => {
+                          if (mode === 'create' && namespace?.['namespace-id']) {
+                            fetchNamespaceDetails(namespace['namespace-id']);
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {allSchemasTabs.map(({ key, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <AllSchemaPage
+                        namespace={namespace}
+                        onViewSchema={(schema, ns) => {
+                          const tabKey = `schema-preview-${schema.id}`;
+                          if (!tabs.find(tab => tab.key === tabKey)) {
+                            setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview' }]);
+                          }
+                          setActiveTab(tabKey);
+                          setSchemaPageTabs(prev => {
+                            if (prev.find(t => t.key === tabKey)) return prev;
+                            return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns }];
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {singleNamespaceTabs.map(({ key, namespace }) => (
+                    <div
+                      key={key}
+                      style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                    >
+                      <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
+                    </div>
+                  ))}
+                  {activeTab !== 'overview' &&
+                    activeTab !== 'namespace' &&
+                    activeTab !== 'schemaService' &&
+                    activeTab !== 'tables' &&
+                    activeTab !== 'unifiedNamespace' &&
+                    activeTab !== 'new' &&
+                    !activeTab.startsWith('tab-') && (
+                      <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
                   )}
                 </div>
-              ))}
-              <button
-                className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full"
-                onClick={handleAddTab}
-              >
-                <Plus size={16} />
-              </button>
-              <button className="px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full">
-                <MoreHorizontal size={16} />
-              </button>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button className="px-3 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg">
-                Testing Env <span className="ml-1">&#9660;</span>
-              </button>
-              <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
-                <Menu size={18} />
-              </button>
+                <EnhancedLLMTerminal 
+                  open={llmTerminalOpen}
+                  setOpen={setLlmTerminalOpen}
+                  placement={llmTerminalPlacement}
+                  setPlacement={setLlmTerminalPlacement}
+                  width={llmTerminalWidth}
+                  setWidth={setLlmTerminalWidth}
+                  openSchemaModal={(name, schema) => {
+                    setShowSchemaModal(true);
+                    setSchemaName(name);
+                    setJsonSchema(JSON.stringify(schema, null, 2));
+                  }}
+                />
+                <SchemaPreviewModal
+                  open={!!previewSchema}
+                  onClose={() => setPreviewSchema(null)}
+                  schema={previewSchema}
+                  onEdit={schema => {
+                    setShowSchemaModal(true);
+                    setPreviewSchema(null);
+                  }}
+                  onDelete={async (schema) => {
+                    if (confirm('Are you sure you want to delete this schema?')) {
+                      try {
+                        const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
+                          method: 'DELETE',
+                        });
+                        if (!response.ok) throw new Error('Failed to delete schema');
+                        setSchemas(schemas => schemas.filter(s => s.id !== schema.id));
+                        setPreviewSchema(null);
+                      } catch (error) {
+                        console.error('Error deleting schema:', error);
+                        alert('Failed to delete schema');
+                      }
+                    }
+                  }}
+                />
+                <MethodPreviewModal
+                  isOpen={!!previewMethod}
+                  onClose={() => setPreviewMethod(null)}
+                  method={previewMethod}
+                  onEdit={method => {
+                    setMethodModal({ isOpen: true, method });
+                    setPreviewMethod(null);
+                  }}
+                  onTest={method => {
+                    setTestMethodModal({ isOpen: true, method });
+                    setPreviewMethod(null);
+                  }}
+                />
+                {previewAccount && (
+                  <div 
+                    className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
+                    onClick={() => setPreviewAccount(null)}
+                  >
+                    <div className="bg-white rounded-xl p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <User className="text-blue-600" size={16} />
+                          </div>
+                          <h3 className="text-base sm:text-xl font-semibold truncate">{previewAccount["namespace-account-name"]}</h3>
+                        </div>
+                        <button
+                          onClick={() => setPreviewAccount(null)}
+                          className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                        >
+                          <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                        <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                          <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">ID</p>
+                          <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-id"]}</p>
+                        </div>
+                        {previewAccount["namespace-account-url-override"] && (
+                          <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                            <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">URL Override</p>
+                            <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-url-override"]}</p>
+                          </div>
+                        )}
+                      </div>
+                      {/* Add more account details as needed */}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          {/* Main Tab Content with conditional left padding */}
-          <div className={`${isCollapsed ? 'pl-0' : 'pl-8'} pr-8 w-full pt-4 transition-all duration-200`}>
-            {activeTab === 'overview' && (
-              <UnifiedNamespace
-                externalModalTrigger={sidePanelModal}
-                onModalClose={() => setSidePanelModal(null)}
-                fetchNamespaceDetails={fetchNamespaceDetails}
-                namespaceDetailsMap={namespaceDetailsMap}
-                setNamespaceDetailsMap={setNamespaceDetailsMap}
-                refreshData={() => {
-                  // re-fetch all data
-                  setNamespaceDetailsMap({});
-                  // trigger fetchData in useEffect
-                  setNamespaces([]);
-                }}
-              />
-            )}
-            {activeTab === 'namespace' && <Namespace />}
-            {activeTab === 'schemaService' && <SchemaService />}
-            {activeTab === 'tables' && <Tables />}
-            {activeTab === 'unifiedNamespace' && (
-              <UnifiedNamespace
-                externalModalTrigger={sidePanelModal}
-                onModalClose={() => setSidePanelModal(null)}
-                fetchNamespaceDetails={fetchNamespaceDetails}
-                namespaceDetailsMap={namespaceDetailsMap}
-                setNamespaceDetailsMap={setNamespaceDetailsMap}
-                refreshData={() => {
-                  // re-fetch all data
-                  setNamespaceDetailsMap({});
-                  // trigger fetchData in useEffect
-                  setNamespaces([]);
-                }}
-              />
-            )}
-            {activeTab === 'schema' && <SchemaCreatePage onSchemaNameChange={name => {
-              setTabs(tabs => tabs.map(tab =>
-                tab.key === 'schema'
-                  ? { ...tab, label: name.trim() ? name : 'New Schema' }
-                  : tab
-              ));
-            }} />}
-            {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
-              <NewTabContent onOpenTab={handleOpenTab} />
-            )}
-            {allAccountsTabs.map(({ key, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <AllAccountPage
-                  namespace={namespace}
-                  onViewAccount={(account, ns) => {
-                    const tabKey = `accountPage-${account['namespace-account-id']}`;
-                    if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}` }]);
-                    }
-                    setActiveTab(tabKey);
-                    setAccountPageTabs(prev => {
-                      if (prev.find(t => t.key === tabKey)) return prev;
-                      return [...prev, { key: tabKey, account, namespace: ns }];
-                    });
-                  }}
-                />
-              </div>
-            ))}
-            {allMethodsTabs.map(({ key, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <AllMethodPage
-                  namespace={namespace}
-                  onViewMethod={(method, ns) => {
-                    const tabKey = `methodPage-${method['namespace-method-id']}`;
-                    if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}` }]);
-                    }
-                    setActiveTab(tabKey);
-                    setMethodPageTabs(prev => {
-                      if (prev.find(t => t.key === tabKey)) return prev;
-                      return [...prev, { key: tabKey, method, namespace: ns }];
-                    });
-                  }}
-                />
-              </div>
-            ))}
-            {accountPageTabs.map(({ key, account, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <AccountPage account={account} namespace={namespace} />
-              </div>
-            ))}
-            {methodPageTabs.map(({ key, method, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <MethodPage
-                  method={method}
-                  namespace={namespace}
-                  onTest={(m, ns) => {
-                    const testKey = `methodTest-${m['namespace-method-id']}`;
-                    if (!tabs.find(tab => tab.key === testKey)) {
-                      setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}` }]);
-                    }
-                    setActiveTab(testKey);
-                    setMethodTestTabs(prev => {
-                      if (prev.find(t => t.key === testKey)) return prev;
-                      return [...prev, { key: testKey, method: m, namespace: ns }];
-                    });
-                  }}
-                />
-              </div>
-            ))}
-            {methodTestTabs.map(({ key, method, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <MethodTestPage
-                  method={method}
-                  namespace={namespace}
-                  onOpenSchemaTab={(schema, schemaName) => handleOpenSchemaTabFromTest(schema, schemaName, namespace, method['namespace-method-id'])}
-                />
-              </div>
-            ))}
-            {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace, methodId }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <SchemaCreatePage
-                  initialSchema={schema}
-                  initialSchemaName={initialSchemaName}
-                  namespace={namespace}
-                  mode={mode === 'create' ? 'create' : 'edit'}
-                  methodId={methodId}
-                  onSuccess={() => {
-                    if (mode === 'create' && namespace?.['namespace-id']) {
-                      fetchNamespaceDetails(namespace['namespace-id']);
-                    }
-                  }}
-                />
-              </div>
-            ))}
-            {allSchemasTabs.map(({ key, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <AllSchemaPage
-                  namespace={namespace}
-                  onViewSchema={(schema, ns) => {
-                    const tabKey = `schema-preview-${schema.id}`;
-                    if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview' }]);
-                    }
-                    setActiveTab(tabKey);
-                    setSchemaPageTabs(prev => {
-                      if (prev.find(t => t.key === tabKey)) return prev;
-                      return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns }];
-                    });
-                  }}
-                />
-              </div>
-            ))}
-            {singleNamespaceTabs.map(({ key, namespace }) => (
-              <div
-                key={key}
-                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
-              >
-                <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
-              </div>
-            ))}
-            {activeTab !== 'overview' &&
-              activeTab !== 'namespace' &&
-              activeTab !== 'schemaService' &&
-              activeTab !== 'tables' &&
-              activeTab !== 'unifiedNamespace' &&
-              activeTab !== 'new' &&
-              !activeTab.startsWith('tab-') && (
-                <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
-            )}
-          </div>
-          <LLMTerminal 
-            open={llmTerminalOpen}
-            setOpen={setLlmTerminalOpen}
-            placement={llmTerminalPlacement}
-            setPlacement={setLlmTerminalPlacement}
-            width={llmTerminalWidth}
-            setWidth={setLlmTerminalWidth}
-            openSchemaModal={openSchemaModal}
+
+          <AccountModal
+            isOpen={accountModal.isOpen}
+            onClose={() => setAccountModal({ isOpen: false, account: null })}
+            account={accountModal.account}
+            namespaceId={namespaces[0]?.["namespace-id"] || ''}
+            refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
           />
+
+          <MethodModal
+            isOpen={methodModal.isOpen}
+            onClose={() => setMethodModal({ isOpen: false, method: null })}
+            method={methodModal.method}
+            namespaceId={namespaces[0]?.["namespace-id"]}
+            refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
+          />
+
+          <NamespaceModal
+            isOpen={namespaceModal.isOpen}
+            onClose={() => setNamespaceModal({ isOpen: false, namespace: null })}
+            onSave={handleSaveNamespace}
+            namespace={namespaceModal.namespace}
+          />
+
+          <AccountPreviewModal
+            isOpen={!!previewAccount}
+            onClose={() => setPreviewAccount(null)}
+            account={previewAccount}
+            onEdit={account => {
+              setAccountModal({ isOpen: true, account });
+              setPreviewAccount(null);
+            }}
+            onDelete={async (account) => {
+              if (confirm('Are you sure you want to delete this account?')) {
+                try {
+                  const response = await fetch(`http://localhost:5001/unified/accounts/${account["namespace-account-id"]}`, {
+                    method: 'DELETE',
+                  });
+                  if (!response.ok) throw new Error('Failed to delete account');
+                  await fetchNamespaceDetails(namespaces[0]?.["namespace-id"]);
+                  setPreviewAccount(null);
+                } catch (error) {
+                  console.error('Error deleting account:', error);
+                  alert('Failed to delete account');
+                }
+              }
+            }}
+          />
+
+          <MethodTestModal
+            isOpen={testMethodModal.isOpen}
+            onClose={() => setTestMethodModal({ isOpen: false, method: null })}
+            namespaceId={testMethodModal.method?.['namespace-id'] || ''}
+            methodName={testMethodModal.method?.['namespace-method-name'] || ''}
+            methodType={testMethodModal.method?.['namespace-method-type'] || ''}
+            namespaceMethodUrlOverride={testMethodModal.method?.['namespace-method-url-override'] || ''}
+            saveData={!!testMethodModal.method?.['save-data']}
+            methodId={testMethodModal.method?.['namespace-method-id'] || ''}
+          />
+
+          <UnifiedSchemaModal
+            showModal={showSchemaModal}
+            setShowModal={setShowSchemaModal}
+            onSuccess={() => setShowSchemaModal(false)}
+          />
+
           <SchemaPreviewModal
             open={!!previewSchema}
             onClose={() => setPreviewSchema(null)}
@@ -944,7 +1133,7 @@ export default function NamespacePage() {
             onDelete={async (schema) => {
               if (confirm('Are you sure you want to delete this schema?')) {
                 try {
-                  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
+                  const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
                     method: 'DELETE',
                   });
                   if (!response.ok) throw new Error('Failed to delete schema');
@@ -957,147 +1146,8 @@ export default function NamespacePage() {
               }
             }}
           />
-          <MethodPreviewModal
-            isOpen={!!previewMethod}
-            onClose={() => setPreviewMethod(null)}
-            method={previewMethod}
-            onEdit={method => {
-              setMethodModal({ isOpen: true, method });
-              setPreviewMethod(null);
-            }}
-            onTest={method => {
-              setTestMethodModal({ isOpen: true, method });
-              setPreviewMethod(null);
-            }}
-          />
-          {previewAccount && (
-            <div 
-              className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => setPreviewAccount(null)}
-            >
-              <div className="bg-white rounded-xl p-4 sm:p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <User className="text-blue-600" size={16} />
-                    </div>
-                    <h3 className="text-base sm:text-xl font-semibold truncate">{previewAccount["namespace-account-name"]}</h3>
-                  </div>
-                  <button
-                    onClick={() => setPreviewAccount(null)}
-                    className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
-                  >
-                    <X className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-                  <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
-                    <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">ID</p>
-                    <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-id"]}</p>
-                  </div>
-                  {previewAccount["namespace-account-url-override"] && (
-                    <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
-                      <p className="text-xs sm:text-sm text-gray-500 mb-0.5 sm:mb-1">URL Override</p>
-                      <p className="text-xs sm:text-sm font-mono break-all">{previewAccount["namespace-account-url-override"]}</p>
-                    </div>
-                  )}
-                </div>
-                {/* Add more account details as needed */}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-
-      <AccountModal
-        isOpen={accountModal.isOpen}
-        onClose={() => setAccountModal({ isOpen: false, account: null })}
-        account={accountModal.account}
-        namespaceId={namespaces[0]?.["namespace-id"] || ''}
-        refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
-      />
-
-      <MethodModal
-        isOpen={methodModal.isOpen}
-        onClose={() => setMethodModal({ isOpen: false, method: null })}
-        method={methodModal.method}
-        namespaceId={namespaces[0]?.["namespace-id"]}
-        refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
-      />
-
-      <NamespaceModal
-        isOpen={namespaceModal.isOpen}
-        onClose={() => setNamespaceModal({ isOpen: false, namespace: null })}
-        onSave={handleSaveNamespace}
-        namespace={namespaceModal.namespace}
-      />
-
-      <AccountPreviewModal
-        isOpen={!!previewAccount}
-        onClose={() => setPreviewAccount(null)}
-        account={previewAccount}
-        onEdit={account => {
-          setAccountModal({ isOpen: true, account });
-          setPreviewAccount(null);
-        }}
-        onDelete={async (account) => {
-          if (confirm('Are you sure you want to delete this account?')) {
-            try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${account["namespace-account-id"]}`, {
-                method: 'DELETE',
-              });
-              if (!response.ok) throw new Error('Failed to delete account');
-              await fetchNamespaceDetails(namespaces[0]?.["namespace-id"]);
-              setPreviewAccount(null);
-            } catch (error) {
-              console.error('Error deleting account:', error);
-              alert('Failed to delete account');
-            }
-          }
-        }}
-      />
-
-      <MethodTestModal
-        isOpen={testMethodModal.isOpen}
-        onClose={() => setTestMethodModal({ isOpen: false, method: null })}
-        namespaceId={testMethodModal.method?.['namespace-id'] || ''}
-        methodName={testMethodModal.method?.['namespace-method-name'] || ''}
-        methodType={testMethodModal.method?.['namespace-method-type'] || ''}
-        namespaceMethodUrlOverride={testMethodModal.method?.['namespace-method-url-override'] || ''}
-        saveData={!!testMethodModal.method?.['save-data']}
-        methodId={testMethodModal.method?.['namespace-method-id'] || ''}
-      />
-
-      <UnifiedSchemaModal
-        showModal={showSchemaModal}
-        setShowModal={setShowSchemaModal}
-        onSuccess={() => setShowSchemaModal(false)}
-      />
-
-      <SchemaPreviewModal
-        open={!!previewSchema}
-        onClose={() => setPreviewSchema(null)}
-        schema={previewSchema}
-        onEdit={schema => {
-          setShowSchemaModal(true);
-          setPreviewSchema(null);
-        }}
-        onDelete={async (schema) => {
-          if (confirm('Are you sure you want to delete this schema?')) {
-            try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
-                method: 'DELETE',
-              });
-              if (!response.ok) throw new Error('Failed to delete schema');
-              setSchemas(schemas => schemas.filter(s => s.id !== schema.id));
-              setPreviewSchema(null);
-            } catch (error) {
-              console.error('Error deleting schema:', error);
-              alert('Failed to delete schema');
-            }
-          }
-        }}
-      />
+      </DndProvider>
     </div>
   );
 }

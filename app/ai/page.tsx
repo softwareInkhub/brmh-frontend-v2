@@ -111,7 +111,7 @@ export default function LLMDashboard() {
     const prompt = `${selected.context}\n\n${message}`;
     
     try {
-      const response = await fetch('http://localhost:5000/llm/generate-schema/stream', {
+      const response = await fetch('http://localhost:5001/llm/generate-schema/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt }),

@@ -15,7 +15,7 @@ const TableData = ({ tableName, onBack }: TableDataProps) => {
   const [tableSchema, setTableSchema] = useState<any>(null);
   const [showCreateDataModal, setShowCreateDataModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BASE_URL = 'http://localhost:5001';
 
   const fetchTableData = async () => {
     setLoading(true);
@@ -139,7 +139,7 @@ function CreateDataForm({ schema, tableName, onClose, onSuccess, renderButtons =
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BASE_URL = 'http://localhost:5001';
 
   if (!schema || !schema.properties) return null;
 
