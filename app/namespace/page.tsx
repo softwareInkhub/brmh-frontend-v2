@@ -77,7 +77,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
-export default function NamespacePage() {
+function NamespacePage(props: React.PropsWithChildren<{}>) {
   const { isCollapsed } = useSidePanel();
   const [activeTab, setActiveTab] = useState('overview');
   const [tabs, setTabs] = useState(initialTabs);
@@ -424,16 +424,6 @@ export default function NamespacePage() {
   // On mount, update from localStorage if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const lastTab = localStorage.getItem('brhm-last-tab');
-      if (lastTab && lastTab !== activeTab) {
-        setActiveTab(lastTab);
-      }
-    }
-    // eslint-disable-next-line
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
       localStorage.setItem('brhm-last-tab', activeTab);
     }
   }, [activeTab]);
@@ -746,7 +736,9 @@ export default function NamespacePage() {
                             ${tab.bold ? 'font-bold' : ''}
                             ${tab.italic ? 'italic' : ''}
                           `}
-                          onClick={() => setActiveTab(tab.key)}
+                          onClick={() => {
+                            setActiveTab(tab.key);
+                          }}
                         >
                           {tab.label}
                         </button>
@@ -1151,3 +1143,5 @@ export default function NamespacePage() {
     </div>
   );
 }
+
+export default NamespacePage;

@@ -14,6 +14,7 @@ export interface LambdaAutomationResult {
   success: boolean;
   functionArn?: string;
   functionUrl?: string;
+  apiGatewayUrl?: string;
   error?: string;
 }
 
@@ -42,8 +43,13 @@ export class LambdaAutomationService {
     });
 
     try {
-      // Step 1: Create the Lambda function
-      const createResponse = await fetch(`${this.baseUrl}/api/aws/lambda`, {
+      // Step 1: Create the Lambda function with code
+      logger.info('Step 1: Creating Lambda function', {
+        component: 'LambdaAutomationService',
+        data: { functionName: config.functionName }
+      });
+
+      const createResponse = await fetch(`${this.baseUrl}/api/lambda/functions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,7 +58,8 @@ export class LambdaAutomationService {
           functionName: config.functionName,
           runtime: config.runtime,
           handler: config.handler,
-          memorySize: config.memorySize,
+          code: config.code,
+          memory: config.memorySize,
           timeout: config.timeout,
         }),
       });
@@ -72,13 +79,20 @@ export class LambdaAutomationService {
       const createData = await createResponse.json();
       const functionArn = createData.functionArn;
 
+      logger.info('Lambda function created, waiting for ready state', {
+        component: 'LambdaAutomationService',
+        data: { functionName: config.functionName, functionArn }
+      });
+
       // Step 2: Wait for function to be ready
       await this.waitForFunctionReady(config.functionName);
 
-      // Step 3: Update function code
-      await this.updateFunctionCode(config.functionName, config.code);
+      logger.info('Lambda function is ready, creating function URL', {
+        component: 'LambdaAutomationService',
+        data: { functionName: config.functionName }
+      });
 
-      // Step 4: Create function URL
+      // Step 3: Create function URL
       const urlResponse = await fetch(`${this.baseUrl}/api/lambda/${config.functionName}/function-url`, {
         method: 'POST',
         headers: {
@@ -90,6 +104,15 @@ export class LambdaAutomationService {
       if (urlResponse.ok) {
         const urlData = await urlResponse.json();
         functionUrl = urlData.functionUrlConfig?.FunctionUrl;
+        logger.info('Function URL created successfully', {
+          component: 'LambdaAutomationService',
+          data: { functionName: config.functionName, functionUrl }
+        });
+      } else {
+        logger.warn('Failed to create function URL', {
+          component: 'LambdaAutomationService',
+          data: { functionName: config.functionName, status: urlResponse.status }
+        });
       }
 
       logger.info('Lambda function created successfully', {
@@ -124,59 +147,46 @@ export class LambdaAutomationService {
   /**
    * Wait for Lambda function to be ready
    */
-  private async waitForFunctionReady(functionName: string, maxAttempts: number = 30): Promise<void> {
+  private async waitForFunctionReady(functionName: string, maxAttempts: number = 15): Promise<void> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await fetch(`${this.baseUrl}/api/lambda/${functionName}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.function?.Configuration?.State === 'Active') {
+          const state = data.function?.Configuration?.State;
+          logger.info(`Function state check attempt ${attempt}`, {
+            component: 'LambdaAutomationService',
+            data: { functionName, state, attempt }
+          });
+          
+          if (state === 'Active') {
+            logger.info('Function is now active', {
+              component: 'LambdaAutomationService',
+              data: { functionName }
+            });
             return;
+          } else if (state === 'Failed') {
+            throw new Error(`Function ${functionName} creation failed`);
           }
+        } else {
+          logger.warn(`Function not found on attempt ${attempt}`, {
+            component: 'LambdaAutomationService',
+            data: { functionName, attempt, status: response.status }
+          });
         }
       } catch (error) {
         // Ignore errors during polling
+        logger.warn(`Attempt ${attempt}: Function not ready yet`, {
+          component: 'LambdaAutomationService',
+          data: { functionName, attempt, error: error instanceof Error ? error.message : 'Unknown error' }
+        });
       }
       
-      // Wait 2 seconds before next attempt
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait 1 second before next attempt (reduced from 2 seconds)
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    throw new Error(`Function ${functionName} did not become ready within ${maxAttempts * 2} seconds`);
-  }
-
-  /**
-   * Update Lambda function code
-   */
-  private async updateFunctionCode(functionName: string, code: string): Promise<void> {
-    try {
-      // Create a ZIP file with the code
-      const JSZip = (await import('jszip')).default;
-      const zip = new JSZip();
-      zip.file('index.js', code);
-      
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const formData = new FormData();
-      formData.append('file', new File([zipBlob], 'lambda.zip', { type: 'application/zip' }));
-
-      const response = await fetch(`${this.baseUrl}/api/lambda/${functionName}/code`, {
-        method: 'PUT',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update function code');
-      }
-    } catch (error) {
-      logger.error('Error updating function code', {
-        component: 'LambdaAutomationService',
-        data: {
-          functionName,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }
-      });
-      throw error;
-    }
+    throw new Error(`Function ${functionName} did not become ready within ${maxAttempts} seconds`);
   }
 
   /**
@@ -184,8 +194,8 @@ export class LambdaAutomationService {
    */
   generateFunctionName(namespaceName: string, methodName: string): string {
     const timestamp = Date.now();
-    const sanitizedNamespace = namespaceName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    const sanitizedMethod = methodName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const sanitizedNamespace = namespaceName.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 20);
+    const sanitizedMethod = methodName.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 20);
     return `${sanitizedNamespace}-${sanitizedMethod}-${timestamp}`;
   }
 
@@ -290,6 +300,119 @@ export class LambdaAutomationService {
     };
   }
 };`;
+  }
+
+  /**
+   * Deploy an existing Lambda function with additional configuration
+   */
+  async deployLambdaFunction(config: {
+    functionName: string;
+    environment: string;
+    region: string;
+    enableFunctionUrl: boolean;
+    enableApiGateway: boolean;
+    corsEnabled: boolean;
+  }): Promise<LambdaAutomationResult> {
+    logger.info('Deploying Lambda function', {
+      component: 'LambdaAutomationService',
+      data: { functionName: config.functionName }
+    });
+
+    try {
+      let functionUrl = null;
+      let apiGatewayUrl = null;
+
+      // Step 1: Create function URL if enabled
+      if (config.enableFunctionUrl) {
+        const urlResponse = await fetch(`${this.baseUrl}/api/lambda/${config.functionName}/function-url`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cors: config.corsEnabled ? {
+              AllowCredentials: true,
+              AllowHeaders: ['*'],
+              AllowMethods: ['*'],
+              AllowOrigins: ['*'],
+              ExposeHeaders: ['*'],
+              MaxAge: 86400
+            } : undefined
+          }),
+        });
+
+        if (urlResponse.ok) {
+          const urlData = await urlResponse.json();
+          functionUrl = urlData.functionUrlConfig?.FunctionUrl;
+        }
+      }
+
+      // Step 2: Create API Gateway if enabled
+      if (config.enableApiGateway) {
+        const apiResponse = await fetch(`${this.baseUrl}/api/aws/apigateway`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: `${config.functionName}-api`,
+            description: `API Gateway for ${config.functionName}`,
+            lambdaFunctionName: config.functionName,
+            corsEnabled: config.corsEnabled
+          }),
+        });
+
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          apiGatewayUrl = apiData.apiUrl;
+        }
+      }
+
+      // Step 3: Update function configuration for environment
+      const updateResponse = await fetch(`${this.baseUrl}/api/lambda/${config.functionName}/configuration`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          environment: {
+            Variables: {
+              ENVIRONMENT: config.environment,
+              REGION: config.region,
+              DEPLOYED_AT: new Date().toISOString()
+            }
+          }
+        }),
+      });
+
+      logger.info('Lambda function deployed successfully', {
+        component: 'LambdaAutomationService',
+        data: {
+          functionName: config.functionName,
+          functionUrl,
+          apiGatewayUrl
+        }
+      });
+
+      return {
+        success: true,
+        functionUrl,
+        apiGatewayUrl
+      };
+    } catch (error) {
+      logger.error('Error deploying Lambda function', {
+        component: 'LambdaAutomationService',
+        data: {
+          functionName: config.functionName,
+          name: error instanceof Error ? error.name : 'Unknown',
+          message: error instanceof Error ? error.message : 'Unknown error'
+        }
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 }
 

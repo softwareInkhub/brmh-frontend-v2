@@ -1,14 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {Sparkles, Zap, Code, Database, Globe, Play, Save, Copy, ExternalLink, Search, Download } from 'lucide-react';
-import lambdaAutomationService from '../../services/lambda-automation';
+'use client';
+import React, { useState, useRef } from 'react';
 import { useDrop } from 'react-dnd';
+import { Sparkles, Zap, X, Copy, ExternalLink, MessageSquare, Settings, RotateCcw } from 'lucide-react';
+import { LambdaAutomationService } from '@/app/services/lambda-automation';
+import { logger } from '@/app/utils/logger';
 
 interface EnhancedLLMTerminalProps {
   openSchemaModal: (name: string, schema: any) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
-  placement: 'right';
-  setPlacement: (placement: 'right') => void;
+  placement: 'right' | 'bottom';
+  setPlacement: (placement: 'right' | 'bottom') => void;
   width: number;
   setWidth: (width: number) => void;
 }
@@ -22,51 +24,61 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
   width, 
   setWidth 
 }) => {
-  // State for automation features
-  const [automationMode, setAutomationMode] = useState<'schema' | 'lambda' | 'namespace' | 'method' | 'external-namespace'>('schema');
+  // Main automation state
+  const [automationMode, setAutomationMode] = useState<'schema' | 'lambda' | 'external-namespace' | 'complete-namespace'>('schema');
+  const [lambdaSubMode, setLambdaSubMode] = useState<'from-description' | 'from-schema'>('from-description');
+  
+  // Common state
   const [userPrompt, setUserPrompt] = useState('');
   const [namespaceName, setNamespaceName] = useState('');
   const [methodName, setMethodName] = useState('');
-  const [externalNamespaceUrl, setExternalNamespaceUrl] = useState('');
-  const [externalNamespaceName, setExternalNamespaceName] = useState('');
-  const [generatedLambdaConfig, setGeneratedLambdaConfig] = useState<any>(null);
-  const [lambdaUrl, setLambdaUrl] = useState<string | null>(null);
-  const [automationResult, setAutomationResult] = useState<any>(null);
-  const [generatedSchemas, setGeneratedSchemas] = useState<{ name: string; schema: any }[]>([]);
-  const [methods, setMethods] = useState<any>({});
-  const [handlers, setHandlers] = useState<any>({});
-  const [externalMethods, setExternalMethods] = useState<any[]>([]);
-  const [selectedMethods, setSelectedMethods] = useState<Set<string>>(new Set());
-  const [targetNamespace, setTargetNamespace] = useState('');
-  const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<string | null>(null);
+  
+  // Lambda specific state
+  const [lambdaFunctionName, setLambdaFunctionName] = useState('');
+  const [lambdaRuntime, setLambdaRuntime] = useState('nodejs18.x');
+  const [lambdaMemory, setLambdaMemory] = useState(128);
+  const [lambdaTimeout, setLambdaTimeout] = useState(30);
+  const [lambdaDescription, setLambdaDescription] = useState('');
+  const [lambdaCode, setLambdaCode] = useState('');
+  const [lambdaUrl, setLambdaUrl] = useState<string | null>(null);
+  const [automationResult, setAutomationResult] = useState<any>(null);
   const [deploymentStatus, setDeploymentStatus] = useState<string>('');
-  const [droppedType, setDroppedType] = useState<string | null>(null);
-  const [droppedData, setDroppedData] = useState<any>(null);
+  
+  // Schema input state (for schema-to-lambda mode)
+  const [inputSchema, setInputSchema] = useState('');
+  
+  // External namespace state
+  const [externalNamespaceUrl, setExternalNamespaceUrl] = useState('');
+  const [externalNamespaceName, setExternalNamespaceName] = useState('');
+
+  // Complete namespace state
+  const [completeNamespaceName, setCompleteNamespaceName] = useState('');
+  const [applicationDescription, setApplicationDescription] = useState('');
+  const [completeNamespaceResult, setCompleteNamespaceResult] = useState<any>(null);
 
   const minWidth = 400;
   const maxWidth = 1100;
   const isResizing = useRef(false);
 
+  // Get the Lambda automation service instance
+  const lambdaAutomationService = LambdaAutomationService.getInstance();
+
+  // Get backend URL from env or default
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+
   // Drop target for react-dnd
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: ['NAMESPACE', 'METHOD', 'SCHEMA'],
     drop: (item: any) => {
-      setDroppedType(item.type);
-      setDroppedData(item.data);
-      // Optionally, update the LLM terminal's state for inspection/editing
       if (item.type === 'NAMESPACE') {
         setNamespaceName(item.data['namespace-name'] || '');
-        setUserPrompt(`Inspect or modify the namespace: ${item.data['namespace-name']}`);
+        setUserPrompt(`Describe or generate Lambda for namespace: ${item.data['namespace-name']}`);
       } else if (item.type === 'METHOD') {
         setMethodName(item.data['namespace-method-name'] || '');
-        setUserPrompt(`Inspect or modify the method: ${item.data['namespace-method-name']}`);
-        setAutomationResult(item.data);
-      } else if (item.type === 'SCHEMA') {
-        setUserPrompt(`Inspect or modify the schema: ${item.data.schemaName || ''}`);
-        setAutomationResult(item.data);
-        setGeneratedSchemas([{ name: item.data.schemaName || 'Schema', schema: item.data.schema }]);
+        setUserPrompt(`Describe or generate Lambda for method: ${item.data['namespace-method-name']}`);
       }
       return item;
     },
@@ -76,53 +88,66 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
     }),
   });
 
-  // Automated schema generation
+  // Clear results when switching modes
+  const clearResults = () => {
+    setAutomationResult(null);
+    setLambdaCode('');
+    setLambdaUrl(null);
+    setResponse(null);
+    setError(null);
+    setDeploymentStatus('');
+    setCompleteNamespaceResult(null);
+  };
+
+  // Handle mode changes
+  const handleModeChange = (newMode: 'schema' | 'lambda' | 'external-namespace' | 'complete-namespace') => {
+    if (automationMode !== newMode) {
+      clearResults();
+      setAutomationMode(newMode);
+    }
+  };
+
+  // Handle Lambda sub-mode changes
+  const handleLambdaSubModeChange = (newSubMode: 'from-description' | 'from-schema') => {
+    if (lambdaSubMode !== newSubMode) {
+      clearResults();
+      setLambdaSubMode(newSubMode);
+    }
+  };
+
+  // Single Schema Generation (keep as is)
   const handleAutomatedSchemaGeneration = async () => {
     if (!userPrompt.trim()) {
       setError('Please enter a description of the API endpoint you want to create');
       return;
     }
-
     setLoading(true);
     setError(null);
     setResponse(null);
     setAutomationResult(null);
-    setDeploymentStatus('');
-
+    setLambdaCode('');
     try {
-      const res = await fetch(`http://localhost:5001/llm/generate-schema-from-prompt`, {
+      const res = await fetch(`${backendUrl}/llm/generate-schema-from-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userPrompt,
-          namespaceName: namespaceName || 'Default',
-          methodName: methodName || 'Auto-generated'
+          namespaceName: 'GeneratedNamespace',
+          methodName: 'GeneratedMethod'
         }),
       });
-
       const data = await res.json();
       if (res.ok && data.success) {
-        setAutomationResult(data.data);
-        setResponse(JSON.stringify(data.data, null, 2));
-        
-        // Extract schemas for display
-        const schemas = [];
-        if (data.data.requestSchema) {
-          schemas.push({ name: `${data.data.schemaName || 'Request'} Schema`, schema: data.data.requestSchema });
-        }
-        if (data.data.responseSchema) {
-          schemas.push({ name: `${data.data.schemaName || 'Response'} Schema`, schema: data.data.responseSchema });
-        }
-        setGeneratedSchemas(schemas);
-        
-        // Set method configuration
-        if (data.data.methodConfig) {
-          setMethods({ [data.data.methodConfig.method]: data.data.methodConfig });
-        }
-        
-        // Set handler code
+        // Extract only the schema parts for display
+        const schemaOnly = {
+          requestSchema: data.data.requestSchema,
+          responseSchema: data.data.responseSchema,
+          methodConfig: data.data.methodConfig
+        };
+        setAutomationResult(schemaOnly);
+        setResponse(JSON.stringify(schemaOnly, null, 2));
         if (data.data.lambdaHandler) {
-          setHandlers({ [data.data.methodConfig?.method || 'handler']: data.data.lambdaHandler });
+          setLambdaCode(data.data.lambdaHandler);
         }
       } else {
         setError(data.error || 'Failed to generate schema');
@@ -134,285 +159,262 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
     }
   };
 
-  // Lambda function generation with URL - Now creates actual Lambda function
-  const handleLambdaGeneration = async () => {
-    if (!automationResult) {
-      setError('Please generate a schema first');
+  // Generate Lambda from Description
+  const handleLambdaFromDescription = async () => {
+    if (!lambdaFunctionName.trim()) {
+      setError('Function name is required');
       return;
     }
+    if (!userPrompt.trim()) {
+      setError('Please describe what the Lambda function should do');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setDeploymentStatus('Generating Lambda from description...');
+    try {
+      // Generate Lambda code from description
+      const res = await fetch(`${backendUrl}/llm/generate-lambda-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          functionName: lambdaFunctionName,
+          description: userPrompt,
+          runtime: lambdaRuntime,
+          memorySize: lambdaMemory,
+          timeout: lambdaTimeout
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLambdaCode(data.data.code);
+        setResponse(JSON.stringify(data, null, 2));
+        setDeploymentStatus('Lambda code generated successfully!');
+      } else {
+        setError(data.error || 'Failed to generate Lambda from description');
+        setDeploymentStatus('Generation failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
+      setDeploymentStatus('Generation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Schema to Lambda Generation
+  const handleSchemaToLambda = async () => {
+    if (!inputSchema.trim()) {
+      setError('Schema is required');
+      return;
+    }
+    if (!lambdaFunctionName.trim()) {
+      setError('Function name is required');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setDeploymentStatus('Generating Lambda from schema...');
+    try {
+      // Parse the input schema
+      const schemaData = JSON.parse(inputSchema);
+      
+      // Generate Lambda code from schema using the same endpoint but with schema context
+      const res = await fetch(`${backendUrl}/llm/generate-lambda-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          functionName: lambdaFunctionName,
+          description: `Create a Lambda function that processes data according to this schema: ${JSON.stringify(schemaData)}`,
+          runtime: lambdaRuntime,
+          memorySize: lambdaMemory,
+          timeout: lambdaTimeout
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLambdaCode(data.data.code);
+        setResponse(JSON.stringify(data, null, 2));
+        setDeploymentStatus('Lambda code generated successfully!');
+      } else {
+        setError(data.error || 'Failed to generate Lambda from schema');
+        setDeploymentStatus('Generation failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
+      setDeploymentStatus('Generation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create Lambda Function (separate function)
+  const handleCreateLambdaFunction = async () => {
+    if (!lambdaFunctionName.trim()) {
+      setError('Function name is required');
+      return;
+    }
+    if (!lambdaCode.trim()) {
+      setError('Lambda code is required. Please generate code first.');
+      return;
+    }
     setLoading(true);
     setError(null);
     setDeploymentStatus('Creating Lambda function...');
-
     try {
-      // Use the Lambda automation service to create the actual function
-      const result = await lambdaAutomationService.automateLambdaCreation(
-        automationResult,
-        namespaceName || 'Default',
-        methodName || 'Auto-generated'
-      );
-
+      // Create the Lambda function
+      const config = {
+        functionName: lambdaFunctionName.trim(),
+        runtime: lambdaRuntime,
+        handler: 'index.handler',
+        code: lambdaCode,
+        memorySize: lambdaMemory,
+        timeout: lambdaTimeout,
+        description: lambdaDescription || `Lambda function: ${lambdaFunctionName}`,
+        environment: {
+          REGION: process.env.AWS_REGION || 'us-east-1'
+        }
+      };
+      const result = await lambdaAutomationService.createLambdaFunction(config);
       if (result.success) {
-        setGeneratedLambdaConfig({
-          functionName: lambdaAutomationService.generateFunctionName(namespaceName || 'Default', methodName || 'Auto-generated'),
-          runtime: 'nodejs18.x',
-          handler: 'index.handler',
-          memorySize: 128,
-          timeout: 30
-        });
         setLambdaUrl(result.functionUrl);
         setDeploymentStatus('Lambda function created successfully!');
-        setResponse(JSON.stringify({
-          success: true,
-          functionArn: result.functionArn,
-          functionUrl: result.functionUrl,
-          message: 'Lambda function deployed successfully'
-        }, null, 2));
       } else {
         setError(result.error || 'Failed to create Lambda function');
-        setDeploymentStatus('Deployment failed');
+        setDeploymentStatus('Creation failed');
       }
-    } catch (e: any) {
-      setError(e.message || 'Failed to create Lambda function');
-      setDeploymentStatus('Deployment failed');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
+      setDeploymentStatus('Creation failed');
     } finally {
       setLoading(false);
     }
   };
 
-  // Complete namespace automation
-  const handleNamespaceAutomation = async () => {
-    if (!userPrompt.trim() || !namespaceName.trim()) {
-      setError('Please enter both a description and namespace name');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setResponse(null);
-    setAutomationResult(null);
-    setDeploymentStatus('');
-
-    try {
-      const res = await fetch(`http://localhost:5001/llm/automate-namespace-creation`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userPrompt,
-          namespaceName
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAutomationResult(data.data);
-        setResponse(JSON.stringify(data.data, null, 2));
-        
-        // Extract schemas
-        if (data.data.schemas) {
-          setGeneratedSchemas(data.data.schemas.map((s: any) => ({ name: s.name, schema: s.schema })));
-        }
-        
-        // Extract methods
-        if (data.data.methods) {
-          const methodMap = {};
-          data.data.methods.forEach((m: any) => {
-            methodMap[m.name] = m;
-          });
-          setMethods(methodMap);
-        }
-        
-        // Extract handlers
-        if (data.data.methods) {
-          const handlerMap = {};
-          data.data.methods.forEach((m: any) => {
-            if (m.lambdaHandler) {
-              handlerMap[m.name] = m.lambdaHandler;
-            }
-          });
-          setHandlers(handlerMap);
-        }
-      } else {
-        setError(data.error || 'Failed to automate namespace creation');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to automate namespace creation');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Method creation automation
-  const handleMethodCreation = async () => {
-    if (!userPrompt.trim() || !methodName.trim()) {
-      setError('Please enter both a method name and description');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setResponse(null);
-    setAutomationResult(null);
-    setDeploymentStatus('');
-
-    try {
-      const res = await fetch(`http://localhost:5001/llm/generate-method`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userPrompt,
-          methodName,
-          namespaceName: namespaceName || 'Default'
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAutomationResult(data.data);
-        setResponse(JSON.stringify(data.data, null, 2));
-        
-        // Extract method configuration
-        if (data.data.methodConfig) {
-          setMethods({ [data.data.methodConfig.method]: data.data.methodConfig });
-        }
-        
-        // Extract schemas
-        const schemas = [];
-        if (data.data.requestSchema) {
-          schemas.push({ name: `${methodName} Request Schema`, schema: data.data.requestSchema });
-        }
-        if (data.data.responseSchema) {
-          schemas.push({ name: `${methodName} Response Schema`, schema: data.data.responseSchema });
-        }
-        setGeneratedSchemas(schemas);
-        
-        // Extract handler code
-        if (data.data.lambdaHandler) {
-          setHandlers({ [methodName]: data.data.lambdaHandler });
-        }
-      } else {
-        setError(data.error || 'Failed to generate method');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to generate method');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // External namespace method fetching
+  // External Namespace Fetch
   const handleExternalNamespaceFetch = async () => {
-    if (!externalNamespaceUrl.trim() || !externalNamespaceName.trim()) {
-      setError('Please enter both namespace URL and name');
-      return;
-    }
-
+    console.log('External namespace values:', {
+      url: externalNamespaceUrl,
+      name: externalNamespaceName,
+      urlTrimmed: externalNamespaceUrl.trim(),
+      nameTrimmed: externalNamespaceName.trim()
+    });
+    
     setLoading(true);
     setError(null);
     setResponse(null);
-    setAutomationResult(null);
-    setDeploymentStatus('Fetching methods from external namespace...');
 
     try {
-      const res = await fetch(`http://localhost:5001/llm/fetch-external-namespace-methods`, {
+      console.log('Making API call to:', `${backendUrl}/llm/fetch-external-namespace-methods`);
+      console.log('Request body:', {
+        namespaceUrl: externalNamespaceUrl,
+        namespaceName: externalNamespaceName
+      });
+      
+      const res = await fetch(`${backendUrl}/llm/fetch-external-namespace-methods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           namespaceUrl: externalNamespaceUrl,
-          namespaceName: externalNamespaceName,
-          userPrompt: userPrompt || 'Analyze and extract all available methods'
+          namespaceName: externalNamespaceName
         }),
       });
-
+      
+      console.log('Response status:', res.status);
+      console.log('Response headers:', res.headers);
+      
       const data = await res.json();
+      console.log('Response data:', data);
+      
       if (res.ok && data.success) {
         setAutomationResult(data.data);
         setResponse(JSON.stringify(data.data, null, 2));
-        setExternalMethods(data.data.methods || []);
-        setDeploymentStatus('Successfully fetched methods from external namespace!');
-        
-        // Extract schemas if available
-        if (data.data.schemas) {
-          setGeneratedSchemas(data.data.schemas.map((s: any) => ({ name: s.name, schema: s.schema })));
-        }
       } else {
-        setError(data.error || 'Failed to fetch external namespace methods');
-        setDeploymentStatus('Fetch failed');
+        const errorMessage = data.error || data.message || `HTTP ${res.status}: ${res.statusText}`;
+        console.error('API Error:', errorMessage);
+        setError(errorMessage);
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch external namespace methods');
-      setDeploymentStatus('Fetch failed');
+      console.error('Network/JSON Error:', e);
+      setError(`Network error: ${e.message || 'Failed to fetch external namespace'}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle method selection
-  const handleMethodSelection = (methodId: string, checked: boolean) => {
-    const newSelected = new Set(selectedMethods);
-    if (checked) {
-      newSelected.add(methodId);
-    } else {
-      newSelected.delete(methodId);
+  const handleCompleteNamespaceGeneration = async () => {
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+
+    try {
+      const response = await fetch(`${backendUrl}/llm/automate-namespace-creation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          namespaceName: completeNamespaceName,
+          userPrompt: applicationDescription,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setCompleteNamespaceResult(result.data);
+        setResponse(JSON.stringify(result.data, null, 2));
+      } else {
+        setError(result.error || 'Failed to generate complete namespace');
+      }
+    } catch (err) {
+      console.error('Error generating complete namespace:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate complete namespace');
+    } finally {
+      setLoading(false);
     }
-    setSelectedMethods(newSelected);
   };
 
-  // Handle select all methods
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const allMethodIds = externalMethods.map((_, index) => `method-${index}`);
-      setSelectedMethods(new Set(allMethodIds));
-    } else {
-      setSelectedMethods(new Set());
-    }
-  };
-
-  // Add selected methods to namespace
-  const handleAddSelectedMethods = async () => {
-    if (selectedMethods.size === 0) {
-      setError('Please select at least one method to add');
-      return;
-    }
-
-    if (!targetNamespace.trim()) {
-      setError('Please enter a target namespace name');
+  const handleSaveAllMethods = async () => {
+    if (!automationResult || !automationResult.methods || !externalNamespaceName) {
+      setError('No methods to save or namespace name missing');
       return;
     }
 
     setLoading(true);
     setError(null);
-    setDeploymentStatus('Adding selected methods to namespace...');
 
     try {
-      const selectedMethodData = externalMethods.filter((_, index) => 
-        selectedMethods.has(`method-${index}`)
-      );
-
-      const res = await fetch(`http://localhost:5001/llm/add-methods-to-namespace`, {
+      const response = await fetch(`${backendUrl}/llm/add-methods-to-namespace`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          namespaceName: targetNamespace,
-          methods: selectedMethodData,
-          sourceNamespace: automationResult?.namespace?.name || 'External'
+          namespaceName: externalNamespaceName,
+          methods: automationResult.methods,
+          sourceNamespace: automationResult.namespace?.name || 'External API'
         }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setDeploymentStatus('Successfully added methods to namespace!');
-        setResponse(JSON.stringify(data.data, null, 2));
-        // Clear selections after successful addition
-        setSelectedMethods(new Set());
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        setResponse(JSON.stringify(result.data, null, 2));
+        setError(null);
       } else {
-        setError(data.error || 'Failed to add methods to namespace');
-        setDeploymentStatus('Failed to add methods');
+        setError(result.error || 'Failed to save methods');
       }
-    } catch (e: any) {
-      setError(e.message || 'Failed to add methods to namespace');
-      setDeploymentStatus('Failed to add methods');
+    } catch (err) {
+      console.error('Error saving methods:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save methods');
     } finally {
       setLoading(false);
     }
@@ -422,20 +424,17 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
     setUserPrompt('');
     setNamespaceName('');
     setMethodName('');
-    setExternalNamespaceUrl('');
-    setExternalNamespaceName('');
-    setTargetNamespace('');
+    setAutomationResult(null);
+    setLambdaCode('');
+    setLambdaUrl(null);
     setResponse(null);
     setError(null);
-    setGeneratedSchemas([]);
-    setMethods({});
-    setHandlers({});
-    setExternalMethods([]);
-    setSelectedMethods(new Set());
-    setAutomationResult(null);
-    setGeneratedLambdaConfig(null);
-    setLambdaUrl(null);
     setDeploymentStatus('');
+    setLambdaFunctionName('');
+    setLambdaDescription('');
+    setInputSchema('');
+    setExternalNamespaceUrl('');
+    setExternalNamespaceName('');
   };
 
   const startResize = (e: React.MouseEvent) => {
@@ -460,7 +459,7 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
     navigator.clipboard.writeText(text);
   };
 
-  const openLambdaUrl = (url: string) => {
+  const openFunctionUrl = (url: string) => {
     window.open(url, '_blank');
   };
 
@@ -469,518 +468,707 @@ const EnhancedLLMTerminal: React.FC<EnhancedLLMTerminalProps> = ({
   return (
     <div
       ref={drop}
-      className={`fixed top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-50 flex flex-col transition-all ${isOver && canDrop ? 'ring-4 ring-purple-300' : ''}`}
-      style={{ width: `${width}px` }}
+      className={`fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl transition-all duration-300 flex flex-col ${
+        placement === 'right' 
+          ? `right-4 top-4 ${automationMode === 'complete-namespace' ? 'bottom-4' : 'bottom-4'}`
+          : `bottom-4 left-4 right-4 ${automationMode === 'complete-namespace' ? 'top-4' : 'top-1/2'}`
+      } ${isOver && canDrop ? 'border-blue-400 bg-blue-50' : ''}`}
+      style={{ 
+        width: placement === 'right' ? width : 'auto',
+        height: automationMode === 'complete-namespace' ? 'calc(100vh - 2rem)' : 'auto'
+      }}
     >
-      {/* Optional: Show a message when dragging over */}
-      {isOver && canDrop && (
-        <div className="absolute inset-0 bg-purple-100 bg-opacity-60 flex items-center justify-center z-50 pointer-events-none">
-          <span className="text-lg font-semibold text-purple-700">Drop to Inspect/Edit in AI Assistant</span>
-        </div>
-      )}
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+      {/* Header - Fixed */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
         <div className="flex items-center space-x-2">
-          <Sparkles className="w-5 h-5 text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-900">AI Automation Assistant</h3>
+          <div className="p-2 rounded-lg bg-blue-100">
+            <Zap className="w-4 h-4 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">AI Automation</h3>
+            <p className="text-xs text-gray-500">Generate schemas and Lambda functions</p>
+          </div>
         </div>
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => setOpen(false)}
-            className="p-1 hover:bg-gray-200 rounded"
+            onClick={() => setPlacement(placement === 'right' ? 'bottom' : 'right')}
+            className="p-1 rounded hover:bg-gray-100"
+            title="Toggle placement"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Settings className="w-4 h-4 text-gray-500" />
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="p-1 rounded hover:bg-gray-100"
+          >
+            <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col p-4 space-y-4">
-          {/* Automation Mode Selection */}
-          <div className="flex flex-wrap gap-2">
+      {/* Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        {/* Main Mode Selection */}
+        <div className="flex space-x-2 flex-shrink-0">
+          <button
+            onClick={() => handleModeChange('schema')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              automationMode === 'schema'
+                ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Single Schema
+          </button>
+          <button
+            onClick={() => handleModeChange('lambda')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              automationMode === 'lambda'
+                ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Lambda Creation
+          </button>
+          <button
+            onClick={() => handleModeChange('external-namespace')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              automationMode === 'external-namespace'
+                ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            External Namespace
+          </button>
+          <button
+            onClick={() => handleModeChange('complete-namespace')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              automationMode === 'complete-namespace'
+                ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Complete Namespace
+          </button>
+        </div>
+
+        {/* Lambda Sub-mode Selection */}
+        {automationMode === 'lambda' && (
+          <div className="flex space-x-2 flex-shrink-0">
             <button
-              onClick={() => setAutomationMode('schema')}
+              onClick={() => handleLambdaSubModeChange('from-description')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                automationMode === 'schema'
-                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                lambdaSubMode === 'from-description'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Single Schema
+              Generate from Description
             </button>
             <button
-              onClick={() => setAutomationMode('lambda')}
+              onClick={() => handleLambdaSubModeChange('from-schema')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                automationMode === 'lambda'
-                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                lambdaSubMode === 'from-schema'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              Schema + Lambda
-            </button>
-            <button
-              onClick={() => setAutomationMode('method')}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                automationMode === 'method'
-                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Method Creation
-            </button>
-            <button
-              onClick={() => setAutomationMode('external-namespace')}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                automationMode === 'external-namespace'
-                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              External Namespace
-            </button>
-            <button
-              onClick={() => setAutomationMode('namespace')}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                automationMode === 'namespace'
-                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Complete Namespace
+              Generate from Schema
             </button>
           </div>
+        )}
 
-          {/* Input Fields */}
+        {/* Single Schema Mode */}
+        {automationMode === 'schema' && (
           <div className="space-y-3">
-            {/* Namespace Name - shown for most modes */}
-            {(automationMode !== 'external-namespace') && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {automationMode === 'namespace' ? 'Namespace Name' : 'Namespace Name (Optional)'}
-                </label>
-                <input
-                  type="text"
-                  value={namespaceName}
-                  onChange={(e) => setNamespaceName(e.target.value)}
-                  placeholder="e.g., UserManagement, ECommerceAPI"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            )}
-
-            {/* Method Name - shown for schema and method modes */}
-            {(automationMode === 'schema' || automationMode === 'method') && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Method Name {automationMode === 'method' ? '' : '(Optional)'}
-                </label>
-                <input
-                  type="text"
-                  value={methodName}
-                  onChange={(e) => setMethodName(e.target.value)}
-                  placeholder="e.g., registerUser, getProducts"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            )}
-
-            {/* External Namespace URL - shown for external-namespace mode */}
-            {automationMode === 'external-namespace' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    External Namespace URL
-                  </label>
-                  <input
-                    type="url"
-                    value={externalNamespaceUrl}
-                    onChange={(e) => setExternalNamespaceUrl(e.target.value)}
-                    placeholder="https://api.example.com/swagger.json or https://api.example.com/openapi.yaml"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Namespace Name
-                  </label>
-                  <input
-                    type="text"
-                    value={externalNamespaceName}
-                    onChange={(e) => setExternalNamespaceName(e.target.value)}
-                    placeholder="e.g., ExternalAPI, ThirdPartyService"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* User Prompt */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {automationMode === 'external-namespace' 
-                  ? 'Analysis Instructions (Optional)' 
-                  : automationMode === 'method'
-                  ? 'Method Description'
-                  : automationMode === 'namespace' 
-                  ? 'Describe your API system'
-                  : 'Describe your API endpoint'
-                }
+                Describe your API endpoint
               </label>
               <textarea
                 value={userPrompt}
                 onChange={(e) => setUserPrompt(e.target.value)}
-                placeholder={
-                  automationMode === 'external-namespace'
-                    ? "Optional: Provide specific instructions for analyzing the external API, e.g., 'Focus on user management endpoints'"
-                    : automationMode === 'method'
-                    ? "Describe the method you want to create, e.g., 'Create a method for user authentication that accepts email and password'"
-                    : automationMode === 'namespace' 
-                    ? "Describe the complete API system you want to create, e.g., 'Create a complete e-commerce API with user management, product catalog, and order processing'"
-                    : "Describe the API endpoint you want to create, e.g., 'Create an API endpoint for user registration that accepts email, password, and name'"
-                }
+                placeholder="Describe the API endpoint you want to create, e.g., 'Create an API endpoint for user registration that accepts email, password, and name'"
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
               />
             </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
             <button
-              onClick={
-                automationMode === 'namespace' 
-                  ? handleNamespaceAutomation 
-                  : automationMode === 'lambda' 
-                  ? handleAutomatedSchemaGeneration 
-                  : automationMode === 'method'
-                  ? handleMethodCreation
-                  : automationMode === 'external-namespace'
-                  ? handleExternalNamespaceFetch
-                  : handleAutomatedSchemaGeneration
-              }
-              disabled={
-                loading || 
-                !userPrompt.trim() || 
-                (automationMode === 'namespace' && !namespaceName.trim()) ||
-                (automationMode === 'method' && !methodName.trim()) ||
-                (automationMode === 'external-namespace' && (!externalNamespaceUrl.trim() || !externalNamespaceName.trim()))
-              }
+              onClick={handleAutomatedSchemaGeneration}
+              disabled={loading || !userPrompt.trim()}
               className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Sparkles className="w-4 h-4" />
+              <span>Generate Schema</span>
+            </button>
+          </div>
+        )}
+
+        {/* Lambda Creation Mode */}
+        {automationMode === 'lambda' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Function Name *
+              </label>
+              <input
+                type="text"
+                value={lambdaFunctionName}
+                onChange={(e) => setLambdaFunctionName(e.target.value)}
+                placeholder="my-lambda-function"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Runtime
+                </label>
+                <select
+                  value={lambdaRuntime}
+                  onChange={(e) => setLambdaRuntime(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="nodejs18.x">Node.js 18.x</option>
+                  <option value="nodejs20.x">Node.js 20.x</option>
+                  <option value="python3.9">Python 3.9</option>
+                  <option value="python3.10">Python 3.10</option>
+                  <option value="java11">Java 11</option>
+                  <option value="dotnet6">.NET 6</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Memory (MB)
+                </label>
+                <select
+                  value={lambdaMemory}
+                  onChange={(e) => setLambdaMemory(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={128}>128 MB</option>
+                  <option value={256}>256 MB</option>
+                  <option value={512}>512 MB</option>
+                  <option value={1024}>1024 MB</option>
+                  <option value={2048}>2048 MB</option>
+                  <option value={4096}>4096 MB</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Timeout (seconds)
+              </label>
+              <select
+                value={lambdaTimeout}
+                onChange={(e) => setLambdaTimeout(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={3}>3 seconds</option>
+                <option value={5}>5 seconds</option>
+                <option value={10}>10 seconds</option>
+                <option value={30}>30 seconds</option>
+                <option value={60}>60 seconds</option>
+                <option value={300}>5 minutes</option>
+              </select>
+            </div>
+
+            {/* Description Input for Generate from Description mode */}
+            {lambdaSubMode === 'from-description' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Function Description *
+                </label>
+                <textarea
+                  value={userPrompt}
+                  onChange={(e) => setUserPrompt(e.target.value)}
+                  placeholder="Describe what the Lambda function should do, e.g., 'Create a Lambda function that processes user registration data and sends a welcome email'"
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            )}
+
+            {/* Schema Input for Schema-to-Lambda mode */}
+            {lambdaSubMode === 'from-schema' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Input Schema *
+                </label>
+                <textarea
+                  value={inputSchema}
+                  onChange={(e) => setInputSchema(e.target.value)}
+                  placeholder="Paste your JSON schema here..."
+                  rows={6}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                />
+              </div>
+            )}
+
+            {/* Lambda Code Display (read-only) */}
+            {lambdaCode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Generated Lambda Code
+                </label>
+                <textarea
+                  value={lambdaCode}
+                  readOnly
+                  rows={8}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-gray-50"
+                />
+              </div>
+            )}
+
+            {/* Action Button */}
+            <button
+              onClick={lambdaSubMode === 'from-description' ? handleLambdaFromDescription : handleSchemaToLambda}
+              disabled={loading || !lambdaFunctionName.trim() || 
+                (lambdaSubMode === 'from-description' && !userPrompt.trim()) ||
+                (lambdaSubMode === 'from-schema' && !inputSchema.trim())}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Zap className="w-4 h-4" />
               <span>
-                {automationMode === 'namespace' 
-                  ? 'Generate Complete Namespace' 
-                  : automationMode === 'lambda' 
-                  ? 'Generate Schema' 
-                  : automationMode === 'method'
-                  ? 'Generate Method'
-                  : automationMode === 'external-namespace'
-                  ? 'Fetch External Methods'
-                  : 'Generate Schema'
-                }
+                {lambdaSubMode === 'from-description' ? 'Generate Lambda Code' : 'Generate Lambda Code'}
               </span>
             </button>
 
-            {automationMode === 'lambda' && automationResult && (
+            {/* Create Lambda Function Button (appears after code generation) */}
+            {lambdaCode && (
               <button
-                onClick={handleLambdaGeneration}
-                disabled={loading}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleCreateLambdaFunction}
+                disabled={loading || !lambdaFunctionName.trim() || !lambdaCode.trim()}
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Zap className="w-4 h-4" />
-                <span>Deploy Lambda + URL</span>
+                <span>Create Lambda Function</span>
               </button>
             )}
+          </div>
+        )}
 
+        {/* External Namespace Mode */}
+        {automationMode === 'external-namespace' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                External Namespace URL
+              </label>
+              <input
+                type="url"
+                value={externalNamespaceUrl}
+                onChange={(e) => setExternalNamespaceUrl(e.target.value)}
+                placeholder="https://api.example.com/swagger.json or https://api.example.com/openapi.yaml"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Namespace Name
+              </label>
+              <input
+                type="text"
+                value={externalNamespaceName}
+                onChange={(e) => setExternalNamespaceName(e.target.value)}
+                placeholder="e.g., ExternalAPI, ThirdPartyService"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
             <button
-              onClick={resetForm}
-              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              onClick={handleExternalNamespaceFetch}
+              disabled={loading || !externalNamespaceUrl.trim() || !externalNamespaceName.trim()}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Reset
+              <Sparkles className="w-4 h-4" />
+              <span>Fetch External Namespace</span>
             </button>
           </div>
+        )}
 
-          {/* Deployment Status */}
-          {deploymentStatus && (
-            <div className={`p-3 rounded-lg ${
-              deploymentStatus.includes('successfully') 
-                ? 'bg-green-50 border border-green-200' 
-                : deploymentStatus.includes('failed') 
-                ? 'bg-red-50 border border-red-200'
-                : 'bg-blue-50 border border-blue-200'
-            }`}>
-              <p className={`text-sm ${
-                deploymentStatus.includes('successfully') 
-                  ? 'text-green-800' 
-                  : deploymentStatus.includes('failed') 
-                  ? 'text-red-800'
-                  : 'text-blue-800'
-              }`}>
-                {deploymentStatus}
-              </p>
-            </div>
-          )}
+        {/* External Namespace Mode - Show Fetched Data */}
+        {automationMode === 'external-namespace' && automationResult && (
+          <div className="space-y-4">
+            {/* Summary */}
+            {automationResult.namespace && (
+              <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+                <h4 className="font-semibold text-blue-800 mb-2">API Summary</h4>
+                <p className="text-sm text-blue-700">
+                  <strong>Name:</strong> {automationResult.namespace.name}<br />
+                  <strong>Description:</strong> {automationResult.namespace.description}<br />
+                  <strong>URL:</strong> {automationResult.namespace.url}
+                </p>
+              </div>
+            )}
 
-          {/* Results Display */}
-          {automationResult && (
-            <div className="flex-1 overflow-auto">
-              <div className="space-y-4">
-                {/* Schema Results */}
-                {generatedSchemas.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Generated Schemas</h4>
-                    <div className="space-y-2">
-                      {generatedSchemas.map((schema, index) => (
-                        <div key={index} className="bg-white rounded border p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-sm">{schema.name}</span>
-                            <button
-                              onClick={() => openSchemaModal(schema.name, schema.schema)}
-                              className="text-purple-600 hover:text-purple-700 text-sm"
-                            >
-                              Open in Schema Editor
-                            </button>
-                          </div>
-                          <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto max-h-32">
-                            {JSON.stringify(schema.schema, null, 2)}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Method Configuration */}
-                {Object.keys(methods).length > 0 && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Method Configuration</h4>
-                    <div className="space-y-2">
-                      {Object.entries(methods).map(([key, method]: [string, any]) => (
-                        <div key={key} className="bg-white rounded border p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="font-medium text-sm">{method.method} {method.path}</span>
-                              <p className="text-xs text-gray-600 mt-1">{method.description}</p>
-                            </div>
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                              {method.method}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Lambda Configuration */}
-                {generatedLambdaConfig && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Lambda Function</h4>
-                    <div className="bg-white rounded border p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">Function Name:</span>
-                        <span className="text-sm text-gray-600">{generatedLambdaConfig.functionName}</span>
+            {/* Methods List */}
+            {automationResult.methods && automationResult.methods.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-800">
+                    Extracted Methods ({automationResult.methods.length})
+                  </h4>
+                  <button
+                    onClick={handleSaveAllMethods}
+                    disabled={loading}
+                    className="flex items-center space-x-2 px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Save All Methods</span>
+                  </button>
+                </div>
+                
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {automationResult.methods.map((method: any, index: number) => (
+                    <div key={index} className="p-3 border border-gray-200 rounded-md bg-gray-50">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span className={`px-2 py-1 text-xs rounded font-mono ${
+                          method.method === 'GET' ? 'bg-green-100 text-green-800' :
+                          method.method === 'POST' ? 'bg-blue-100 text-blue-800' :
+                          method.method === 'PUT' ? 'bg-yellow-100 text-yellow-800' :
+                          method.method === 'DELETE' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {method.method}
+                        </span>
+                        <span className="font-mono text-sm text-gray-700">{method.path}</span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm">Runtime:</span>
-                        <span className="text-sm text-gray-600">{generatedLambdaConfig.runtime}</span>
-                      </div>
-                      {lambdaUrl && (
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">Function URL:</span>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-blue-600">{lambdaUrl}</span>
-                            <button
-                              onClick={() => openLambdaUrl(lambdaUrl)}
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => copyToClipboard(lambdaUrl)}
-                              className="text-gray-600 hover:text-gray-700"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                          </div>
+                      {method.description && (
+                        <p className="text-sm text-gray-600 mb-2">{method.description}</p>
+                      )}
+                      {method.parameters && method.parameters.length > 0 && (
+                        <div className="text-xs text-gray-500">
+                          <strong>Parameters:</strong> {method.parameters.length}
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
+              </div>
+            )}
 
-                {/* External Methods Display */}
-                {externalMethods.length > 0 && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-medium text-gray-900">External Namespace Methods</h4>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center space-x-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={selectedMethods.size === externalMethods.length && externalMethods.length > 0}
-                            onChange={(e) => handleSelectAll(e.target.checked)}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span>Select All</span>
-                        </label>
-                        <span className="text-sm text-gray-600">
-                          {selectedMethods.size} of {externalMethods.length} selected
+            {/* Raw JSON Data */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Raw API Data
+              </label>
+              <textarea
+                value={JSON.stringify(automationResult, null, 2)}
+                readOnly
+                rows={8}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm bg-gray-50"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Complete Namespace Mode */}
+        {automationMode === 'complete-namespace' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Namespace Name *
+              </label>
+              <input
+                type="text"
+                value={completeNamespaceName}
+                onChange={(e) => setCompleteNamespaceName(e.target.value)}
+                placeholder="e.g., UserManagement, ECommerceAPI, InventorySystem"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Application Description *
+              </label>
+              <textarea
+                value={applicationDescription}
+                onChange={(e) => setApplicationDescription(e.target.value)}
+                placeholder="Describe your complete application, e.g., 'Create a user management system with user registration, login, profile management, and password reset functionality. Include email verification and role-based access control.'"
+                rows={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+            <button
+              onClick={handleCompleteNamespaceGeneration}
+              disabled={loading || !completeNamespaceName.trim() || !applicationDescription.trim()}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Generate Complete Namespace</span>
+            </button>
+          </div>
+        )}
+
+        {/* Complete Namespace Mode - Show Generated Data */}
+        {automationMode === 'complete-namespace' && completeNamespaceResult && (
+          <div className="space-y-2 max-h-full overflow-y-auto pr-2">
+            {/* Namespace Summary */}
+            {completeNamespaceResult.namespace && (
+              <div className="p-2 rounded-md bg-blue-50 border border-blue-200">
+                <h4 className="font-semibold text-blue-800 mb-1 text-sm">Generated Namespace</h4>
+                <p className="text-xs text-blue-700">
+                  <strong>Name:</strong> {completeNamespaceResult.namespace.name}<br />
+                  <strong>Description:</strong> {completeNamespaceResult.namespace.description}<br />
+                  <strong>Version:</strong> {completeNamespaceResult.namespace.version}
+                </p>
+              </div>
+            )}
+
+            {/* Schemas Section */}
+            {completeNamespaceResult.schemas && completeNamespaceResult.schemas.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-1 text-sm">
+                  Generated Schemas ({completeNamespaceResult.schemas.length})
+                </h4>
+                <div className="space-y-1">
+                  {completeNamespaceResult.schemas.map((schema: any, index: number) => (
+                    <div key={index} className="border border-gray-200 rounded-md">
+                      <div className="p-1 bg-gray-50 border-b border-gray-200">
+                        <h5 className="font-medium text-gray-800 text-xs">{schema.name}</h5>
+                        {schema.description && (
+                          <p className="text-xs text-gray-600 mt-1">{schema.description}</p>
+                        )}
+                      </div>
+                      <div className="p-1">
+                        <textarea
+                          value={JSON.stringify(schema.schema, null, 2)}
+                          readOnly
+                          rows={3}
+                          className="w-full px-1 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Methods Section */}
+            {completeNamespaceResult.methods && completeNamespaceResult.methods.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-1 text-sm">
+                  Generated Methods ({completeNamespaceResult.methods.length})
+                </h4>
+                <div className="space-y-1">
+                  {completeNamespaceResult.methods.map((method: any, index: number) => (
+                    <div key={index} className="p-1 border border-gray-200 rounded-md bg-gray-50">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <span className={`px-1 py-0.5 text-xs rounded font-mono ${
+                          method.method === 'GET' ? 'bg-green-100 text-green-800' :
+                          method.method === 'POST' ? 'bg-blue-100 text-blue-800' :
+                          method.method === 'PUT' ? 'bg-yellow-100 text-yellow-800' :
+                          method.method === 'DELETE' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {method.method}
                         </span>
+                        <span className="font-mono text-xs text-gray-700">{method.path}</span>
+                        <span className="text-xs font-medium text-gray-800">{method.name}</span>
                       </div>
-                    </div>
-
-                    {/* Content Analysis Info */}
-                    {automationResult && (
-                      <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Database className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-medium text-blue-800">Content Analysis</span>
-                        </div>
-                        <div className="text-xs text-blue-700 space-y-1">
-                          <div><strong>Source:</strong> {automationResult.namespace?.url || 'Unknown'}</div>
-                          <div><strong>Content Type:</strong> {response && JSON.parse(response).content_type || 'Unknown'}</div>
-                          <div><strong>Methods Found:</strong> {externalMethods.length}</div>
-                          {automationResult.summary && (
-                            <div><strong>Summary:</strong> {automationResult.summary}</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Target Namespace Input */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Target Namespace Name
-                      </label>
-                      <input
-                        type="text"
-                        value={targetNamespace}
-                        onChange={(e) => setTargetNamespace(e.target.value)}
-                        placeholder="Enter the namespace name where you want to add these methods"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        If the namespace doesn't exist, it will be created automatically.
-                      </p>
-                    </div>
-
-                    {/* Add Selected Methods Button */}
-                    <div className="mb-4">
-                      <button
-                        onClick={handleAddSelectedMethods}
-                        disabled={selectedMethods.size === 0 || !targetNamespace.trim() || loading}
-                        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Add Selected Methods to Namespace</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {externalMethods.map((method, index) => (
-                        <div key={index} className="bg-white rounded border p-3">
-                          <div className="flex items-start space-x-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedMethods.has(`method-${index}`)}
-                              onChange={(e) => handleMethodSelection(`method-${index}`, e.target.checked)}
-                              className="mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      {method.description && (
+                        <p className="text-xs text-gray-600 mb-1">{method.description}</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-1 text-xs">
+                        {method.requestSchema && (
+                          <div>
+                            <strong>Request Schema:</strong>
+                            <textarea
+                              value={JSON.stringify(method.requestSchema, null, 2)}
+                              readOnly
+                              rows={1}
+                              className="w-full mt-1 px-1 py-0.5 border border-gray-300 rounded font-mono text-xs bg-white"
                             />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <span className="font-medium text-sm">{method.method} {method.path}</span>
-                                  <p className="text-xs text-gray-600 mt-1">{method.description}</p>
-                                  {method.parameters && method.parameters.length > 0 && (
-                                    <div className="mt-2">
-                                      <span className="text-xs text-gray-500">Parameters:</span>
-                                      <div className="text-xs text-gray-600 mt-1">
-                                        {method.parameters.map((param: any, i: number) => (
-                                          <span key={i} className="inline-block bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
-                                            {param.name}: {param.type}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                  {(method.requestSchema || method.responseSchema) && (
-                                    <div className="mt-2">
-                                      <span className="text-xs text-gray-500">Schemas:</span>
-                                      <div className="text-xs text-gray-600 mt-1">
-                                        {method.requestSchema && (
-                                          <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-1">
-                                            Request Schema
-                                          </span>
-                                        )}
-                                        {method.responseSchema && (
-                                          <span className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded">
-                                            Response Schema
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                                  {method.method}
-                                </span>
-                              </div>
-                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )}
+                        {method.responseSchema && (
+                          <div>
+                            <strong>Response Schema:</strong>
+                            <textarea
+                              value={JSON.stringify(method.responseSchema, null, 2)}
+                              readOnly
+                              rows={1}
+                              className="w-full mt-1 px-1 py-0.5 border border-gray-300 rounded font-mono text-xs bg-white"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
+              </div>
+            )}
 
-                {/* Raw Response */}
-                {response && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">Raw Response</h4>
-                      <button
-                        onClick={() => copyToClipboard(response)}
-                        className="text-gray-600 hover:text-gray-700"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
+            {/* Lambda Functions Section */}
+            {completeNamespaceResult.lambdaFunctions && completeNamespaceResult.lambdaFunctions.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-1 text-sm">
+                  Generated Lambda Functions ({completeNamespaceResult.lambdaFunctions.length})
+                </h4>
+                <div className="space-y-1">
+                  {completeNamespaceResult.lambdaFunctions.map((lambda: any, index: number) => (
+                    <div key={index} className="border border-gray-200 rounded-md">
+                      <div className="p-1 bg-gray-50 border-b border-gray-200">
+                        <h5 className="font-medium text-gray-800 text-xs">{lambda.name}</h5>
+                        {lambda.description && (
+                          <p className="text-xs text-gray-600 mt-1">{lambda.description}</p>
+                        )}
+                        <div className="flex space-x-4 mt-1 text-xs text-gray-500">
+                          <span>Runtime: {lambda.runtime}</span>
+                          <span>Memory: {lambda.memorySize}MB</span>
+                          <span>Timeout: {lambda.timeout}s</span>
+                        </div>
+                      </div>
+                      <div className="p-1">
+                        <textarea
+                          value={lambda.code}
+                          readOnly
+                          rows={4}
+                          className="w-full px-1 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-xs bg-gray-50"
+                        />
+                      </div>
                     </div>
-                    <pre className="text-xs bg-white p-3 rounded border overflow-auto max-h-64">
-                      {response}
-                    </pre>
-                  </div>
-                )}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            {completeNamespaceResult.summary && (
+              <div className="p-2 rounded-md bg-green-50 border border-green-200">
+                <h4 className="font-semibold text-green-800 mb-1 text-sm">System Summary</h4>
+                <p className="text-xs text-green-700">{completeNamespaceResult.summary}</p>
+              </div>
+            )}
+
+            {/* Raw JSON Data (Collapsible) */}
+            <details className="border border-gray-200 rounded-md">
+              <summary className="p-1 bg-gray-50 cursor-pointer hover:bg-gray-100 font-medium text-gray-700 text-xs">
+                Raw JSON Data
+              </summary>
+              <div className="p-1">
+                <textarea
+                  value={JSON.stringify(completeNamespaceResult, null, 2)}
+                  readOnly
+                  rows={3}
+                  className="w-full px-1 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs bg-gray-50"
+                />
+              </div>
+            </details>
+          </div>
+        )}
+
+        {/* Schema Mode - Show JSON Schema */}
+        {automationMode === 'schema' && automationResult && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Generated Schema
+            </label>
+            <textarea
+              value={JSON.stringify(automationResult, null, 2)}
+              readOnly
+              rows={8}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm bg-gray-50"
+            />
+          </div>
+        )}
+
+        {/* Status and Results */}
+        {automationMode === 'lambda' && deploymentStatus && (
+          <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <p className="text-sm text-blue-800">{deploymentStatus}</p>
+          </div>
+        )}
+        {automationMode === 'lambda' && error && (
+          <div className="p-3 rounded-md bg-red-50 border border-red-200">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        {automationMode === 'lambda' && lambdaUrl && (
+          <div className="p-3 rounded-md bg-green-50 border border-green-200">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-green-800">Function URL:</p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => copyToClipboard(lambdaUrl)}
+                  className="p-1 rounded hover:bg-green-100"
+                  title="Copy URL"
+                >
+                  <Copy className="w-3 h-3 text-green-600" />
+                </button>
+                <button
+                  onClick={() => openFunctionUrl(lambdaUrl)}
+                  className="p-1 rounded hover:bg-green-100"
+                  title="Open URL"
+                >
+                  <ExternalLink className="w-3 h-3 text-green-600" />
+                </button>
               </div>
             </div>
-          )}
+            <p className="text-xs text-green-600 mt-1 break-all">{lambdaUrl}</p>
+          </div>
+        )}
 
-          {/* Error Display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-red-800 text-sm">{error}</p>
-            </div>
-          )}
+        {/* Status and Results for Single Schema Mode */}
+        {automationMode === 'schema' && loading && (
+          <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <p className="text-sm text-blue-800">Generating schema...</p>
+          </div>
+        )}
+        {automationMode === 'schema' && error && (
+          <div className="p-3 rounded-md bg-red-50 border border-red-200">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        {automationMode === 'schema' && automationResult && !loading && (
+          <div className="p-3 rounded-md bg-green-50 border border-green-200">
+            <p className="text-sm text-green-800">Schema generated successfully!</p>
+          </div>
+        )}
 
-          {/* Loading State */}
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-              <span className="ml-2 text-gray-600">Generating...</span>
-            </div>
-          )}
-        </div>
+        {/* Status and Results for External Namespace Mode */}
+        {automationMode === 'external-namespace' && loading && (
+          <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <p className="text-sm text-blue-800">Fetching external namespace...</p>
+          </div>
+        )}
+        {automationMode === 'external-namespace' && error && (
+          <div className="p-3 rounded-md bg-red-50 border border-red-200">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        {automationMode === 'external-namespace' && automationResult && !loading && (
+          <div className="p-3 rounded-md bg-green-50 border border-green-200">
+            <p className="text-sm text-green-800">External namespace fetched successfully!</p>
+          </div>
+        )}
+
+        {/* Status and Results for Complete Namespace Mode */}
+        {automationMode === 'complete-namespace' && loading && (
+          <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <p className="text-sm text-blue-800">Generating complete namespace...</p>
+          </div>
+        )}
+        {automationMode === 'complete-namespace' && error && (
+          <div className="p-3 rounded-md bg-red-50 border border-red-200">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        {automationMode === 'complete-namespace' && completeNamespaceResult && !loading && (
+          <div className="p-3 rounded-md bg-green-50 border border-green-200">
+            <p className="text-sm text-green-800">Complete namespace generated successfully!</p>
+          </div>
+        )}
       </div>
-
-      {/* Resize handle */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-purple-300"
-        onMouseDown={startResize}
-      />
+      {/* Resize Handle */}
+      {placement === 'right' && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400"
+          onMouseDown={startResize}
+        />
+      )}
     </div>
   );
 };

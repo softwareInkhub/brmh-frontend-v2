@@ -15,13 +15,30 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 
 const inter = Inter({ subsets: ["latin"] });
 
+function AppContent({ children }: { children: React.ReactNode }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  return (
+    <>
+      <div className="flex min-h-screen bg-gray-50 overflow-hidden ml-20">
+        <Sidebar />
+        <div className="flex-1 min-h-screen overflow-hidden">
+          <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
+          <main className="w-full min-h-screen overflow-hidden">
+            {children}
+          </main>
+        </div>
+      </div>
+      <FooterWithCollapseButton />
+    </>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
   return (
     <html lang="en" className="overflow-hidden">
       <body 
@@ -31,16 +48,9 @@ export default function RootLayout({
         <DndProvider backend={HTML5Backend}>
           <QueryClientProvider client={queryClient}>
             <SidePanelProvider>
-              <div className="flex min-h-screen bg-gray-50 overflow-hidden ml-20">
-                <Sidebar />
-                <div className="flex-1 min-h-screen overflow-hidden">
-                  <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
-                  <main className="w-full min-h-screen overflow-hidden">
-                    {children}
-                  </main>
-                </div>
-              </div>
-              <FooterWithCollapseButton />
+              <AppContent>
+                {children}
+              </AppContent>
             </SidePanelProvider>
             <Toaster richColors position="top-right" />
           </QueryClientProvider>
