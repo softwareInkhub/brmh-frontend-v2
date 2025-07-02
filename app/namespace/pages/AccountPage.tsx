@@ -25,18 +25,61 @@ export default function AccountPage({ account, namespace }: Props) {
 
   // Helper to render header variables if present
   const renderHeaderVars = (headers: any) => {
-    if (!headers || typeof headers !== 'object') return <span className="italic text-gray-400">None</span>;
-  return (
+    if (!Array.isArray(headers) || headers.length === 0)
+      return <span className="italic text-gray-400">None</span>;
+    return (
       <ul className="space-y-1 mt-1">
-        {Object.entries(headers).map(([key, value]) => (
-          <li key={key} className="flex items-center gap-2 text-xs">
+        {headers.map((header: any, idx: number) => (
+          <li key={idx} className="flex items-center gap-2 text-xs">
             <Key size={14} className="text-blue-400" />
-            <span className="font-mono text-gray-700">{key}</span>
-            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded ml-2">{String(value)}</span>
+            <span className="font-mono text-gray-700">{header.key}</span>
+            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded ml-2">{String(header.value)}</span>
           </li>
         ))}
       </ul>
     );
+  };
+
+  // Helper to render variables if present
+  const renderVariables = (variables: any[]) => {
+    if (!Array.isArray(variables) || variables.length === 0)
+      return <span className="italic text-gray-400">None</span>;
+    return (
+      <ul className="space-y-1 mt-1">
+        {variables.map((v, idx) => (
+          <li key={idx} className="flex items-center gap-2 text-xs">
+            <Key size={14} className="text-green-400" />
+            <span className="font-mono text-gray-700">{v.key}</span>
+            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded ml-2">{String(v.value)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  // Helpers for editing key/value pairs in arrays
+  const handleEditPair = (field: string, idx: number, keyOrValue: 'key' | 'value', newValue: string) => {
+    setEditAccount((prev: any) => {
+      const arr = Array.isArray(prev[field]) ? [...prev[field]] : [];
+      arr[idx] = { ...arr[idx], [keyOrValue]: newValue };
+      return { ...prev, [field]: arr };
+    });
+  };
+
+  const handleAddPair = (field: string) => {
+    setEditAccount((prev: any) => {
+      const arr = Array.isArray(prev[field]) ? [...prev[field]] : [];
+      arr.push({ key: '', value: '' });
+      return { ...prev, [field]: arr };
+    });
+  };
+
+  const handleRemovePair = (field: string, idx: number) => {
+    setEditAccount((prev: any) => {
+      const arr = Array.isArray(prev[field]) ? [...prev[field]] : [];
+      arr.splice(idx, 1);
+      return { ...prev, [field]: arr };
+    });
   };
 
   // Pinterest OAuth redirect logic
@@ -149,10 +192,16 @@ export default function AccountPage({ account, namespace }: Props) {
                   )}
                 </div>
               </div>
-              {editAccount["header-variables"] && (
+              {Array.isArray(editAccount["namespace-account-header"]) && (
                 <div className="sm:col-span-2">
-                  <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><List size={16} className="text-blue-400" /> Header Variables</div>
-                  {renderHeaderVars(editAccount["header-variables"])}
+                  <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><List size={16} className="text-blue-400" /> Headers</div>
+                  {renderHeaderVars(editAccount["namespace-account-header"])}
+                </div>
+              )}
+              {Array.isArray(editAccount["variables"]) && (
+                <div className="sm:col-span-2">
+                  <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><List size={16} className="text-green-400" /> Variables</div>
+                  {renderVariables(editAccount["variables"])}
                 </div>
               )}
               <div className="sm:col-span-2 flex items-center gap-2 mt-2">
@@ -213,10 +262,78 @@ export default function AccountPage({ account, namespace }: Props) {
                   onChange={e => handleInput('tags', e.target.value.split(',').map((t: string) => t.trim()).filter(Boolean))}
                 />
               </div>
-              {editAccount["header-variables"] && (
+              {Array.isArray(editAccount["namespace-account-header"]) && (
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Header Variables</label>
-                  {renderHeaderVars(editAccount["header-variables"])}
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Headers</label>
+                  {editAccount["namespace-account-header"].map((header: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 mb-2 w-full">
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1 text-xs flex-1"
+                        placeholder="Key"
+                        value={header.key}
+                        onChange={e => handleEditPair("namespace-account-header", idx, "key", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1 text-xs flex-1"
+                        placeholder="Value"
+                        value={header.value}
+                        onChange={e => handleEditPair("namespace-account-header", idx, "value", e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="text-red-500 text-xs ml-2"
+                        onClick={() => handleRemovePair("namespace-account-header", idx)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="text-blue-500 text-xs mt-1"
+                    onClick={() => handleAddPair("namespace-account-header")}
+                  >
+                    + Add Header
+                  </button>
+                </div>
+              )}
+              {Array.isArray(editAccount["variables"]) && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Variables</label>
+                  {editAccount["variables"].map((v: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 mb-2 w-full">
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1 text-xs flex-1"
+                        placeholder="Key"
+                        value={v.key}
+                        onChange={e => handleEditPair("variables", idx, "key", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="border rounded px-2 py-1 text-xs flex-1"
+                        placeholder="Value"
+                        value={v.value}
+                        onChange={e => handleEditPair("variables", idx, "value", e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="text-red-500 text-xs ml-2"
+                        onClick={() => handleRemovePair("variables", idx)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="text-blue-500 text-xs mt-1"
+                    onClick={() => handleAddPair("variables")}
+                  >
+                    + Add Variable
+                  </button>
                 </div>
               )}
             </div>

@@ -135,3 +135,15 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom thin scrollbar for tab section */
+.tab-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+.tab-scrollbar::-webkit-scrollbar-thumb {
+  background: #d1d5db; /* Tailwind gray-300 */
+  border-radius: 4px;
+}
+.tab-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}

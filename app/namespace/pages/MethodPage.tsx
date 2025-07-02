@@ -53,33 +53,40 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
     try {
       // Use the correct endpoint and body structure
       const methodId = editMethod["namespace-method-id"];
-      const requestBody = {
+      const requestBody: Record<string, any> = {
         "namespace-method-name": editMethod["namespace-method-name"],
         "namespace-method-type": editMethod["namespace-method-type"],
-        "namespace-method-url-override": editMethod["namespace-method-url-override"] || '',
+        "namespace-method-url-override": editMethod["namespace-method-url-override"] || undefined,
         "namespace-method-queryParams": editMethod["namespace-method-queryParams"] || [],
         "namespace-method-header": editMethod["namespace-method-header"] || [],
         "save-data": !!editMethod["save-data"],
         "isInitialized": !!editMethod["isInitialized"],
         "tags": editMethod["tags"] || [],
-        "namespace-method-tableName": editMethod["namespace-method-tableName"] || '',
-        "tableName": editMethod["tableName"] || '',
-        "schemaId": editMethod["schemaId"] || '',
-        "namespace-id": editMethod["namespace-id"] || ''
+        "namespace-method-tableName": editMethod["namespace-method-tableName"] || undefined,
+        "tableName": editMethod["tableName"] || undefined,
+        "schemaId": editMethod["schemaId"] || undefined,
+        "namespace-id": editMethod["namespace-id"] || undefined
       };
+      // Remove undefined or empty string fields
+      Object.keys(requestBody).forEach(
+        key => (requestBody[key] === undefined || requestBody[key] === '') && delete requestBody[key]
+      );
+      console.log('Edit Method Request Body:', requestBody);
       const res = await fetch(`${API_BASE_URL}/unified/methods/${methodId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
+      const data = await res.json().catch(() => ({}));
+      console.log('Edit Method Response:', data);
       if (res.ok) {
         setSaveMsg('Method updated successfully!');
         setEditMode(false);
       } else {
-        setSaveMsg('Failed to update method.');
+        setSaveMsg('Failed to update method: ' + (data?.error || 'Unknown error'));
       }
-    } catch {
-      setSaveMsg('Failed to update method.');
+    } catch (err: any) {
+      setSaveMsg('Failed to update method. ' + (err?.message || ''));
     }
   };
 
@@ -120,7 +127,7 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                   onClick={async () => {
                     if (window.confirm('Are you sure you want to delete this method?')) {
                       try {
-                        const res = await fetch(`/api/namespace/method`, {
+                        const res = await fetch(`${API_BASE_URL}/unified/methods/${editMethod["namespace-method-id"]}`, {
                           method: 'DELETE',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ id: editMethod["namespace-method-id"] }),

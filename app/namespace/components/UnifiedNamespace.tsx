@@ -959,10 +959,14 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><FileCode size={14}/> Schemas</span>
             <button
                     className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 rounded-full bg-purple-50 font-semibold"
-                    onClick={() => { setSchemaModalNamespace(ns); setShowUnifiedSchemaModal(true); }}
+                    onClick={() => { 
+                      const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                      setSchemaModalNamespace(currentNamespace);
+                      setShowUnifiedSchemaModal(true); 
+                    }}
             >
                     + Create Schema
-            </button>
+          </button>
           </div>
                 {
                   (() => {
@@ -1407,202 +1411,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         </div>
       )}
 
-      {/* Method Modal */}
-      {showMethodModal && (
-        <div 
-          className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={() => setShowMethodModal(false)}
-        >
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-semibold mb-4">
-              {editingMethod ? 'Edit Method' : 'Create Method'}
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Method Name *
-                </label>
-                <input
-                  type="text"
-                  value={methodForm["namespace-method-name"]}
-                  onChange={e => setMethodForm(f => ({ ...f, "namespace-method-name": e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Method Type *
-                </label>
-                <select
-                  value={methodForm["namespace-method-type"]}
-                  onChange={e => setMethodForm(f => ({ ...f, "namespace-method-type": e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                  <option value="PUT">PUT</option>
-                  <option value="DELETE">DELETE</option>
-                  <option value="PATCH">PATCH</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL Override
-                </label>
-                <input
-                  type="text"
-                  value={methodForm["namespace-method-url-override"]}
-                  onChange={e => setMethodForm(f => ({ ...f, "namespace-method-url-override": e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Query Parameters
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setMethodForm(f => ({ ...f, "namespace-method-queryParams": [...f["namespace-method-queryParams"], { key: '', value: '' }] }))}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    + Add Query Parameter
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {methodForm["namespace-method-queryParams"].map((param, index) => (
-                    <div key={index} className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Key"
-                        value={param.key}
-                        onChange={e => {
-                          const updated = [...methodForm["namespace-method-queryParams"]];
-                          updated[index] = { ...param, key: e.target.value };
-                          setMethodForm(f => ({ ...f, "namespace-method-queryParams": updated }));
-                        }}
-                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Value"
-                        value={param.value}
-                        onChange={e => {
-                          const updated = [...methodForm["namespace-method-queryParams"]];
-                          updated[index] = { ...param, value: e.target.value };
-                          setMethodForm(f => ({ ...f, "namespace-method-queryParams": updated }));
-                        }}
-                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = methodForm["namespace-method-queryParams"].filter((_, i) => i !== index);
-                          setMethodForm(f => ({ ...f, "namespace-method-queryParams": updated }));
-                        }}
-                        className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Headers
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setMethodForm(f => ({ ...f, "namespace-method-header": [...f["namespace-method-header"], { key: '', value: '' }] }))}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    + Add Header
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {methodForm["namespace-method-header"].map((header, index) => (
-                    <div key={index} className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Key"
-                        value={header.key}
-                        onChange={e => {
-                          const updated = [...methodForm["namespace-method-header"]];
-                          updated[index] = { ...header, key: e.target.value };
-                          setMethodForm(f => ({ ...f, "namespace-method-header": updated }));
-                        }}
-                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Value"
-                        value={header.value}
-                        onChange={e => {
-                          const updated = [...methodForm["namespace-method-header"]];
-                          updated[index] = { ...header, value: e.target.value };
-                          setMethodForm(f => ({ ...f, "namespace-method-header": updated }));
-                        }}
-                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = methodForm["namespace-method-header"].filter((_, i) => i !== index);
-                          setMethodForm(f => ({ ...f, "namespace-method-header": updated }));
-                        }}
-                        className="px-2 py-2 text-red-600 hover:text-red-700 rounded-lg hover:bg-red-50"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tags (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={methodForm.tags.join(', ')}
-                  onChange={e => setMethodForm(f => ({ ...f, tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean) }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="save-data-edit"
-                  checked={methodForm["save-data"]}
-                  onChange={e => setMethodForm(f => ({ ...f, "save-data": e.target.checked }))}
-                  className="rounded text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="save-data-edit" className="text-sm text-gray-700">
-                  Save Data
-                </label>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowMethodModal(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveMethod}
-                className={`px-4 py-2 ${editingMethod ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg`}
-                disabled={methodLoading}
-              >
-                {editingMethod ? 'Update Method' : 'Create Method'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+     
 
       {/* Method Preview Modal */}
       {previewMethod && (

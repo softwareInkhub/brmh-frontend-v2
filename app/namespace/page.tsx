@@ -6,11 +6,8 @@ import Namespace from './components/Namespace';
 import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
-import SchemaModal from './Modals/SchemaModal';
-import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
+import { schemaToFields } from './components/SchemaService';
 import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database } from 'lucide-react';
-import AccountModal from './Modals/AccountModal';
-import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
 import AccountPreviewModal from './Modals/AccountPreviewModal';
 import MethodPreviewModal from './Modals/MethodPreviewModal';
@@ -74,6 +71,14 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
+// Utility to truncate tab names in JS
+function truncateTabName(name: string, max = 18) {
+  if (!name) return '';
+  // Remove line breaks and extra spaces
+  const clean = name.replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
+  return clean.length > max ? clean.slice(0, max) + '...' : clean;
+}
+
 export default function NamespacePage() {
   const { isCollapsed } = useSidePanel();
   const [activeTab, setActiveTab] = useState('overview');
@@ -101,8 +106,7 @@ export default function NamespacePage() {
   const [previewSchema, setPreviewSchema] = useState(null);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
 
-  // New state for AccountModal and MethodModal
-  const [accountModal, setAccountModal] = useState<{ isOpen: boolean; account: any | null }>({ isOpen: false, account: null });
+  // New state for MethodModal
   const [methodModal, setMethodModal] = useState<{ isOpen: boolean; method: any | null }>({ isOpen: false, method: null });
   const [namespaceModal, setNamespaceModal] = useState<{ isOpen: boolean; namespace: any | null }>({ isOpen: false, namespace: null });
 
@@ -113,8 +117,8 @@ export default function NamespacePage() {
   const [showSchemaModal, setShowSchemaModal] = useState(false);
 
   // Add state for all accounts/methods tabs
-  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any }[]>([]);
-  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any }[]>([]);
+  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any; openForm?: boolean }[]>([]);
+  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any; openForm?: boolean }[]>([]);
 
   // Add state for account/method tabs
   const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any }[]>([]);
@@ -209,11 +213,11 @@ export default function NamespacePage() {
       return;
     }
   };
-  const handleSidePanelAdd = (type: string, parentData?: any) => {
+  const handleSidePanelAdd = (type: string, parentData?: any, options?: { openForm?: boolean }) => {
     if (type === 'namespace') {
       setNamespaceModal({ isOpen: true, namespace: null });
     } else if (type === 'account') {
-      setAccountModal({ isOpen: true, account: null });
+      setMethodModal({ isOpen: true, method: null });
     } else if (type === 'method') {
       setMethodModal({ isOpen: true, method: null });
     } else if (type === 'schema') {
@@ -238,7 +242,7 @@ export default function NamespacePage() {
       setActiveTab(key);
       setAllAccountsTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
-        return [...prev, { key, namespace: parentData }];
+        return [...prev, { key, namespace: parentData, openForm: options?.openForm }];
       });
       return;
     } else if (type === 'allMethods') {
@@ -249,7 +253,7 @@ export default function NamespacePage() {
       setActiveTab(key);
       setAllMethodsTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
-        return [...prev, { key, namespace: parentData }];
+        return [...prev, { key, namespace: parentData, openForm: options?.openForm }];
       });
       return;
     } else if (type === 'accountPage' && parentData?.account) {
@@ -694,7 +698,10 @@ export default function NamespacePage() {
         >
           {/* Tab Section (always flush left) */}
           <div className="flex items-center border-b bg-white px-4 py-2">
-            <div className="flex items-center gap-1">
+            <div
+              className="flex items-center gap-1 flex-nowrap overflow-x-auto whitespace-nowrap scrollbar-thin tab-scrollbar"
+              style={{ maxWidth: '100vw', minWidth: 0 }}
+            >
               {tabs.map(tab => (
                 <div key={tab.key} className="flex items-center group">
                   <button
@@ -704,8 +711,9 @@ export default function NamespacePage() {
                       ${tab.italic ? 'italic' : ''}
                     `}
                     onClick={() => setActiveTab(tab.key)}
+                    style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}
                   >
-                    {tab.label}
+                    {truncateTabName(tab.label)}
                   </button>
                   {tab.key !== 'overview' && (
                     <button
@@ -782,13 +790,14 @@ export default function NamespacePage() {
             {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
               <NewTabContent onOpenTab={handleOpenTab} />
             )}
-            {allAccountsTabs.map(({ key, namespace }) => (
+            {allAccountsTabs.map(({ key, namespace, openForm }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <AllAccountPage
                   namespace={namespace}
+                  openForm={openForm}
                   onViewAccount={(account, ns) => {
                     const tabKey = `accountPage-${account['namespace-account-id']}`;
                     if (!tabs.find(tab => tab.key === tabKey)) {
@@ -803,13 +812,14 @@ export default function NamespacePage() {
                 />
               </div>
             ))}
-            {allMethodsTabs.map(({ key, namespace }) => (
+            {allMethodsTabs.map(({ key, namespace, openForm }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <AllMethodPage
                   namespace={namespace}
+                  openForm={openForm}
                   onViewMethod={(method, ns) => {
                     const tabKey = `methodPage-${method['namespace-method-id']}`;
                     if (!tabs.find(tab => tab.key === tabKey)) {
@@ -1009,22 +1019,7 @@ export default function NamespacePage() {
         </div>
       </div>
 
-      <AccountModal
-        isOpen={accountModal.isOpen}
-        onClose={() => setAccountModal({ isOpen: false, account: null })}
-        account={accountModal.account}
-        namespaceId={namespaces[0]?.["namespace-id"] || ''}
-        refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
-      />
-
-      <MethodModal
-        isOpen={methodModal.isOpen}
-        onClose={() => setMethodModal({ isOpen: false, method: null })}
-        method={methodModal.method}
-        namespaceId={namespaces[0]?.["namespace-id"]}
-        refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
-      />
-
+     
       <NamespaceModal
         isOpen={namespaceModal.isOpen}
         onClose={() => setNamespaceModal({ isOpen: false, namespace: null })}
@@ -1037,7 +1032,7 @@ export default function NamespacePage() {
         onClose={() => setPreviewAccount(null)}
         account={previewAccount}
         onEdit={account => {
-          setAccountModal({ isOpen: true, account });
+          setMethodModal({ isOpen: true, method: null });
           setPreviewAccount(null);
         }}
         onDelete={async (account) => {

@@ -8,7 +8,7 @@ interface SidePanelProps {
   schemas: any[];
   methods: Record<string, any[]>; // namespaceId -> methods
   onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
-  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace', parentData?: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace', parentData?: any, options?: { openForm?: boolean }) => void;
   fetchNamespaceDetails: (namespaceId: string) => void;
   selectedSchemaId?: string | null;
   onEditSchema?: (schema: any) => void;
@@ -89,7 +89,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       {/* Header */}
       <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
         <LayoutDashboard className="text-blue-600" size={20} />
-        <span className="font-bold text-lg text-gray-900">Dashboard</span>
+        <span className="font-bold text-lg text-gray-900">BRMH</span>
       </div>
       {/* Search/Filter/Add Row */}
       <div className="flex items-center px-3 py-2 space-x-2 border-b border-gray-100 bg-white">
@@ -167,12 +167,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         >
                           {expandedSection[ns['namespace-id']]?.accounts ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Accounts</span>
-                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
-                            <Plus size={14} className="text-blue-400" />
-                          </span>
+                          
                         </button>
                         <button
-                          onClick={() => onAdd('account', ns)}
+                          onClick={() =>{  toggleSection(ns['namespace-id'], 'accounts');
+                            onAdd('allAccounts', ns, { openForm: true });}}
                           className="p-1 rounded hover:bg-blue-50"
                           title="Add Account"
                           type="button"
@@ -182,9 +181,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                       </div>
                       {expandedSection[ns['namespace-id']]?.accounts && (
                         <div className="space-y-1">
-                          {(accounts[ns['namespace-id']] || []).map(acc => (
+                          {(accounts[ns['namespace-id']] || []).map((acc, idx) => (
                             <button
-                              key={acc['namespace-account-id']}
+                              key={acc['namespace-account-id'] || idx}
                               onClick={() => onAdd('accountPage', { account: acc, namespace: ns })}
                               className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
                             >
@@ -217,12 +216,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         >
                           {expandedSection[ns['namespace-id']]?.methods ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Methods</span>
-                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
-                            <Plus size={14} className="text-blue-400" />
-                          </span>
+                         
                         </button>
                         <button
-                          onClick={() => onAdd('method', ns)}
+                          onClick={() =>{toggleSection(ns['namespace-id'], 'methods');
+                            onAdd('allMethods', ns, { openForm: true });}}
                           className="p-1 rounded hover:bg-blue-50"
                           title="Add Method"
                           type="button"
@@ -232,9 +230,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                       </div>
                       {expandedSection[ns['namespace-id']]?.methods && (
                         <div className="space-y-1">
-                          {(methods[ns['namespace-id']] || []).map(m => (
+                          {(methods[ns['namespace-id']] || []).map((m, idx) => (
                             <button
-                              key={m['namespace-method-id']}
+                              key={m['namespace-method-id'] || idx}
                               onClick={() => onItemClick('method', m)}
                               className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
                             >
@@ -256,31 +254,29 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                       )}
                     </div>
                     {/* Schemas */}
-      <div>
+                    <div>
                       <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
-          <button
+                        <button
                           className="flex items-center gap-1 group hover:underline cursor-pointer"
                           onClick={() => {
                             toggleSection(ns['namespace-id'], 'schemas');
                             onAdd('allSchemas', ns);
                           }}
-            type="button"
-          >
+                          type="button"
+                        >
                           {expandedSection[ns['namespace-id']]?.schemas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           <span>Schemas</span>
-                          <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
-                            <Plus size={14} className="text-purple-400" />
-                          </span>
-          </button>
-          <button
+                          
+                        </button>
+                        <button
                           onClick={() => onAdd('schema', ns)}
-            className="p-1 rounded hover:bg-purple-50"
-            title="Add Schema"
-            type="button"
-          >
-            <Plus size={14} className="text-purple-500" />
-          </button>
-        </div>
+                          className="p-1 rounded hover:bg-purple-50"
+                          title="Add Schema"
+                          type="button"
+                        >
+                          <Plus size={14} className="text-purple-500" />
+                        </button>
+                      </div>
                       {expandedSection[ns['namespace-id']]?.schemas && (
                         <div className="space-y-1">
                           {(
@@ -289,24 +285,24 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                                 Array.isArray(ns.schemaIds) &&
                                 ns.schemaIds.includes(s.id)
                             ) || []
-                          ).map(schema => (
-                      <button
-                              key={schema.id}
+                          ).map((schema, idx) => (
+                            <button
+                              key={schema.id || idx}
                               onClick={() => onItemClick('schema', schema)}
                               className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
-                      >
+                            >
                               <FileCode size={16} className="text-purple-500" />
                               <span>{schema.schemaName}</span>
-                      </button>
-                ))}
-          </div>
-        )}
-      </div>
-        </div>
-        )}
-      </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
-        </div>
+          </div>
         )}
       </div>
       <NamespacePreviewModal
