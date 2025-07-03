@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw, LayoutDashboard } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw, LayoutDashboard, Bot } from 'lucide-react';
 import NamespacePreviewModal from '../Modals/NamespacePreviewModal';
 import { useDrag } from 'react-dnd';
 
@@ -15,6 +15,7 @@ interface SidePanelProps {
   onEditSchema?: (schema: any) => void;
   onDeleteSchema?: (schema: any) => void;
   onDeleteNamespace?: (namespace: any) => void;
+  onOpenAIAgent?: (namespace?: any) => void;
 }
 
 const methodColor = (type: string) => {
@@ -94,7 +95,7 @@ const DraggableSchema: React.FC<{ schema: any; children: React.ReactNode; onClic
   );
 };
 
-const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace, onOpenAIAgent }) => {
   // Debug logs
   console.log('SidePanel namespaces:', namespaces);
   console.log('SidePanel schemas:', schemas);
@@ -146,6 +147,15 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
         <LayoutDashboard className="text-blue-600" size={20} />
         <span className="font-bold text-lg text-gray-900">Dashboard</span>
+        {onOpenAIAgent && (
+          <button
+            onClick={() => onOpenAIAgent()}
+            className="ml-auto p-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700 transition-all"
+            title="Open AI Agent Workspace"
+          >
+            <Bot size={16} />
+          </button>
+        )}
       </div>
       {/* Search/Filter/Add Row */}
       <div className="flex items-center px-3 py-2 space-x-2 border-b border-gray-100 bg-white">
@@ -211,6 +221,19 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         {ns['namespace-name']}
                       </span>
                     </button>
+                    {onOpenAIAgent && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenAIAgent(ns);
+                        }}
+                        className="p-1 rounded hover:bg-purple-50"
+                        title="Open AI Agent for this namespace"
+                        type="button"
+                      >
+                        <Bot size={14} className="text-purple-500" />
+                      </button>
+                    )}
                   </div>
                   {expandedNs[ns['namespace-id']] && (
                     <div className="ml-6 mt-1 space-y-1">
@@ -242,7 +265,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         </div>
                         {expandedSection[ns['namespace-id']]?.accounts && (
                           <div className="space-y-1">
-                            {(accounts[ns['namespace-id']] || []).map(acc => (
+                            {(Array.isArray(accounts[ns['namespace-id']]) ? accounts[ns['namespace-id']] : []).map(acc => (
                               <button
                                 key={acc['namespace-account-id']}
                                 onClick={() => onAdd('accountPage', { account: acc, namespace: ns })}

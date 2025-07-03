@@ -84,10 +84,12 @@ export default function NamespacePage() {
       try {
         const response = await fetch(`http://localhost:5001/unified/namespaces`);
         const data = await response.json();
-        setNamespaces(Array.isArray(data) ? data : []);
-        } catch (error) {
-      setNamespaces([]);
-    }
+        const namespacesArray = Array.isArray(data) ? data : 
+                               (data && Array.isArray(data.body) ? data.body : []);
+        setNamespaces(namespacesArray);
+      } catch (error) {
+        setNamespaces([]);
+      }
     }
     fetchNamespaces();
   }, []);

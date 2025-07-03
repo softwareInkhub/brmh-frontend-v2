@@ -7,9 +7,10 @@ import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
 import LLMTerminal from './components/LLMTerminal';
 import EnhancedLLMTerminal from './components/EnhancedLLMTerminal';
+import dynamic from 'next/dynamic';
 import SchemaModal from './Modals/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
-import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database, Sparkles } from 'lucide-react';
+import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database, Sparkles, Bot } from 'lucide-react';
 import AccountModal from './Modals/AccountModal';
 import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
@@ -29,6 +30,21 @@ import SingleNamespacePage from './pages/SingleNamespacePage';
 import MethodTestPage from './pages/MethodTestPage';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+
+// Dynamically import AIAgentWorkspace to prevent SSR issues
+const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8">
+        <div className="flex items-center gap-3">
+          <Bot className="text-blue-500 animate-pulse" size={24} />
+          <span>Loading AI Agent Workspace...</span>
+        </div>
+      </div>
+    </div>
+  )
+});
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
@@ -140,6 +156,9 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   // Add state for method test tabs
   const [methodTestTabs, setMethodTestTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
 
+  // Add state for AI Agent Workspace
+  const [aiAgentTab, setAIAgentTab] = useState<{ namespace?: any } | null>(null);
+
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
     Object.entries(namespaceDetailsMap).map(([nsId, v]) => [nsId, v.accounts])
@@ -150,37 +169,60 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
   // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
-    console.log('Fetching namespaces and schemas...');
-    
-    // Fetch namespaces
-    fetch(`http://localhost:5001/unified/namespaces`)
-      .then(res => {
-        console.log('Namespaces response status:', res.status);
-        return res.json();
-      })
-      .then(data => {
-        console.log('Namespaces data received:', data);
-        setNamespaces(Array.isArray(data) ? data : []);
-      })
-      .catch(error => {
+    const fetchData = async () => {
+      console.log('Fetching namespaces and schemas...');
+      
+      // Add a small delay to ensure backend is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      try {
+        // Fetch namespaces
+        const namespacesRes = await fetch(`http://localhost:5001/unified/namespaces`);
+        console.log('Namespaces response status:', namespacesRes.status);
+        if (!namespacesRes.ok) {
+          throw new Error(`HTTP error! status: ${namespacesRes.status}`);
+        }
+        const namespacesData = await namespacesRes.json();
+        console.log('Namespaces data received:', namespacesData);
+        // Fix: Handle both formats - direct array or wrapped in body
+        const namespacesArray = Array.isArray(namespacesData) ? namespacesData : 
+                               (namespacesData && Array.isArray(namespacesData.body) ? namespacesData.body : []);
+        setNamespaces(namespacesArray);
+      } catch (error) {
         console.error('Error fetching namespaces:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          type: error.constructor.name
+        });
         setNamespaces([]);
-      });
+      }
 
-    // Fetch schemas
-    fetch(`http://localhost:5001/unified/schema`)
-      .then(res => {
-        console.log('Schemas response status:', res.status);
-        return res.json();
-      })
-      .then(data => {
-        console.log('Schemas data received:', data);
-        setSchemas(Array.isArray(data) ? data : []);
-      })
-      .catch(error => {
+      try {
+        // Fetch schemas
+        const schemasRes = await fetch(`http://localhost:5001/unified/schema`);
+        console.log('Schemas response status:', schemasRes.status);
+        if (!schemasRes.ok) {
+          throw new Error(`HTTP error! status: ${schemasRes.status}`);
+        }
+        const schemasData = await schemasRes.json();
+        console.log('Schemas data received:', schemasData);
+        // Fix: Handle both formats - direct array or wrapped in body
+        const schemasArray = Array.isArray(schemasData) ? schemasData : 
+                           (schemasData && Array.isArray(schemasData.body) ? schemasData.body : []);
+        setSchemas(schemasArray);
+      } catch (error) {
         console.error('Error fetching schemas:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          type: error.constructor.name
+        });
         setSchemas([]);
-      });
+      }
+    };
+
+    fetchData();
   }, []);
 
   // Fetch accounts and methods for a namespace
@@ -621,6 +663,23 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
             <Zap size={40} className="text-blue-300 mb-4" />
             <div className="font-semibold text-gray-800">New Request</div>
           </div>
+          <div 
+            className="flex flex-col items-center bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer text-white" 
+            onClick={() => {
+              const key = 'ai-agent';
+              if (!tabs.find(tab => tab.key === key)) {
+                setTabs([...tabs, { key, label: 'AI Agent' }]);
+              }
+              setActiveTab(key);
+              setAIAgentTab({});
+            }}
+          >
+            <Bot size={40} className="text-white mb-4" />
+            <div className="font-semibold text-white">AI Agent Workspace</div>
+            <div className="text-xs text-purple-100 mt-2 text-center">
+              Design APIs, generate code, test endpoints
+            </div>
+          </div>
         </div>
         <div className="mb-4">
           <button className="text-gray-600 text-sm font-medium px-4 py-2 rounded hover:bg-gray-100 transition flex items-center gap-1">
@@ -648,13 +707,24 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     });
   };
 
+  // Debug log for llmTerminalOpen state
+  useEffect(() => {
+    console.log('llmTerminalOpen state changed:', llmTerminalOpen);
+  }, [llmTerminalOpen]);
+
   return (
     <div className="relative h-full w-full">
       {/* Floating AI Assistant Button */}
       <button
-        className="fixed bottom-8 right-8 z-50 flex items-center gap-2 px-5 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all text-base font-semibold"
-        onClick={() => setLlmTerminalOpen(true)}
-        style={{ boxShadow: '0 4px 24px rgba(80,0,200,0.15)' }}
+        className="fixed bottom-8 right-8 z-[9999] flex items-center gap-2 px-5 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all text-base font-semibold"
+        onClick={() => {
+          console.log('AI Assistant button clicked!');
+          setLlmTerminalOpen(true);
+        }}
+        style={{ 
+          boxShadow: '0 4px 24px rgba(80,0,200,0.3)',
+          border: '2px solid white'
+        }}
       >
         <Sparkles className="w-6 h-6" />
         AI Assistant
@@ -709,6 +779,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                       }
                     }}
                     onDeleteNamespace={handleDeleteNamespace}
+                    onOpenAIAgent={(namespace) => {
+                      const key = 'ai-agent';
+                      if (!tabs.find(tab => tab.key === key)) {
+                        setTabs([...tabs, { key, label: 'AI Agent' }]);
+                      }
+                      setActiveTab(key);
+                      setAIAgentTab({ namespace });
+                    }}
                   />
                 )}
               </div>
@@ -958,6 +1036,22 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                     !activeTab.startsWith('tab-') && (
                       <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
                   )}
+                  {tabs.map(tab => {
+                    if (tab.key === 'ai-agent') {
+                      return (
+                        <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
+                          <AIAgentWorkspace
+                            namespace={aiAgentTab?.namespace}
+                            onClose={() => {
+                              setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
+                              setAIAgentTab(null);
+                              setActiveTab('overview');
+                            }}
+                          />
+                        </div>
+                      );
+                    }
+                  })}
                 </div>
                 <EnhancedLLMTerminal 
                   open={llmTerminalOpen}

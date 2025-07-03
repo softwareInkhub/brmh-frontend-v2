@@ -567,13 +567,22 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
           fetch(`${API_BASE_URL}/unified/namespaces/${ns["namespace-id"]}/accounts`),
           fetch(`${API_BASE_URL}/unified/namespaces/${ns["namespace-id"]}/methods`)
         ]);
-        const [accounts, methods] = await Promise.all([
+        const [accountsData, methodsData] = await Promise.all([
           accountsRes.json(),
           methodsRes.json()
         ]);
+        
+        // Ensure accounts and methods are always arrays
+        const accounts = Array.isArray(accountsData) ? accountsData : 
+                        (accountsData?.body && Array.isArray(accountsData.body)) ? accountsData.body : [];
+        const methods = Array.isArray(methodsData) ? methodsData : 
+                       (methodsData?.body && Array.isArray(methodsData.body)) ? methodsData.body : [];
+        
         setNamespaceDetailsMap(prev => ({ ...prev, [ns["namespace-id"]]: { accounts, methods } }));
       } catch (err) {
         setError(prev => ({ ...prev, namespaces: 'Failed to fetch namespace details' }));
+        // Set empty arrays on error to prevent future errors
+        setNamespaceDetailsMap(prev => ({ ...prev, [ns["namespace-id"]]: { accounts: [], methods: [] } }));
       } finally {
         setLoadingDetails(false);
       }
@@ -907,15 +916,15 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-400 text-xs">Loading accounts...</div>
-                ) : (namespaceDetailsMap[expandedNamespaceId]?.accounts.length === 0 ? (
+                ) : (!namespaceDetailsMap[expandedNamespaceId]?.accounts || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.accounts) || namespaceDetailsMap[expandedNamespaceId]?.accounts.length === 0 ? (
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No accounts found.</div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.accounts.map(account => (
+                    {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map(account => (
                             <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
-                              {account.tags && account.tags.length > 0 && account.tags.map((tag: string) => (
+                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
@@ -934,15 +943,15 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-400 text-xs">Loading methods...</div>
-                ) : (namespaceDetailsMap[expandedNamespaceId]?.methods.length === 0 ? (
+                ) : (!namespaceDetailsMap[expandedNamespaceId]?.methods || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.methods) || namespaceDetailsMap[expandedNamespaceId]?.methods.length === 0 ? (
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
                       ) : (
                         <div className="space-y-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.methods.map(method => (
+                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map(method => (
                             <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
-                              {method.tags && method.tags.length > 0 && method.tags.map((tag: string) => (
+                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
                                 <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                         <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
