@@ -146,7 +146,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       {/* Header */}
       <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
         <LayoutDashboard className="text-blue-600" size={20} />
-        <span className="font-bold text-lg text-gray-900">Dashboard</span>
+        <span className="font-bold text-lg text-gray-900">BRMH</span>
         {onOpenAIAgent && (
           <button
             onClick={() => onOpenAIAgent()}

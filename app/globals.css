@@ -56,6 +56,23 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Utility: Thin horizontal scrollbar */
+  .scrollbar-thin-x::-webkit-scrollbar {
+    height: 4px;
+  }
+  .scrollbar-thin-x::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 2px;
+  }
+  .scrollbar-thin-x::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin-x {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
+  }
 }
 
 :root {
