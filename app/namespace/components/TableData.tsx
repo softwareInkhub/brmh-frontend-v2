@@ -135,6 +135,14 @@ const TableData = ({ tableName, onBack }: TableDataProps) => {
   );
 };
 
+function useRandomId() {
+  const [id, setId] = useState('');
+  useEffect(() => {
+    setId(Math.random().toString(36).slice(2, 12));
+  }, []);
+  return id;
+}
+
 function CreateDataForm({ schema, tableName, onClose, onSuccess, renderButtons = true }: { schema: any, tableName: string, onClose: () => void, onSuccess: () => void, renderButtons?: boolean }) {
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
@@ -148,9 +156,6 @@ function CreateDataForm({ schema, tableName, onClose, onSuccess, renderButtons =
     setSaving(true);
     setError(null);
     let itemToSave = { ...form };
-    if (!itemToSave.id) {
-      itemToSave.id = Math.random().toString(36).slice(2, 12);
-    }
     try {
       const res = await fetch(`${BASE_URL}/schema/data`, {
         method: 'POST',

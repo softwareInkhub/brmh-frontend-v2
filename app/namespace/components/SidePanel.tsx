@@ -51,7 +51,7 @@ const DraggableNamespace: React.FC<{ namespace: any; children: React.ReactNode; 
   });
 
   return (
-    <div ref={drag} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
+    <div ref={node => { if (node) drag(node); }} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
       <div onClick={onClick}>
         {children}
       </div>
@@ -69,7 +69,7 @@ const DraggableMethod: React.FC<{ method: any; namespace: any; children: React.R
   });
 
   return (
-    <div ref={drag} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
+    <div ref={node => { if (node) drag(node); }} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
       <div onClick={onClick}>
         {children}
       </div>
@@ -87,7 +87,7 @@ const DraggableSchema: React.FC<{ schema: any; children: React.ReactNode; onClic
   });
 
   return (
-    <div ref={drag} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
+    <div ref={node => { if (node) drag(node); }} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
       <div onClick={onClick}>
         {children}
       </div>
@@ -200,22 +200,33 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
             {filteredNamespaces.length === 0 && (
               <div className="text-xs text-gray-400 pl-2 py-2">No namespaces found</div>
             )}
-            {filteredNamespaces.map(ns => (
+            {filteredNamespaces.map((ns, nsIdx) => (
               <DraggableNamespace
-                key={ns['namespace-id']}
+                key={ns['namespace-id'] || nsIdx}
                 namespace={ns}
-                onClick={() => {
-                  toggleNs(ns['namespace-id']);
-                  onAdd('singleNamespace', ns);
-                }}
+                onClick={() => onAdd('singleNamespace', ns)}
               >
                 <div className="mb-1">
                   <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
                     <button
-                      className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold hover:underline cursor-pointer"
+                      className="flex items-center gap-1 px-1 py-1 hover:bg-gray-100 rounded"
+                      onClick={e => {
+                        e.stopPropagation();
+                        toggleNs(ns['namespace-id']);
+                      }}
                       type="button"
+                      aria-label={expandedNs[ns['namespace-id']] ? 'Collapse namespace' : 'Expand namespace'}
                     >
                       {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                    <button
+                      className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold hover:underline cursor-pointer"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onAdd('singleNamespace', ns);
+                      }}
+                      type="button"
+                    >
                       <Folder size={16} className="text-blue-500" />
                       <span className="font-medium text-sm text-gray-800 group-hover:text-blue-600 truncate">
                         {ns['namespace-name']}
@@ -223,7 +234,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                     </button>
                     {onOpenAIAgent && (
                       <button
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           onOpenAIAgent(ns);
                         }}
@@ -265,9 +276,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         </div>
                         {expandedSection[ns['namespace-id']]?.accounts && (
                           <div className="space-y-1">
-                            {(Array.isArray(accounts[ns['namespace-id']]) ? accounts[ns['namespace-id']] : []).map(acc => (
+                            {(Array.isArray(accounts[ns['namespace-id']]) ? accounts[ns['namespace-id']] : []).map((acc, accIdx) => (
                               <button
-                                key={acc['namespace-account-id']}
+                                key={acc['namespace-account-id'] || accIdx}
                                 onClick={() => onAdd('accountPage', { account: acc, namespace: ns })}
                                 className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-gray-50 text-sm group"
                               >
@@ -315,9 +326,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         </div>
                         {expandedSection[ns['namespace-id']]?.methods && (
                           <div className="space-y-1">
-                            {(methods[ns['namespace-id']] || []).map(method => (
+                            {(methods[ns['namespace-id']] || []).map((method, methodIdx) => (
                               <DraggableMethod
-                                key={method['namespace-method-id']}
+                                key={method['namespace-method-id'] || methodIdx}
                                 method={method}
                                 namespace={ns}
                                 onClick={() => onItemClick('method', method)}
@@ -369,15 +380,9 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         </div>
                         {expandedSection[ns['namespace-id']]?.schemas && (
                           <div className="space-y-1">
-                            {(
-                              schemas.filter(
-                                s =>
-                                  Array.isArray(ns.schemaIds) &&
-                                  ns.schemaIds.includes(s.id)
-                              ) || []
-                            ).map(schema => (
+                            {(schemas.filter(s => Array.isArray(ns.schemaIds) && ns.schemaIds.includes(s.id)) || []).map((schema, schemaIdx) => (
                               <DraggableSchema
-                                key={schema.id}
+                                key={schema.id || schemaIdx}
                                 schema={schema}
                                 onClick={() => onItemClick('schema', schema)}
                               >

@@ -486,7 +486,7 @@ export default function S3Page() {
                   <div>
                     <h3 className="font-semibold text-lg mb-1 truncate max-w-[200px]">{bucket.Name}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Created: {new Date(bucket.CreationDate).toLocaleDateString()}
+                      Created: {new Date(bucket.CreationDate).toLocaleDateString('en-GB')}
                     </p>
                   </div>
                 </div>
@@ -578,7 +578,7 @@ export default function S3Page() {
                 </div>
                 <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 opacity-60 group-hover:opacity-100 transition-opacity duration-300">
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Modified: {new Date(obj.LastModified).toLocaleString()}
+                    Modified: {new Date(obj.LastModified).toLocaleString('en-GB')}
                   </p>
                 </div>
               </div>

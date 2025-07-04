@@ -166,8 +166,8 @@ const Tables = () => {
                       {table.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{new Date(table.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(table.updatedAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(table.createdAt).toLocaleDateString('en-GB')}</TableCell>
+                  <TableCell>{new Date(table.updatedAt).toLocaleDateString('en-GB')}</TableCell>
                   <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-end gap-2">
                       <Button

@@ -64,7 +64,7 @@ export default function APIGatewayPage() {
                       Protocol: {api.protocol} | Endpoint: {api.endpointConfiguration.types.join(', ')}
                     </div>
                     <div className="text-gray-500">
-                      Created: {new Date(api.createdDate).toLocaleDateString()}
+                      Created: {new Date(api.createdDate).toLocaleDateString('en-GB')}
                     </div>
                   </li>
                 ))}

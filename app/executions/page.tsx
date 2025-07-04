@@ -374,7 +374,7 @@ const ExecutionsContent = () => {
                             Items: {parent.data['total-items-processed']}
                           </div>
                           <div className="text-[10px] sm:text-xs text-gray-400">
-                            {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
+                            {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString('en-GB')}
                           </div>
                         </div>
                       </div>
@@ -475,7 +475,7 @@ const ExecutionsContent = () => {
                                 Items: {parent.data['total-items-processed']}
                               </div>
                               <div className="text-[10px] sm:text-xs text-gray-400">
-                                {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString()}
+                                {parent.data.timestamp && new Date(parent.data.timestamp).toLocaleString('en-GB')}
                               </div>
                             </>
                           )}

@@ -795,13 +795,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
                 style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
               >
-                {/* Header with Dashboard title */}
-                <div className="flex items-center justify-between px-8 pt-8 pb-4 bg-[#f7f8fa]">
-                  <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-                  </div>
-                  {/* Removed Open AI Assistant button, now floating globally */}
-                </div>
+               
                 
                 {/* Tab Section (always flush left) */}
                 <div className="flex items-center border-b bg-white px-4 py-2">

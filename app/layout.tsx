@@ -20,11 +20,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="flex min-h-screen bg-gray-50 overflow-hidden ml-20">
+      <div className="flex min-h-screen bg-gray-50 ml-20">
         <Sidebar />
-        <div className="flex-1 min-h-screen overflow-hidden">
+        <div className="flex-1 min-h-screen overflow-auto">
           <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
-          <main className="w-full min-h-screen overflow-hidden">
+          <main className="w-full min-h-screen overflow-auto">
             {children}
           </main>
         </div>
@@ -40,9 +40,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="overflow-hidden">
+    <html lang="en">
       <body 
-        className={inter.className + ' overflow-hidden'}
+        className={inter.className}
         suppressHydrationWarning={true}
       >
         <DndProvider backend={HTML5Backend}>

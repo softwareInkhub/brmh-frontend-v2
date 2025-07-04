@@ -20,9 +20,9 @@ import {
 
 const sidebarItems = [
   {
-    name: 'APIs',
+    name: 'Dashboard',
     path: '/',
-    icon: <Database size={24} />, // Use your logo or API icon
+    icon: <LayoutDashboard size={24} />, // Use your logo or API icon
   },
   {
     name: 'Namespace',
@@ -44,31 +44,14 @@ const sidebarItems = [
     path: '/ai',
     icon: <FileCode size={24} />, // You can use any icon you like
   },
-  {
-    name: 'Share Docs',
-    path: '/docs',
-    icon: <BookOpen size={24} />, // Docs icon
-  },
-  {
-    name: 'History',
-    path: '/history',
-    icon: <History size={24} />, // History icon
-  },
+
+
   {
     name: 'Settings',
     path: '/settings',
     icon: <Settings size={24} />, // Settings icon
   },
-  {
-    name: 'Invite',
-    path: '/invite',
-    icon: <UserPlus size={24} />, // Invite icon
-  },
-  {
-    name: 'Upgrade',
-    path: '/upgrade',
-    icon: <Rocket size={24} />, // Upgrade icon
-  },
+
 ];
 
 const Sidebar: React.FC = () => {

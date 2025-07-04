@@ -468,8 +468,12 @@ function DynamicForm({ schema, formData, setFormData, path = '' }: DynamicFormPr
 }
 
 // Add a helper to generate a random id
-function generateRandomId() {
-  return Math.random().toString(36).substring(2, 12);
+function useRandomId() {
+  const [id, setId] = useState('');
+  useEffect(() => {
+    setId(Math.random().toString(36).substring(2, 12));
+  }, []);
+  return id;
 }
 
 const SchemaService = () => {
@@ -816,8 +820,8 @@ const SchemaService = () => {
                           {schema.schemaName}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-gray-500">{schema.isArray ? 'Array' : schema.originalType}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.createdAt).toLocaleDateString()}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.createdAt).toLocaleDateString('en-GB')}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.updatedAt).toLocaleDateString('en-GB')}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-right rounded-r-lg">
                           <div className="flex items-center gap-2 justify-end">
                             {!isTableActive && (
@@ -1033,7 +1037,7 @@ const SchemaService = () => {
                 onClick={async () => {
                   const itemToSave = { ...dataForm };
                   if (!itemToSave.id) {
-                    itemToSave.id = generateRandomId();
+                    itemToSave.id = useRandomId();
                   }
                   const res = await fetch(`${API_URL}/schema/data`, {
                     method: 'POST',

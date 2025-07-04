@@ -67,58 +67,78 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace }: {
 
   return (
     <div className="p-8 w-full">
-      <h2 className="text-2xl font-bold mb-4 text-gray-900">Namespace: {namespace['namespace-name']}</h2>
-      <div className="mb-2 text-gray-700">
-        <span className="font-semibold">ID:</span> <span className="font-mono">{namespace['namespace-id']}</span>
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-2 text-gray-900 flex items-center gap-2">
+          <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+          Namespace: {namespace['namespace-name']}
+        </h2>
+        <div className="flex flex-wrap gap-6 text-gray-700 mb-4">
+          <div className="bg-gray-50 rounded-lg px-4 py-2 flex flex-col min-w-[220px]">
+            <span className="font-semibold text-xs text-gray-500">ID</span>
+            <span className="font-mono text-sm">{namespace['namespace-id']}</span>
+          </div>
+          <div className="bg-gray-50 rounded-lg px-4 py-2 flex flex-col min-w-[220px]">
+            <span className="font-semibold text-xs text-gray-500">URL</span>
+            <span className="font-mono text-sm">{namespace['namespace-url']}</span>
+          </div>
+        </div>
       </div>
-      <div className="mb-4 text-gray-700">
-        <span className="font-semibold">URL:</span> <span className="font-mono">{namespace['namespace-url']}</span>
-      </div>
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Accounts</h3>
-        {accounts.length === 0 ? (
-          <div className="text-gray-400">No accounts found.</div>
-        ) : (
-          <ul className="list-disc ml-6">
-            {accounts.map((acc: any) => (
-              <li key={acc['namespace-account-id']} className="mb-1">
-                <span className="font-medium">{acc['namespace-account-name']}</span>
-                {acc['namespace-account-url-override'] && (
-                  <span className="ml-2 text-xs text-gray-500">(URL: {acc['namespace-account-url-override']})</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Methods</h3>
-        {methods.length === 0 ? (
-          <div className="text-gray-400">No methods found.</div>
-        ) : (
-          <ul className="list-disc ml-6">
-            {methods.map((m: any) => (
-              <li key={m['namespace-method-id']} className="mb-1">
-                <span className="font-medium">{m['namespace-method-name']}</span>
-                <span className="ml-2 text-xs text-gray-500">({m['namespace-method-type']})</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Schemas</h3>
-        {schemas.length === 0 ? (
-          <div className="text-gray-400">No schemas found.</div>
-        ) : (
-          <ul className="list-disc ml-6">
-            {schemas.map((s: any) => (
-              <li key={s.id} className="mb-1">
-                <span className="font-medium">{s.schemaName}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Accounts Card */}
+        <div className="bg-white rounded-xl shadow p-6 flex flex-col">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-blue-400 rounded-full"></span> Accounts
+          </h3>
+          {accounts.length === 0 ? (
+            <div className="text-gray-400">No accounts found.</div>
+          ) : (
+            <ul className="space-y-2">
+              {accounts.map((acc: any, idx: number) => (
+                <li key={acc['namespace-account-id'] || idx} className="flex flex-col bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="font-medium text-gray-800">{acc['namespace-account-name']}</span>
+                  {acc['namespace-account-url-override'] && (
+                    <span className="text-xs text-gray-500">URL: {acc['namespace-account-url-override']}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {/* Methods Card */}
+        <div className="bg-white rounded-xl shadow p-6 flex flex-col">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-green-400 rounded-full"></span> Methods
+          </h3>
+          {methods.length === 0 ? (
+            <div className="text-gray-400">No methods found.</div>
+          ) : (
+            <ul className="space-y-2">
+              {methods.map((m: any, idx: number) => (
+                <li key={m['namespace-method-id'] || idx} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="font-medium text-gray-800">{m['namespace-method-name']}</span>
+                  <span className="ml-2 text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-mono">{m['namespace-method-type']}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {/* Schemas Card */}
+        <div className="bg-white rounded-xl shadow p-6 flex flex-col">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-purple-400 rounded-full"></span> Schemas
+          </h3>
+          {schemas.length === 0 ? (
+            <div className="text-gray-400">No schemas found.</div>
+          ) : (
+            <ul className="space-y-2">
+              {schemas.map((s: any, idx: number) => (
+                <li key={s.id || idx} className="flex flex-col bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="font-medium text-gray-800">{s.schemaName}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

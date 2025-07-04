@@ -691,7 +691,7 @@ export default function IAMPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700">
-                          Created: {new Date(user.CreateDate).toLocaleDateString()}
+                          Created: {new Date(user.CreateDate).toLocaleDateString('en-GB')}
                         </Badge>
                       </div>
                     </div>
@@ -806,7 +806,7 @@ export default function IAMPage() {
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full bg-green-500"></div>
                           <span className="text-sm text-gray-600">
-                            {new Date(group.CreateDate).toLocaleDateString()}
+                            {new Date(group.CreateDate).toLocaleDateString('en-GB')}
                           </span>
                         </div>
                       </TableCell>
@@ -983,7 +983,7 @@ export default function IAMPage() {
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full bg-green-500"></div>
                           <span className="text-sm text-gray-600">
-                            {new Date(role.CreateDate).toLocaleDateString()}
+                            {new Date(role.CreateDate).toLocaleDateString('en-GB')}
                           </span>
                         </div>
                       </TableCell>
@@ -1199,7 +1199,7 @@ export default function IAMPage() {
                         <div className="flex items-center gap-2">
                           <div className="h-2 w-2 rounded-full bg-green-500"></div>
                           <span className="text-sm text-gray-600">
-                            {new Date(policy.UpdateDate || '').toLocaleDateString()}
+                            {new Date(policy.UpdateDate || '').toLocaleDateString('en-GB')}
                           </span>
                         </div>
                       </TableCell>
@@ -1879,7 +1879,7 @@ export default function IAMPage() {
                             </div>
                             <div>
                               <Label className="text-xs text-gray-500">Creation date</Label>
-                              <p className="text-sm">{selectedRole?.CreateDate.toLocaleString()}</p>
+                              <p className="text-sm">{selectedRole?.CreateDate.toLocaleString('en-GB')}</p>
                             </div>
                             <div>
                               <Label className="text-xs text-gray-500">Role ID</Label>

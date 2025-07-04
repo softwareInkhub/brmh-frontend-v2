@@ -86,6 +86,14 @@ function jsonSchemaToFields(name, schema) {
   };
 }
 
+function useNowId() {
+  const [id, setId] = useState('');
+  useEffect(() => {
+    setId(Date.now().toString());
+  }, []);
+  return id;
+}
+
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'files' | 'api' | 'schema'>('chat');
   const [messages, setMessages] = useState<Message[]>([
@@ -294,7 +302,7 @@ What would you like to work on today?`,
   const addMessage = (message: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = {
       ...message,
-      id: Date.now().toString(),
+      id: useNowId(),
       timestamp: new Date()
     };
     setMessages(prev => [...prev, newMessage]);

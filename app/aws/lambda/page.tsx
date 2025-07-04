@@ -377,7 +377,7 @@
                   <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
                 </svg>
-                <span>Last Updated: {functions.length > 0 ? new Date(Math.max(...functions.map(f => new Date(f.LastModified).getTime()))).toLocaleDateString() : 'N/A'}</span>
+                <span>Last Updated: {functions.length > 0 ? new Date(Math.max(...functions.map(f => new Date(f.LastModified).getTime()))).toLocaleDateString('en-GB') : 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -430,7 +430,7 @@
                           {func.Runtime}
                         </span>
                         <span className="text-xs text-gray-500">
-                          {new Date(func.LastModified).toLocaleDateString()}
+                          {new Date(func.LastModified).toLocaleDateString('en-GB')}
                         </span>
                       </div>
                     </div>
@@ -446,36 +446,7 @@
                         <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                         <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/>
                       </svg>
-                      <span>Last invoked: {func.LastModified ? new Date(func.LastModified).toLocaleDateString() : 'Never'}</span>
+                      <span>{func.LastModified ? new Date(func.LastModified).toLocaleDateString('en-GB') : 'Never'}</span>
                     </div>
                     <div className="flex items-center">
-                      <div className={`w-2 h-2 rounded-full ${func.State === 'Active' 
-                        ? 'bg-gradient-to-r from-green-400 to-emerald-500 shadow-sm ring-2 ring-green-400/20' 
-                        : 'bg-gradient-to-r from-gray-300 to-gray-400 ring-2 ring-gray-300/20'}`} 
-                      />
-                      <span className="ml-2 text-xs text-gray-600">{func.State || 'Unknown'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <FunctionDetailsModal
-          func={selectedFunction}
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedFunction(null);
-          }}
-        />
-
-        <CreateFunctionModal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          onSuccess={handleCreateSuccess}
-        />
-      </div>
-    );
-  } 
+                      <div className={`

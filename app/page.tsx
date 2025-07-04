@@ -208,7 +208,7 @@ export default function HomePage() {
                     {user.apps.length} apps
                   </span>
                   <span className="text-[10px] text-gray-500">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('en-GB') : 'Never'}
                   </span>
                 </div>
               </div>
@@ -361,7 +361,7 @@ export default function HomePage() {
                   <div className="flex flex-wrap items-center gap-3 text-xs">
                     <span className="flex items-center text-gray-500">
                       <Clock className="w-3 h-3 mr-1" />
-                      Last: {new Date(webhook.lastTriggered).toLocaleTimeString()}
+                      Last: {new Date(webhook.lastTriggered).toLocaleTimeString('en-GB')}
                     </span>
                     <span className="flex items-center text-green-600">
                       <Activity className="w-3 h-3 mr-1" />
@@ -400,7 +400,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="text-gray-500 text-xs">
-                      {new Date(event.timestamp).toLocaleString([], {
+                      {new Date(event.timestamp).toLocaleString('en-GB', {
                         month: 'numeric',
                         day: 'numeric',
                         year: 'numeric',
@@ -538,7 +538,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2 md:gap-4">
                   <span className="text-[10px] md:text-xs text-gray-500">
-                    {new Date(execution.timestamp).toLocaleTimeString()}
+                    {new Date(execution.timestamp).toLocaleTimeString('en-GB')}
                   </span>
                   <span className={`text-[10px] md:text-xs font-medium ${
                     execution.status === 'completed' ? 'text-green-600' :

@@ -282,7 +282,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
                     <div>
                       <p className="text-sm font-medium text-gray-700">{webhook.route}</p>
                       <p className="text-xs text-gray-500">Table: {webhook.tableName}</p>
-                      <p className="text-xs text-gray-400 mt-1">Created: {new Date(webhook.createdAt).toLocaleString()}</p>
+                      <p className="text-xs text-gray-400 mt-1">Created: {new Date(webhook.createdAt).toLocaleString('en-GB')}</p>
                     </div>
                     <button
                       onClick={() => handleDeleteWebhook(webhook.id)}
