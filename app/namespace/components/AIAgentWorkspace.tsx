@@ -1,38 +1,12 @@
-'use client';
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  MessageSquare, 
-  Terminal as TerminalIcon, 
-  Code, 
-  Database, 
-  FileText, 
-  Play, 
-  Save, 
-  Settings, 
-  Zap, 
-  Bot, 
-  Send, 
-  Loader2,
-  ChevronDown,
-  ChevronUp,
-  X,
-  Plus,
-  Folder,
-  File,
-  GitBranch,
-  Search,
-  RefreshCw
-} from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Bot, Send, File, Folder, Play, Database, Code, X, Maximize2, Minimize2 } from 'lucide-react';
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  metadata?: {
-    type?: 'api' | 'schema' | 'test' | 'code' | 'log';
-    data?: any;
-  };
+  type?: string;
 }
 
 interface ProjectFile {
@@ -40,98 +14,34 @@ interface ProjectFile {
   name: string;
   type: 'file' | 'folder';
   path: string;
-  content?: string;
   children?: ProjectFile[];
 }
 
 interface AIAgentWorkspaceProps {
   namespace?: any;
-  onClose?: () => void;
+  onClose: () => void;
 }
 
-// Utility: Try to extract JSON blocks from a string
-function extractJSONBlocks(text) {
-  const blocks = [];
-  const regex = /```json[\s\S]*?({[\s\S]*?})[\s\S]*?```/g;
-  let match;
-  while ((match = regex.exec(text))) {
-    try {
-      blocks.push(JSON.parse(match[1]));
-    } catch {}
+// Helper function to load from localStorage
+const loadFromStorage = (key: string, defaultValue: any) => {
+  if (typeof window === 'undefined') return defaultValue;
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch {
+    return defaultValue;
   }
-  // Also try to find the first {...} block if no code fences
-  if (blocks.length === 0) {
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      try {
-        blocks.push(JSON.parse(text.substring(firstBrace, lastBrace + 1)));
-      } catch {}
-    }
-  }
-  return blocks;
-}
+};
 
-// Helper: Convert JSON Schema to { name, fields } format
-function jsonSchemaToFields(name, schema) {
-  if (!schema || typeof schema !== 'object' || !schema.properties) return null;
-  const required = Array.isArray(schema.required) ? schema.required : [];
-  return {
-    name: name || schema.title || 'Schema',
-    fields: Object.entries(schema.properties).map(([fieldName, def]) => ({
-      name: fieldName,
-      type: def.type || 'string',
-      required: required.includes(fieldName)
-    }))
-  };
-}
-
-// Update getNowId to ensure uniqueness
-function getNowId() {
-  return Date.now().toString() + '-' + Math.random().toString(36).slice(2, 10);
-}
-
-// Add utility for localStorage
-function saveToStorage(key, value) {
-  if (typeof window !== 'undefined') {
+// Helper function to save to localStorage
+const saveToStorage = (key: string, value: any) => {
+  if (typeof window === 'undefined') return;
+  try {
     localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error('Failed to save to localStorage:', error);
   }
-}
-function loadFromStorage(key, fallback) {
-  if (typeof window !== 'undefined') {
-    const val = localStorage.getItem(key);
-    if (val) return JSON.parse(val);
-  }
-  return fallback;
-}
-
-// Utility for namespace-specific storage
-function getNamespaceKey(type, namespace) {
-  return `aiagent-saved-${type}-${namespace?.['namespace-id'] || 'default'}`;
-}
-
-// Utility to extract code blocks and JSON from a string
-function extractCodeBlocksAndText(text) {
-  const codeBlockRegex = /```[a-zA-Z]*\n([\s\S]*?)```/g;
-  let match;
-  let codeBlocks = [];
-  let lastIndex = 0;
-  let plainParts = [];
-  while ((match = codeBlockRegex.exec(text))) {
-    if (match.index > lastIndex) {
-      plainParts.push(text.slice(lastIndex, match.index));
-    }
-    codeBlocks.push(match[1]);
-    lastIndex = match.index;
-  }
-  if (lastIndex < text.length) {
-    plainParts.push(text.slice(lastIndex));
-  }
-  return {
-    codeBlocks,
-    plainText: plainParts.map(s => s.trim()).filter(Boolean).join('\n').trim()
-  };
-}
+};
 
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'files' | 'api' | 'schema'>('chat');
@@ -200,143 +110,42 @@ What would you like to work on today?`,
 
   // Initialize terminal only on client side
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const initTerminal = async () => {
-      try {
-        setIsTerminalLoading(true);
-        
-        // Wait for the DOM element to be available
-        if (!terminalRef.current) {
-          console.log('Terminal ref not ready, retrying...');
-          setTimeout(initTerminal, 100);
-          return;
-        }
-
-        // Check if element has dimensions
-        const rect = terminalRef.current.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-          console.log('Terminal element has no dimensions, retrying...');
-          setTimeout(initTerminal, 100);
-          return;
-        }
-
-        const { Terminal } = await import('@xterm/xterm');
-        const { FitAddon } = await import('@xterm/addon-fit');
-        const { WebLinksAddon } = await import('@xterm/addon-web-links');
-        const { SearchAddon } = await import('@xterm/addon-search');
-        
-        // Import CSS
-        await import('@xterm/xterm/css/xterm.css');
-
-        if (terminalRef.current && !terminalInstance.current) {
-          const terminal = new Terminal({
-            cursorBlink: true,
-            fontSize: 14,
-            fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-            theme: {
-              background: '#1e1e1e',
-              foreground: '#ffffff',
-              cursor: '#ffffff',
-              selection: '#264f78'
-            },
-            // Add these options to prevent dimension errors
-            cols: 80,
-            rows: 24,
-            allowTransparency: true
-          });
-
-          const fitAddon = new FitAddon();
-          const webLinksAddon = new WebLinksAddon();
-          const searchAddon = new SearchAddon();
-
-          terminal.loadAddon(fitAddon);
-          terminal.loadAddon(webLinksAddon);
-          terminal.loadAddon(searchAddon);
-
-          // Open terminal with error handling
-          try {
-            terminal.open(terminalRef.current);
-            
-            // Wait a bit before fitting to ensure terminal is properly initialized
-            setTimeout(() => {
-              try {
-                fitAddon.fit();
-              } catch (fitError) {
-                console.warn('Fit addon error:', fitError);
-              }
-            }, 50);
-
-            terminal.write('$ AI Agent Workspace Terminal\r\n');
-            terminal.write('$ Ready for commands...\r\n\r\n');
-
-            terminalInstance.current = terminal;
-            setIsTerminalReady(true);
-            setIsTerminalLoading(false);
-
-            const handleResize = () => {
-              try {
-                if (terminalInstance.current && fitAddon) {
-                  fitAddon.fit();
-                }
-              } catch (resizeError) {
-                console.warn('Resize error:', resizeError);
-              }
-            };
-            
-            window.addEventListener('resize', handleResize);
-
-            return () => {
-              window.removeEventListener('resize', handleResize);
-              if (terminalInstance.current) {
-                try {
-                  terminalInstance.current.dispose();
-                } catch (disposeError) {
-                  console.warn('Terminal dispose error:', disposeError);
-                }
-              }
-            };
-          } catch (openError) {
-            console.error('Failed to open terminal:', openError);
-            setIsTerminalLoading(false);
-            // Clean up if terminal creation failed
-            if (terminalInstance.current) {
-              try {
-                terminalInstance.current.dispose();
-              } catch (disposeError) {
-                console.warn('Terminal dispose error:', disposeError);
-              }
-              terminalInstance.current = null;
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to initialize terminal:', error);
-        // Set a flag to prevent infinite retries
-        setIsTerminalReady(false);
-        setIsTerminalLoading(false);
-      }
-    };
-
-    // Add a small delay to ensure DOM is ready
-    const timer = setTimeout(initTerminal, 100);
-    
-    return () => {
-      clearTimeout(timer);
-      if (terminalInstance.current) {
-        try {
-          terminalInstance.current.dispose();
-        } catch (error) {
-          console.warn('Terminal cleanup error:', error);
-        }
-      }
-    };
+    if (typeof window !== 'undefined') {
+      setIsTerminalLoading(false);
+      setIsTerminalReady(true);
+    }
   }, []);
 
-  // Auto-scroll messages
+  // Auto-scroll to bottom of messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Load file tree when namespace changes
+  useEffect(() => {
+    if (namespace?.id) {
+      refreshFileTree();
+    }
+  }, [namespace?.id]);
+
+  // Save data to localStorage when it changes
+  useEffect(() => {
+    saveToStorage('aiagent-files', projectFiles);
+  }, [projectFiles]);
+
+  useEffect(() => {
+    saveToStorage('aiagent-apis', apiEndpoints);
+  }, [apiEndpoints]);
+
+  useEffect(() => {
+    saveToStorage('aiagent-schemas', schemas);
+  }, [schemas]);
+
+  useEffect(() => {
+    saveToStorage('aiagent-rawschemas', rawSchemas);
+  }, [rawSchemas]);
+
+  const getNowId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const addMessage = (message: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = {
@@ -361,7 +170,30 @@ What would you like to work on today?`,
     });
 
     try {
-      // Call the real backend AI agent
+      // Check if we should use streaming
+      const shouldStream = userMessage.toLowerCase().includes('create') || 
+                          userMessage.toLowerCase().includes('edit') ||
+                          userMessage.toLowerCase().includes('generate') ||
+                          userMessage.toLowerCase().includes('project');
+
+      if (shouldStream) {
+        await handleStreamingResponse(userMessage);
+      } else {
+        await handleRegularResponse(userMessage);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      addMessage({
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error.message}`
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStreamingResponse = async (userMessage) => {
+    try {
       const response = await fetch('/unified/ai-agent', {
         method: 'POST',
         headers: {
@@ -370,7 +202,9 @@ What would you like to work on today?`,
         body: JSON.stringify({
           message: userMessage,
           namespace: namespace || null,
-          action: null
+          action: null,
+          history: messages.map(m => ({ role: m.role, content: m.content })),
+          stream: true
         })
       });
 
@@ -378,275 +212,196 @@ What would you like to work on today?`,
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-
-      // Only add to chat if not a schema/api/test/auth output
-      if (!data.metadata || !['schema', 'api', 'test', 'auth'].includes(data.metadata.type)) {
-        addMessage({
-          role: 'assistant',
-          content: data.content,
-          metadata: data.metadata
-        });
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
       }
 
-      // Handle different response types
-      if (data.metadata?.type === 'api') {
-        handleAPIGeneration(data.metadata.data);
-      } else if (data.metadata?.type === 'schema') {
-        handleSchemaGeneration(data.metadata.data);
-      } else if (data.metadata?.type === 'test') {
-        handleCodeGeneration(data.metadata.data);
-      } else if (data.metadata?.type === 'auth') {
-        handleCodeGeneration(data.metadata.data);
-      } else {
-        // For general responses, try to detect the type from content
-        const content = data.content.toLowerCase();
-        const userMessageLower = userMessage.toLowerCase();
+      let streamedContent = '';
+      const streamingId = getNowId();
+      addMessage({
+        id: streamingId,
+        role: 'assistant',
+        content: ''
+      });
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n');
         
-        // Check user intent first (what they asked for)
-        if (userMessageLower.includes('schema') || userMessageLower.includes('model') || userMessageLower.includes('database') || userMessageLower.includes('json schema')) {
-          handleSchemaGeneration({ content: data.content });
-        } else if (userMessageLower.includes('api') || userMessageLower.includes('endpoint') || userMessageLower.includes('route')) {
-          handleAPIGeneration({ content: data.content });
-        } else if (userMessageLower.includes('test') || userMessageLower.includes('debug') || userMessageLower.includes('code')) {
-          handleCodeGeneration({ content: data.content });
-        } else {
-          // Fallback: check content for patterns
-          if (content.includes('api') || content.includes('endpoint') || content.includes('route')) {
-            handleAPIGeneration({ content: data.content });
-          } else if (content.includes('schema') || content.includes('model') || content.includes('database') || content.includes('properties')) {
-            handleSchemaGeneration({ content: data.content });
-          } else if (content.includes('test') || content.includes('debug') || content.includes('code')) {
-            handleCodeGeneration({ content: data.content });
-          } else {
-            // For general responses, switch to console tab to show the output
-            setActiveTab('console');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                streamedContent += data.content;
+                setMessages(msgs => 
+                  msgs.map(m => 
+                    m.id === streamingId 
+                      ? { ...m, content: streamedContent }
+                      : m
+                  )
+                );
+              }
+            } catch (e) {
+              // Ignore parsing errors for incomplete chunks
+            }
           }
+        }
+      }
+
+      await processStreamedContent(streamedContent, userMessage);
+
+    } catch (error) {
+      console.error('Streaming error:', error);
+      throw error;
+    }
+  };
+
+  const handleRegularResponse = async (userMessage) => {
+    const response = await fetch('/unified/ai-agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: userMessage,
+        namespace: namespace || null,
+        action: null,
+        history: messages.map(m => ({ role: m.role, content: m.content }))
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    addMessage({
+      role: 'assistant',
+      content: data.content,
+      type: data.type
+    });
+    if (data.output && data.type) {
+      routeOutputToTab(data.output, data.type);
+    }
+  };
+
+  const processStreamedContent = async (content, originalMessage) => {
+    // Extract file operations from streamed content
+    const fileMatch = content.match(/file:\s*(.+)/i);
+    const codeMatch = content.match(/```[\s\S]*?```/g);
+    
+    if (fileMatch || codeMatch) {
+      // Extract file path and content
+      let filePath = '';
+      let fileContent = '';
+      
+      if (fileMatch) {
+        filePath = fileMatch[1].trim();
+      }
+      
+      if (codeMatch) {
+        fileContent = codeMatch[0].replace(/```[\w]*\n?/g, '').trim();
+      }
+      
+      // Create file in workspace
+      if (filePath && fileContent && namespace?.id) {
+        try {
+          const fileResponse = await fetch('/unified/file-operations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              operation: 'create',
+              namespaceId: namespace.id,
+              filePath,
+              content: fileContent
+            })
+          });
+          
+          if (fileResponse.ok) {
+            // Update file tree
+            await refreshFileTree();
+            // Switch to files tab to show the new file
+            setActiveTab('files');
+          }
+        } catch (error) {
+          console.error('Error creating file:', error);
+        }
+      }
+    }
+  };
+
+  const refreshFileTree = async () => {
+    if (!namespace?.id) return;
+    
+    try {
+      const response = await fetch(`/unified/file-tree/${namespace.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.tree) {
+          setProjectFiles(data.tree);
         }
       }
     } catch (error) {
-      console.error('Error calling AI agent:', error);
-      addMessage({
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.'
-      });
-    } finally {
-      setIsLoading(false);
+      console.error('Error refreshing file tree:', error);
     }
   };
 
-  const handleAPIGeneration = (data: any) => {
-    const content = data.message || data.content || '';
-    let endpoints = [];
-
-    // Try to extract endpoints from JSON blocks
-    const jsonBlocks = extractJSONBlocks(content);
-    for (const block of jsonBlocks) {
-      if (Array.isArray(block)) {
-        // If it's an array of endpoints
-        endpoints = endpoints.concat(block);
-      } else if (block.endpoints && Array.isArray(block.endpoints)) {
-        endpoints = endpoints.concat(block.endpoints);
-      } else if (block.path && block.method) {
-        endpoints.push(block);
-      }
-    }
-
-    // Fallback: Try regex for Flask/Express
-    if (endpoints.length === 0) {
-      const flaskMatches = content.match(/@app\.route\('([^']+)', methods=\[([^\]]+)\]/g);
-      if (flaskMatches) {
-        endpoints = flaskMatches.map((match) => {
-          const pathMatch = match.match(/@app\.route\('([^']+)'/);
-          const methodMatch = match.match(/methods=\[([^\]]+)\]/);
-          return {
-            method: methodMatch ? methodMatch[1].replace(/['"]/g, '') : 'GET',
-            path: pathMatch ? pathMatch[1] : '/',
-            description: 'AI generated endpoint'
+  const routeOutputToTab = (output, type) => {
+    switch (type) {
+      case 'schema':
+        const newSchema = {
+          id: Date.now().toString(),
+          name: 'Generated Schema',
+          schema: output,
+          timestamp: new Date()
+        };
+        setSchemas(prev => [...prev, newSchema]);
+        setRawSchemas(prev => [...prev, { id: newSchema.id, content: output }]);
+        setActiveTab('schema');
+        break;
+        
+      case 'api':
+        try {
+          const apiData = JSON.parse(output);
+          const newApi = {
+            id: Date.now().toString(),
+            name: 'Generated API',
+            endpoints: apiData.endpoints || [],
+            timestamp: new Date()
           };
-        });
-      }
-    }
-
-    // Fallback: If no endpoints found, create a generic one
-    if (endpoints.length === 0 && content.toLowerCase().includes('api')) {
-      endpoints.push({
-        method: 'POST',
-        path: '/api/generated',
-        description: 'AI generated API endpoint'
-      });
-    }
-
-    setApiEndpoints(endpoints);
-    setActiveTab('api');
-    
-    // Add to console
-    const consoleLines = ['$ Generating API endpoints...'];
-    endpoints.forEach((endpoint) => {
-      consoleLines.push(`$ Created ${endpoint.method} ${endpoint.path}`);
-    });
-    consoleLines.push('$ API generation complete!', '');
-    
-    setConsoleOutput(prev => [...prev, ...consoleLines]);
-    
-    if (terminalInstance.current && isTerminalReady) {
-      terminalInstance.current.write('\r\n$ Generating API endpoints...\r\n');
-      endpoints.forEach((endpoint) => {
-        terminalInstance.current?.write(`$ Created ${endpoint.method} ${endpoint.path}\r\n`);
-      });
-      terminalInstance.current.write('$ API generation complete!\r\n\r\n');
-    }
-  };
-
-  const handleSchemaGeneration = (data: any) => {
-    const content = data.message || data.content || '';
-    let schemas = [];
-    let rawSchemasArr = [];
-    // Try to extract JSON schemas
-    const jsonBlocks = extractJSONBlocks(content);
-    for (const block of jsonBlocks) {
-      if (Array.isArray(block)) {
-        block.forEach((item, idx) => {
-          if (item && item.properties) {
-            const converted = jsonSchemaToFields(item.title || `Schema${idx + 1}`, item);
-            if (converted) schemas.push(converted);
-            rawSchemasArr.push(item);
-          } else if (item.name && item.fields) {
-            schemas.push(item);
-            rawSchemasArr.push(item);
-          }
-        });
-      } else if (block && block.properties) {
-        const converted = jsonSchemaToFields(block.title, block);
-        if (converted) schemas.push(converted);
-        rawSchemasArr.push(block);
-      } else if (block.name && block.fields) {
-        schemas.push(block);
-        rawSchemasArr.push(block);
-      } else if (block.schemaName && block.schema) {
-        if (block.schema && block.schema.properties) {
-          const converted = jsonSchemaToFields(block.schemaName, block.schema);
-          if (converted) schemas.push(converted);
-          rawSchemasArr.push(block.schema);
-        } else {
-          schemas.push({ name: block.schemaName, fields: block.schema.fields || [] });
-          rawSchemasArr.push(block.schema);
+          setApiEndpoints(prev => [...prev, newApi]);
+          setActiveTab('api');
+        } catch (error) {
+          console.error('Error parsing API output:', error);
         }
-      }
+        break;
+        
+      case 'test':
+        setConsoleOutput(prev => [...prev, output]);
+        setActiveTab('console');
+        break;
+        
+      case 'file':
+        refreshFileTree();
+        setActiveTab('files');
+        break;
+        
+      case 'project':
+        refreshFileTree();
+        setActiveTab('files');
+        break;
+        
+      default:
+        // Just show in chat
+        break;
     }
-    // Fallback: Try regex for Python classes
-    if (schemas.length === 0) {
-      const schemaMatches = content.match(/class\s+(\w+).*?:\s*\n([\s\S]*?)(?=\nclass|\n\n|$)/g);
-      if (schemaMatches) {
-        schemas = schemaMatches.map((match, index) => {
-          const nameMatch = match.match(/class\s+(\w+)/);
-          const fieldMatches = match.match(/(\w+)\s*=\s*db\.Column\([^)]+\)/g);
-          const fields = fieldMatches ? fieldMatches.map((field) => {
-            const fieldNameMatch = field.match(/(\w+)\s*=/);
-            const fieldTypeMatch = field.match(/db\.(\w+)/);
-            return {
-              name: fieldNameMatch ? fieldNameMatch[1] : 'field',
-              type: fieldTypeMatch ? fieldTypeMatch[1] : 'String',
-              required: field.includes('nullable=False')
-            };
-          }) : [];
-          return {
-            name: nameMatch ? nameMatch[1] : `Schema${index + 1}`,
-            fields: fields.length > 0 ? fields : [
-              { name: 'id', type: 'Integer', required: true },
-              { name: 'name', type: 'String', required: true },
-              { name: 'created_at', type: 'DateTime', required: false }
-            ]
-          };
-        });
-        rawSchemasArr = [...schemas];
-      }
-    }
-    // Fallback: If no schemas found, create a generic one
-    if (schemas.length === 0 && content.toLowerCase().includes('schema')) {
-      schemas.push({
-        name: 'GeneratedSchema',
-        fields: [
-          { name: 'id', type: 'Integer', required: true },
-          { name: 'name', type: 'String', required: true },
-          { name: 'description', type: 'Text', required: false },
-          { name: 'created_at', type: 'DateTime', required: false }
-        ]
-      });
-      rawSchemasArr.push({
-        name: 'GeneratedSchema',
-        fields: [
-          { name: 'id', type: 'Integer', required: true },
-          { name: 'name', type: 'String', required: true },
-          { name: 'description', type: 'Text', required: false },
-          { name: 'created_at', type: 'DateTime', required: false }
-        ]
-      });
-    }
-    setSchemas(schemas);
-    setRawSchemas(rawSchemasArr);
-    setActiveTab('schema');
-    
-    // Add to console
-    const consoleLines = ['$ Generating database schemas...'];
-    schemas.forEach((schema) => {
-      consoleLines.push(`$ Created schema: ${schema.name}`);
-    });
-    consoleLines.push('$ Schema generation complete!', '');
-    
-    setConsoleOutput(prev => [...prev, ...consoleLines]);
-    
-    if (terminalInstance.current && isTerminalReady) {
-      terminalInstance.current.write('\r\n$ Generating database schemas...\r\n');
-      if (schemas.length > 0) {
-        schemas.forEach((schema) => {
-          terminalInstance.current?.write(`$ Created schema: ${schema.name}\r\n`);
-        });
-      } else {
-        terminalInstance.current?.write('$ AI generated schema suggestions (check the response above)\r\n');
-      }
-      terminalInstance.current.write('$ Schema generation complete!\r\n\r\n');
-    }
-  };
-
-  const handleCodeGeneration = (data: any) => {
-    const content = data.message || data.content || '';
-    
-    // Check if the response contains test-related content
-    if (content.toLowerCase().includes('test') || content.toLowerCase().includes('debug')) {
-      const consoleLines = [
-        '$ Running tests...',
-        '$ ✓ Tests analyzed from AI response',
-        '$ Check the AI response above for test details',
-        '$ Test analysis complete!',
-        ''
-      ];
-      
-      setConsoleOutput(prev => [...prev, ...consoleLines]);
-      
-      if (terminalInstance.current && isTerminalReady) {
-        terminalInstance.current.write('\r\n$ Running tests...\r\n');
-        terminalInstance.current.write('$ ✓ Tests analyzed from AI response\r\n');
-        terminalInstance.current.write('$ Check the AI response above for test details\r\n');
-        terminalInstance.current.write('$ Test analysis complete!\r\n\r\n');
-      }
-    } else {
-      const consoleLines = [
-        '$ Code generation complete!',
-        '$ Check the AI response above for generated code',
-        ''
-      ];
-      
-      setConsoleOutput(prev => [...prev, ...consoleLines]);
-      
-      if (terminalInstance.current && isTerminalReady) {
-        terminalInstance.current.write('\r\n$ Code generation complete!\r\n');
-        terminalInstance.current.write('$ Check the AI response above for generated code\r\n\r\n');
-      }
-    }
-    
-    // Switch to console tab to show the output
-    setActiveTab('console');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -655,38 +410,6 @@ What would you like to work on today?`,
       handleSendMessage();
     }
   };
-
-  const renderMessage = (message: Message) => (
-    <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-[80%] ${message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-900'} rounded-lg px-4 py-2`}>
-        <div className="whitespace-pre-wrap">{message.content}</div>
-        {message.metadata && (
-          <div className="mt-2 text-xs opacity-75">
-            {message.metadata.type === 'api' && (
-              <div className="bg-green-100 text-green-800 p-2 rounded">
-                AI generated API suggestions
-              </div>
-            )}
-            {message.metadata.type === 'schema' && (
-              <div className="bg-blue-100 text-blue-800 p-2 rounded">
-                AI generated schema suggestions
-              </div>
-            )}
-            {message.metadata.type === 'test' && (
-              <div className="bg-yellow-100 text-yellow-800 p-2 rounded">
-                AI generated test suggestions
-              </div>
-            )}
-            {message.metadata.type === 'auth' && (
-              <div className="bg-purple-100 text-purple-800 p-2 rounded">
-                AI generated authentication suggestions
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   const renderFileTree = (files: ProjectFile[], level = 0) => (
     <div className="space-y-1">
@@ -697,7 +420,37 @@ What would you like to work on today?`,
               selectedFile?.id === file.id ? 'bg-blue-100' : ''
             }`}
             style={{ paddingLeft: `${level * 16 + 8}px` }}
-            onClick={() => setSelectedFile(file)}
+            onClick={async () => {
+              setSelectedFile(file);
+              if (file.type === 'file' && namespace?.id) {
+                // Load actual file content
+                try {
+                  const response = await fetch('/unified/file-operations', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      operation: 'read',
+                      namespaceId: namespace.id,
+                      filePath: file.path
+                    })
+                  });
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                      setFileContent(data.content);
+                    } else {
+                      setFileContent('// Error loading file content');
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error reading file:', error);
+                  setFileContent('// Error loading file content');
+                }
+              }
+            }}
           >
             {file.type === 'folder' ? <Folder size={14} /> : <File size={14} />}
             <span className="text-sm">{file.name}</span>
@@ -713,7 +466,7 @@ What would you like to work on today?`,
     setApiTestLoading((prev) => ({ ...prev, [index]: true }));
     setApiTestResults((prev) => ({ ...prev, [index]: null }));
     try {
-      const url = endpoint.path.startsWith('http') ? endpoint.path : `http://localhost:5001${endpoint.path}`;
+      const url = endpoint.path.startsWith('http') ? endpoint.path : `${endpoint.path}`;
       const method = endpoint.method.split(',')[0].trim().toUpperCase();
       let res;
       if (method === 'GET') {
@@ -739,304 +492,275 @@ What would you like to work on today?`,
   const [savedApis, setSavedApis] = useState<any[]>([]);
   const [savedFiles, setSavedFiles] = useState<ProjectFile[]>([]);
 
-  // Save handlers
-  const handleSaveSchema = (schema) => {
-    const updated = [...savedSchemas, schema];
-    setSavedSchemas(updated);
-    saveToStorage(getNamespaceKey('schemas', namespace), updated);
-  };
-  const handleSaveApi = (api) => {
-    const updated = [...savedApis, api];
-    setSavedApis(updated);
-    saveToStorage(getNamespaceKey('apis', namespace), updated);
-  };
-  const handleSaveFile = (file) => {
-    const updated = [...savedFiles, file];
-    setSavedFiles(updated);
-    saveToStorage(getNamespaceKey('files', namespace), updated);
-  };
-
-  // On mount, load saved items for current namespace
-  useEffect(() => {
-    if (!namespace) return;
-    const savedSchemas = loadFromStorage(getNamespaceKey('schemas', namespace), []);
-    const savedApis = loadFromStorage(getNamespaceKey('apis', namespace), []);
-    const savedFiles = loadFromStorage(getNamespaceKey('files', namespace), []);
-    setSavedSchemas(savedSchemas);
-    setSavedApis(savedApis);
-    setSavedFiles(savedFiles);
-  }, [namespace]);
-
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Bot className="text-blue-500" size={24} />
-          <div>
-            <h2 className="text-lg font-semibold">AI Agent Workspace</h2>
-            <p className="text-sm text-gray-500">
-              {namespace ? `Working on: ${namespace['namespace-name']}` : 'Development Assistant'}
-            </p>
-          </div>
-        </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded"
-          >
-            <X size={16} />
-          </button>
-        )}
-      </div>
-      {/* Main Content: Split horizontally */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Center: Chat and thinking process */}
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center gap-2 p-3 border-b bg-gray-50 flex-shrink-0">
-            <MessageSquare size={16} />
-            <span className="font-medium">AI Assistant</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-            {messages.map(renderMessage)}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-lg px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>AI is thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-          <div className="p-4 border-t flex-shrink-0">
-            <div className="flex gap-2">
-              <textarea
-                ref={inputRef}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask me to create APIs, generate schemas, run tests..."
-                className="flex-1 p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={2}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={isLoading || !inputMessage.trim()}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-              >
-                <Send size={16} />
-              </button>
+    <div className="h-screen w-full flex bg-white">
+      {/* Left: Chat Panel */}
+      <div className="flex flex-col w-[650px] min-w-[500px] max-w-[900px] border-r border-gray-200 bg-white h-full">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100">
+              <Bot className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">AI Assistant</h2>
+              <p className="text-sm text-gray-500">
+                {namespace ? `Working with: ${namespace['namespace-name']}` : 'General Development'}
+              </p>
             </div>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
         </div>
-        {/* Right: Output Tabs */}
-        <div className="w-96 border-l flex flex-col min-h-0">
-          {/* Tab Navigation */}
-          <div className="flex border-b flex-shrink-0">
-            {[
-              { key: 'files', label: 'Files', icon: Folder },
-              { key: 'api', label: 'API', icon: Code },
-              { key: 'schema', label: 'Schema', icon: Database },
-              { key: 'console', label: 'Console', icon: TerminalIcon }
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`flex-1 flex items-center justify-center gap-2 p-3 text-sm font-medium ${
-                  activeTab === tab.key ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:bg-gray-50'
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                  message.role === 'user'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-900'
                 }`}
               >
-                <tab.icon size={16} />
-                {tab.label}
-              </button>
-            ))}
+                <div className="whitespace-pre-wrap">{message.content}</div>
+                <div className="text-xs opacity-70 mt-1">
+                  {message.timestamp.toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+        {/* Chat Input */}
+        <div className="border-t border-gray-200 p-4">
+          <div className="flex gap-2">
+            <textarea
+              ref={inputRef}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your message..."
+              className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={1}
+              disabled={isLoading}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={isLoading || !inputMessage.trim()}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="w-4 h-4" />
+            </button>
           </div>
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {activeTab === 'files' && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium">Project Files</h3>
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <Plus size={16} />
+        </div>
+      </div>
+
+      {/* Right: Tabbed Content Panel */}
+      <div className="flex-1 flex flex-col bg-[#f8f9fb]">
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-200 bg-white px-4 pt-2">
+          <button
+            onClick={() => setActiveTab('files')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              activeTab === 'files'
+                ? 'border-blue-500 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <File size={16} /> Files
+          </button>
+          <button
+            onClick={() => setActiveTab('api')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              activeTab === 'api'
+                ? 'border-blue-500 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Code size={16} /> API
+          </button>
+          <button
+            onClick={() => setActiveTab('schema')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              activeTab === 'schema'
+                ? 'border-blue-500 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Database size={16} /> Schema
+          </button>
+          <button
+            onClick={() => setActiveTab('console')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              activeTab === 'console'
+                ? 'border-blue-500 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Play size={16} /> Console
+          </button>
+        </div>
+        {/* Tab Content */}
+        <div className="flex-1 overflow-auto p-6">
+          {activeTab === 'files' && (
+            <div className="h-full flex">
+              <div className="w-64 border-r border-gray-200 p-4 bg-white rounded-l-lg">
+                <h3 className="font-medium mb-4">Project Files</h3>
+                {renderFileTree(projectFiles)}
+              </div>
+              <div className="flex-1 flex flex-col">
+                {selectedFile ? (
+                  <>
+                    <div className="p-4 border-b border-gray-200 bg-white">
+                      <h3 className="font-medium">{selectedFile.name}</h3>
+                    </div>
+                    <div className="flex-1 p-4 bg-white">
+                      <textarea
+                        value={fileContent}
+                        onChange={(e) => setFileContent(e.target.value)}
+                        className="w-full h-full resize-none border border-gray-300 rounded-lg p-3 font-mono text-sm"
+                        placeholder="File content..."
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-gray-500 bg-white">
+                    Select a file to edit
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {activeTab === 'api' && (
+            <div className="h-full overflow-y-auto">
+              <h3 className="font-medium mb-4">API Endpoints</h3>
+              {apiEndpoints.length === 0 ? (
+                <div className="text-gray-500">No API endpoints generated yet...</div>
+              ) : (
+                <div className="space-y-4">
+                  {apiEndpoints.map((api, apiIndex) => (
+                    <div key={api.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <h4 className="font-medium mb-2">{api.name}</h4>
+                      <div className="space-y-2">
+                        {api.endpoints.map((endpoint, index) => (
+                          <div key={index} className="border border-gray-100 rounded p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                endpoint.method?.includes('GET') ? 'bg-green-100 text-green-800' :
+                                endpoint.method?.includes('POST') ? 'bg-blue-100 text-blue-800' :
+                                endpoint.method?.includes('PUT') ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {endpoint.method}
+                              </span>
+                              <span className="font-mono text-sm">{endpoint.path}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{endpoint.description}</p>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="Test input (JSON)"
+                                value={apiTestInput[`${apiIndex}-${index}`] || ''}
+                                onChange={(e) => setApiTestInput(prev => ({
+                                  ...prev,
+                                  [`${apiIndex}-${index}`]: e.target.value
+                                }))}
+                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                              <button
+                                onClick={() => handleApiTest(endpoint, `${apiIndex}-${index}`)}
+                                disabled={apiTestLoading[`${apiIndex}-${index}`]}
+                                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50"
+                              >
+                                {apiTestLoading[`${apiIndex}-${index}`] ? 'Testing...' : 'Test'}
+                              </button>
+                            </div>
+                            {apiTestResults[`${apiIndex}-${index}`] && (
+                              <div className="mt-2 p-2 bg-gray-50 rounded text-sm">
+                                <pre className="whitespace-pre-wrap">
+                                  {JSON.stringify(apiTestResults[`${apiIndex}-${index}`], null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {activeTab === 'schema' && (
+            <div className="h-full overflow-y-auto">
+              <h3 className="font-medium mb-4">Generated Schemas</h3>
+              {schemas.length === 0 ? (
+                <div className="text-gray-500">No schemas generated yet...</div>
+              ) : (
+                <div className="space-y-4">
+                  {schemas.map((schema, index) => (
+                    <div key={schema.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium">{schema.name}</h4>
+                        <button
+                          onClick={() => setShowRawSchema(prev => ({ ...prev, [index]: !prev[index] }))}
+                          className="text-sm text-blue-500 hover:text-blue-700"
+                        >
+                          {showRawSchema[index] ? 'Hide Raw' : 'Show Raw'}
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 rounded p-3">
+                        {showRawSchema[index] ? (
+                          <pre className="text-sm overflow-x-auto">
+                            {rawSchemas[index]?.raw || JSON.stringify(schema.schema, null, 2)}
+                          </pre>
+                        ) : (
+                          <pre className="text-sm overflow-x-auto">
+                            {JSON.stringify(schema.schema, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {activeTab === 'console' && (
+            <div className="h-full flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+                <h3 className="font-medium">Console Output</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConsoleOutput([])}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                  >
+                    Clear
                   </button>
                 </div>
-                <div className="overflow-y-auto max-h-full">
-                  {renderFileTree(projectFiles)}
-                </div>
               </div>
-            )}
-            {activeTab === 'api' && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium">API Endpoints</h3>
-                  <span className="text-xs text-gray-500">{apiEndpoints.length} endpoints</span>
-                </div>
-                <div className="overflow-y-auto max-h-full">
-                                      {apiEndpoints.length > 0 ? (
-                      <div className="space-y-3">
-                        {apiEndpoints.map((endpoint, index) => {
-                          const isSaved = savedApis.some(api => JSON.stringify(api) === JSON.stringify(endpoint));
-                          return (
-                            <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                              <div className="flex items-center gap-2 mb-2">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              endpoint.method === 'GET' ? 'bg-green-100 text-green-800' :
-                              endpoint.method === 'POST' ? 'bg-blue-100 text-blue-800' :
-                              endpoint.method === 'PUT' ? 'bg-yellow-100 text-yellow-800' :
-                              endpoint.method === 'DELETE' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {endpoint.method}
-                            </span>
-                            <span className="font-mono text-sm bg-white px-2 py-1 rounded border">{endpoint.path}</span>
-                          </div>
-                          <p className="text-sm text-gray-600">{endpoint.description}</p>
-                          <form
-                            className="mt-2 flex gap-2 items-center"
-                            onSubmit={e => {
-                              e.preventDefault();
-                              handleApiTest(endpoint, index);
-                            }}
-                          >
-                            {endpoint.method && endpoint.method.toUpperCase() !== 'GET' && (
-                              <textarea
-                                className="flex-1 p-2 border rounded text-xs"
-                                placeholder="JSON body"
-                                value={apiTestInput[index] || ''}
-                                onChange={e => setApiTestInput((prev) => ({ ...prev, [index]: e.target.value }))}
-                                rows={2}
-                              />
-                            )}
-                            <button
-                              type="submit"
-                              className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 disabled:opacity-50"
-                              disabled={apiTestLoading[index]}
-                            >
-                              {apiTestLoading[index] ? 'Testing...' : 'Test'}
-                            </button>
-                          </form>
-                          {apiTestResults[index] && (
-                            <pre className="mt-2 bg-white border rounded p-2 text-xs overflow-auto max-h-32">
-                              {JSON.stringify(apiTestResults[index], null, 2)}
-                            </pre>
-                          )}
-                          <button className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 mt-2">
-                                                          Copy
-                            </button>
-                              {isSaved ? (
-                                <span className="ml-2 text-green-600 text-xs font-semibold">Saved</span>
-                              ) : (
-                                <button
-                                  className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                                  onClick={() => handleSaveApi(endpoint)}
-                                >
-                                  Save
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Code size={48} className="mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500 text-sm">No API endpoints generated yet.</p>
-                      <p className="text-gray-400 text-xs mt-1">Ask the AI to create some!</p>
+              <div className="flex-1 overflow-y-auto p-4 bg-gray-900 text-green-400 font-mono text-sm rounded-b-lg">
+                {consoleOutput.length === 0 ? (
+                  <div className="text-gray-500">No console output yet...</div>
+                ) : (
+                  consoleOutput.map((output, index) => (
+                    <div key={index} className="mb-1">
+                      <span className="text-gray-400">$ </span>
+                      {output}
                     </div>
-                  )}
-                </div>
+                  ))
+                )}
               </div>
-            )}
-            {activeTab === 'schema' && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium">Database Schemas</h3>
-                  <span className="text-xs text-gray-500">{schemas.length} schemas</span>
-                </div>
-                <div className="overflow-y-auto max-h-full">
-                                      {schemas.length > 0 ? (
-                      <div className="space-y-3">
-                        {schemas.map((schema, index) => {
-                          const isSaved = savedSchemas.some(s => JSON.stringify(s) === JSON.stringify(schema));
-                          return (
-                            <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                              <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-blue-600">{schema.name}</h4>
-                            <span className="text-xs text-gray-500">{schema.fields.length} fields</span>
-                            <button
-                              className="text-xs text-blue-500 underline ml-2"
-                              onClick={() => setShowRawSchema((prev) => ({ ...prev, [index]: !prev[index] }))}
-                            >
-                                                              {showRawSchema[index] ? 'Hide JSON' : 'Show JSON'}
-                              </button>
-                              {isSaved ? (
-                                <span className="ml-2 text-green-600 text-xs font-semibold">Saved</span>
-                              ) : (
-                                <button
-                                  className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                                  onClick={() => handleSaveSchema(schema)}
-                                >
-                                  Save
-                                </button>
-                              )}
-                            </div>
-                          {showRawSchema[index] && (
-                            <pre className="bg-white border rounded p-2 text-xs overflow-auto max-h-40 mb-2">
-                              {JSON.stringify(rawSchemas[index], null, 2)}
-                            </pre>
-                          )}
-                          <div className="space-y-2">
-                            {schema.fields.map((field, fieldIndex) => (
-                              <div key={fieldIndex} className="flex items-center justify-between text-sm bg-white p-2 rounded border">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-medium">{field.name}</span>
-                                  <span className="text-gray-400">:</span>
-                                  <span className={`px-2 py-1 rounded text-xs ${field.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{field.type}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {field.required && <span className="text-red-500 text-xs font-bold">*</span>}
-                                  <span className={`text-xs px-1 rounded ${field.required ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>{field.required ? 'Required' : 'Optional'}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex gap-2">
-                            <button className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">Generate Migration</button>
-                            <button className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">View SQL</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Database size={48} className="mx-auto text-gray-300 mb-4" />
-                      <p className="text-gray-500 text-sm">No schemas generated yet.</p>
-                      <p className="text-gray-400 text-xs mt-1">Ask the AI to create some!</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {activeTab === 'console' && (
-              <div className="p-4">
-                <h3 className="font-medium mb-4">Console Output</h3>
-                <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-sm h-64 overflow-y-auto">
-                  {consoleOutput.length > 0 ? (
-                    consoleOutput.map((line, index) => (
-                      <div key={index}>{line}</div>
-                    ))
-                  ) : (
-                    <div>No console output yet...</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

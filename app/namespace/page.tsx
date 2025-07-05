@@ -48,6 +48,7 @@ const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), 
   )
 });
 
+
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
 
@@ -141,10 +142,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any }[]>([]);
   const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
 
-  // Add state for LLMTerminal
-  const [llmTerminalOpen, setLlmTerminalOpen] = useState(false);
-  const [llmTerminalPlacement, setLlmTerminalPlacement] = useState<'right'>('right');
-  const [llmTerminalWidth, setLlmTerminalWidth] = useState(500);
+
 
   // Add state for schema page tabs
   const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
@@ -157,6 +155,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
   // Add state for method test tabs
   const [methodTestTabs, setMethodTestTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
+
+
 
   // Add state for AI Agent Workspace
   const [aiAgentTab, setAIAgentTab] = useState<{ namespace?: any } | null>(null);
@@ -698,11 +698,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               setAIAgentTab({});
             }}
           >
-            <Bot size={40} className="text-white mb-4" />
-            <div className="font-semibold text-white">AI Agent Workspace</div>
-            <div className="text-xs text-purple-100 mt-2 text-center">
-              Design APIs, generate code, test endpoints
-            </div>
+    
+
           </div>
         </div>
         <div className="mb-4">
@@ -731,28 +728,11 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     });
   };
 
-  // Debug log for llmTerminalOpen state
-  useEffect(() => {
-    console.log('llmTerminalOpen state changed:', llmTerminalOpen);
-  }, [llmTerminalOpen]);
+
 
   return (
     <div className="relative h-full w-full">
-      {/* Floating AI Assistant Button */}
-      <button
-        className="fixed bottom-8 right-8 z-[9999] flex items-center gap-2 px-5 py-3 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all text-base font-semibold"
-        onClick={() => {
-          console.log('AI Assistant button clicked!');
-          setLlmTerminalOpen(true);
-        }}
-        style={{ 
-          boxShadow: '0 4px 24px rgba(80,0,200,0.3)',
-          border: '2px solid white'
-        }}
-      >
-        <Sparkles className="w-6 h-6" />
-        AI Assistant
-      </button>
+
       <DndProvider backend={HTML5Backend}>
         <div className="flex flex-col h-full w-full">
     <div className="bg-[#f7f8fa] min-h-screen">
@@ -803,22 +783,21 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                   }
                 }
               }}
-              onDeleteNamespace={handleDeleteNamespace}
-                    onOpenAIAgent={(namespace) => {
-                      const key = 'ai-agent';
-                      if (!tabs.find(tab => tab.key === key)) {
-                        setTabs([...tabs, { key, label: 'AI Agent', pinned: false }]);
-                      }
-                      setActiveTab(key);
-                      setAIAgentTab({ namespace });
-                    }}
-            />
+                            onDeleteNamespace={handleDeleteNamespace}
+              onOpenAIAgent={(namespace) => {
+                const key = 'ai-agent';
+                if (!tabs.find(tab => tab.key === key)) {
+                  setTabs([...tabs, { key, label: 'AI Agent', pinned: false }]);
+                }
+                setActiveTab(key);
+                setAIAgentTab({ namespace });
+              }}
+          />
           )}
         </div>
         {/* Main Content */}
         <div 
           className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
-          style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
         >
                
                 
@@ -1435,22 +1414,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                     </div>
                   </div>
                 )}
-                <EnhancedLLMTerminal 
-            open={llmTerminalOpen}
-            setOpen={setLlmTerminalOpen}
-            placement={llmTerminalPlacement}
-                  setPlacement={(placement) => {
-                    if (placement === 'right') setLlmTerminalPlacement('right');
-                    // Ignore 'bottom' since only 'right' is supported in state
-                  }}
-            width={llmTerminalWidth}
-            setWidth={setLlmTerminalWidth}
-                  openSchemaModal={(name, schema) => {
-                    setShowSchemaModal(true);
-                    setSchemaName(name);
-                    setJsonSchema(JSON.stringify(schema, null, 2));
-                  }}
-          />
+
           <SchemaPreviewModal
             open={!!previewSchema}
             onClose={() => setPreviewSchema(null)}
