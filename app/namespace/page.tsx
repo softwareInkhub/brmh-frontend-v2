@@ -481,43 +481,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     }
   }, [activeTab]);
 
-  const handleSchemaModalSave = (schemaName: string, jsonSchema: string) => {
-    handleSave([], jsonSchema); // You may want to adapt this to use fields if needed
-  };
-
-  const handleSaveAccount = async (account: any) => {
-    try {
-      const response = await fetch('/api/namespace/account', {
-        method: account["namespace-account-id"] ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...account,
-          "namespace-id": namespaces[0]?.["namespace-id"],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save account');
-      }
-
-      const savedAccount = await response.json();
-      setNamespaceDetailsMap(prev => ({
-        ...prev,
-        [namespaces[0]?.["namespace-id"]]: {
-          accounts: [
-            ...(prev[namespaces[0]?.["namespace-id"]]?.accounts || []).filter((a: any) => a["namespace-account-id"] !== savedAccount["namespace-account-id"]),
-            savedAccount,
-          ],
-          methods: prev[namespaces[0]?.["namespace-id"]]?.methods || [],
-        },
-      }));
-    } catch (error) {
-      console.error('Error saving account:', error);
-      throw error;
-    }
-  };
+ 
 
   const handleSaveNamespace = async (namespace: any) => {
     try {
