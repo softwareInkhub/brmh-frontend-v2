@@ -1050,15 +1050,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
                         </div>
                       ))}
-                      {activeTab !== 'overview' &&
+                      {/* {activeTab !== 'overview' &&
                         activeTab !== 'namespace' &&
                         activeTab !== 'schemaService' &&
                         activeTab !== 'tables' &&
                         activeTab !== 'unifiedNamespace' &&
                         activeTab !== 'new' &&
                         !activeTab.startsWith('tab-') && (
-                          <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
-                      )}
+                      )} */}
                       {tabs.map(tab => {
                         if (tab.key === 'ai-agent') {
                           return (
