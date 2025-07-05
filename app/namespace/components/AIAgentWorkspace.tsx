@@ -86,12 +86,51 @@ function jsonSchemaToFields(name, schema) {
   };
 }
 
-function useNowId() {
-  const [id, setId] = useState('');
-  useEffect(() => {
-    setId(Date.now().toString());
-  }, []);
-  return id;
+// Update getNowId to ensure uniqueness
+function getNowId() {
+  return Date.now().toString() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+// Add utility for localStorage
+function saveToStorage(key, value) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+}
+function loadFromStorage(key, fallback) {
+  if (typeof window !== 'undefined') {
+    const val = localStorage.getItem(key);
+    if (val) return JSON.parse(val);
+  }
+  return fallback;
+}
+
+// Utility for namespace-specific storage
+function getNamespaceKey(type, namespace) {
+  return `aiagent-saved-${type}-${namespace?.['namespace-id'] || 'default'}`;
+}
+
+// Utility to extract code blocks and JSON from a string
+function extractCodeBlocksAndText(text) {
+  const codeBlockRegex = /```[a-zA-Z]*\n([\s\S]*?)```/g;
+  let match;
+  let codeBlocks = [];
+  let lastIndex = 0;
+  let plainParts = [];
+  while ((match = codeBlockRegex.exec(text))) {
+    if (match.index > lastIndex) {
+      plainParts.push(text.slice(lastIndex, match.index));
+    }
+    codeBlocks.push(match[1]);
+    lastIndex = match.index;
+  }
+  if (lastIndex < text.length) {
+    plainParts.push(text.slice(lastIndex));
+  }
+  return {
+    codeBlocks,
+    plainText: plainParts.map(s => s.trim()).filter(Boolean).join('\n').trim()
+  };
 }
 
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
@@ -115,7 +154,7 @@ What would you like to work on today?`,
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>(() => loadFromStorage('aiagent-files', [
     {
       id: '1',
       name: 'api',
@@ -137,13 +176,13 @@ What would you like to work on today?`,
     },
     { id: '6', name: 'package.json', type: 'file', path: '/package.json' },
     { id: '7', name: 'README.md', type: 'file', path: '/README.md' }
-  ]);
+  ]));
   const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
   const [fileContent, setFileContent] = useState('');
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
-  const [apiEndpoints, setApiEndpoints] = useState<any[]>([]);
-  const [schemas, setSchemas] = useState<any[]>([]);
-  const [rawSchemas, setRawSchemas] = useState([]);
+  const [apiEndpoints, setApiEndpoints] = useState<any[]>(() => loadFromStorage('aiagent-apis', []));
+  const [schemas, setSchemas] = useState<any[]>(() => loadFromStorage('aiagent-schemas', []));
+  const [rawSchemas, setRawSchemas] = useState(() => loadFromStorage('aiagent-rawschemas', []));
   const [showRawSchema, setShowRawSchema] = useState({});
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
   const [isChatExpanded, setIsChatExpanded] = useState(true);
@@ -302,7 +341,7 @@ What would you like to work on today?`,
   const addMessage = (message: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = {
       ...message,
-      id: useNowId(),
+      id: getNowId(),
       timestamp: new Date()
     };
     setMessages(prev => [...prev, newMessage]);
@@ -323,7 +362,7 @@ What would you like to work on today?`,
 
     try {
       // Call the real backend AI agent
-      const response = await fetch('http://localhost:5001/unified/ai-agent', {
+      const response = await fetch('/unified/ai-agent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -362,15 +401,27 @@ What would you like to work on today?`,
       } else {
         // For general responses, try to detect the type from content
         const content = data.content.toLowerCase();
-        if (content.includes('api') || content.includes('endpoint') || content.includes('route')) {
-          handleAPIGeneration({ content: data.content });
-        } else if (content.includes('schema') || content.includes('model') || content.includes('database')) {
+        const userMessageLower = userMessage.toLowerCase();
+        
+        // Check user intent first (what they asked for)
+        if (userMessageLower.includes('schema') || userMessageLower.includes('model') || userMessageLower.includes('database') || userMessageLower.includes('json schema')) {
           handleSchemaGeneration({ content: data.content });
-        } else if (content.includes('test') || content.includes('debug') || content.includes('code')) {
+        } else if (userMessageLower.includes('api') || userMessageLower.includes('endpoint') || userMessageLower.includes('route')) {
+          handleAPIGeneration({ content: data.content });
+        } else if (userMessageLower.includes('test') || userMessageLower.includes('debug') || userMessageLower.includes('code')) {
           handleCodeGeneration({ content: data.content });
         } else {
-          // For general responses, switch to console tab to show the output
-          setActiveTab('console');
+          // Fallback: check content for patterns
+          if (content.includes('api') || content.includes('endpoint') || content.includes('route')) {
+            handleAPIGeneration({ content: data.content });
+          } else if (content.includes('schema') || content.includes('model') || content.includes('database') || content.includes('properties')) {
+            handleSchemaGeneration({ content: data.content });
+          } else if (content.includes('test') || content.includes('debug') || content.includes('code')) {
+            handleCodeGeneration({ content: data.content });
+          } else {
+            // For general responses, switch to console tab to show the output
+            setActiveTab('console');
+          }
         }
       }
     } catch (error) {
@@ -683,6 +734,39 @@ What would you like to work on today?`,
     }
   };
 
+  // State for saved items
+  const [savedSchemas, setSavedSchemas] = useState<any[]>([]);
+  const [savedApis, setSavedApis] = useState<any[]>([]);
+  const [savedFiles, setSavedFiles] = useState<ProjectFile[]>([]);
+
+  // Save handlers
+  const handleSaveSchema = (schema) => {
+    const updated = [...savedSchemas, schema];
+    setSavedSchemas(updated);
+    saveToStorage(getNamespaceKey('schemas', namespace), updated);
+  };
+  const handleSaveApi = (api) => {
+    const updated = [...savedApis, api];
+    setSavedApis(updated);
+    saveToStorage(getNamespaceKey('apis', namespace), updated);
+  };
+  const handleSaveFile = (file) => {
+    const updated = [...savedFiles, file];
+    setSavedFiles(updated);
+    saveToStorage(getNamespaceKey('files', namespace), updated);
+  };
+
+  // On mount, load saved items for current namespace
+  useEffect(() => {
+    if (!namespace) return;
+    const savedSchemas = loadFromStorage(getNamespaceKey('schemas', namespace), []);
+    const savedApis = loadFromStorage(getNamespaceKey('apis', namespace), []);
+    const savedFiles = loadFromStorage(getNamespaceKey('files', namespace), []);
+    setSavedSchemas(savedSchemas);
+    setSavedApis(savedApis);
+    setSavedFiles(savedFiles);
+  }, [namespace]);
+
   return (
     <div className="w-full h-full flex flex-col">
       {/* Header */}
@@ -792,11 +876,13 @@ What would you like to work on today?`,
                   <span className="text-xs text-gray-500">{apiEndpoints.length} endpoints</span>
                 </div>
                 <div className="overflow-y-auto max-h-full">
-                  {apiEndpoints.length > 0 ? (
-                    <div className="space-y-3">
-                      {apiEndpoints.map((endpoint, index) => (
-                        <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                          <div className="flex items-center gap-2 mb-2">
+                                      {apiEndpoints.length > 0 ? (
+                      <div className="space-y-3">
+                        {apiEndpoints.map((endpoint, index) => {
+                          const isSaved = savedApis.some(api => JSON.stringify(api) === JSON.stringify(endpoint));
+                          return (
+                            <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                              <div className="flex items-center gap-2 mb-2">
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               endpoint.method === 'GET' ? 'bg-green-100 text-green-800' :
                               endpoint.method === 'POST' ? 'bg-blue-100 text-blue-800' :
@@ -839,11 +925,22 @@ What would you like to work on today?`,
                             </pre>
                           )}
                           <button className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 mt-2">
-                            Copy
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                                                          Copy
+                            </button>
+                              {isSaved ? (
+                                <span className="ml-2 text-green-600 text-xs font-semibold">Saved</span>
+                              ) : (
+                                <button
+                                  className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                                  onClick={() => handleSaveApi(endpoint)}
+                                >
+                                  Save
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                   ) : (
                     <div className="text-center py-8">
                       <Code size={48} className="mx-auto text-gray-300 mb-4" />
@@ -861,20 +958,32 @@ What would you like to work on today?`,
                   <span className="text-xs text-gray-500">{schemas.length} schemas</span>
                 </div>
                 <div className="overflow-y-auto max-h-full">
-                  {schemas.length > 0 ? (
-                    <div className="space-y-3">
-                      {schemas.map((schema, index) => (
-                        <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                          <div className="flex items-center justify-between mb-3">
+                                      {schemas.length > 0 ? (
+                      <div className="space-y-3">
+                        {schemas.map((schema, index) => {
+                          const isSaved = savedSchemas.some(s => JSON.stringify(s) === JSON.stringify(schema));
+                          return (
+                            <div key={index} className="p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                              <div className="flex items-center justify-between mb-3">
                             <h4 className="font-medium text-blue-600">{schema.name}</h4>
                             <span className="text-xs text-gray-500">{schema.fields.length} fields</span>
                             <button
                               className="text-xs text-blue-500 underline ml-2"
                               onClick={() => setShowRawSchema((prev) => ({ ...prev, [index]: !prev[index] }))}
                             >
-                              {showRawSchema[index] ? 'Hide JSON' : 'Show JSON'}
-                            </button>
-                          </div>
+                                                              {showRawSchema[index] ? 'Hide JSON' : 'Show JSON'}
+                              </button>
+                              {isSaved ? (
+                                <span className="ml-2 text-green-600 text-xs font-semibold">Saved</span>
+                              ) : (
+                                <button
+                                  className="ml-2 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                                  onClick={() => handleSaveSchema(schema)}
+                                >
+                                  Save
+                                </button>
+                              )}
+                            </div>
                           {showRawSchema[index] && (
                             <pre className="bg-white border rounded p-2 text-xs overflow-auto max-h-40 mb-2">
                               {JSON.stringify(rawSchemas[index], null, 2)}
@@ -886,33 +995,22 @@ What would you like to work on today?`,
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono font-medium">{field.name}</span>
                                   <span className="text-gray-400">:</span>
-                                  <span className={`px-2 py-1 rounded text-xs ${
-                                    field.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {field.type}
-                                  </span>
+                                  <span className={`px-2 py-1 rounded text-xs ${field.required ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{field.type}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   {field.required && <span className="text-red-500 text-xs font-bold">*</span>}
-                                  <span className={`text-xs px-1 rounded ${
-                                    field.required ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
-                                  }`}>
-                                    {field.required ? 'Required' : 'Optional'}
-                                  </span>
+                                  <span className={`text-xs px-1 rounded ${field.required ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>{field.required ? 'Required' : 'Optional'}</span>
                                 </div>
                               </div>
                             ))}
                           </div>
                           <div className="mt-3 flex gap-2">
-                            <button className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
-                              Generate Migration
-                            </button>
-                            <button className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
-                              View SQL
-                            </button>
+                            <button className="text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">Generate Migration</button>
+                            <button className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">View SQL</button>
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
                   ) : (
                     <div className="text-center py-8">

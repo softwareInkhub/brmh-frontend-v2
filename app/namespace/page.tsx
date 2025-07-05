@@ -180,7 +180,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
       
       try {
     // Fetch namespaces
-        const namespacesRes = await fetch(`http://localhost:5001/unified/namespaces`);
+        const namespacesRes = await fetch(`/unified/namespaces`);
         console.log('Namespaces response status:', namespacesRes.status);
         if (!namespacesRes.ok) {
           throw new Error(`HTTP error! status: ${namespacesRes.status}`);
@@ -207,7 +207,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
       try {
     // Fetch schemas
-        const schemasRes = await fetch(`http://localhost:5001/unified/schema`);
+        const schemasRes = await fetch(`/unified/schema`);
         console.log('Schemas response status:', schemasRes.status);
         if (!schemasRes.ok) {
           throw new Error(`HTTP error! status: ${schemasRes.status}`);
@@ -240,8 +240,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
-        fetch(`http://localhost:5001/unified/namespaces/${namespaceId}/accounts`),
-        fetch(`http://localhost:5001/unified/namespaces/${namespaceId}/methods`)
+        fetch(`/unified/namespaces/${namespaceId}/accounts`),
+        fetch(`/unified/namespaces/${namespaceId}/methods`)
       ]);
       const [accounts, methods] = await Promise.all([
         accountsRes.json(),
@@ -487,8 +487,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     try {
       const isEdit = !!namespace["namespace-id"];
       const url = isEdit
-        ? `http://localhost:5001/unified/namespaces/${namespace["namespace-id"]}`
-        : `http://localhost:5001/unified/namespaces`;
+        ? `/unified/namespaces/${namespace["namespace-id"]}`
+        : `/unified/namespaces`;
       const method = isEdit ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
@@ -523,7 +523,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     if (!namespace || !namespace["namespace-id"]) return;
     if (!window.confirm('Are you sure you want to delete this namespace?')) return;
     try {
-      const response = await fetch(`http://localhost:5001/unified/namespaces/${namespace["namespace-id"]}`, {
+              const response = await fetch(`/unified/namespaces/${namespace["namespace-id"]}`, {
         method: 'DELETE',
       });
       if (!response.ok && response.status !== 204) {
@@ -742,7 +742,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               onDeleteSchema={async (schema) => {
                 if (confirm('Are you sure you want to delete this schema?')) {
                   try {
-                          const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
+                          const response = await fetch(`/unified/schema/${schema.id}`, {
                       method: 'DELETE',
                     });
                     if (!response.ok) throw new Error('Failed to delete schema');
@@ -1373,7 +1373,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
             onDelete={async (schema) => {
               if (confirm('Are you sure you want to delete this schema?')) {
                 try {
-                        const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
+                        const response = await fetch(`/unified/schema/${schema.id}`, {
                     method: 'DELETE',
                   });
                   if (!response.ok) throw new Error('Failed to delete schema');
@@ -1473,7 +1473,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         onDelete={async (account) => {
           if (confirm('Are you sure you want to delete this account?')) {
             try {
-                  const response = await fetch(`http://localhost:5001/unified/accounts/${account["namespace-account-id"]}`, {
+                  const response = await fetch(`/unified/accounts/${account["namespace-account-id"]}`, {
                 method: 'DELETE',
               });
               if (!response.ok) throw new Error('Failed to delete account');
@@ -1515,7 +1515,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         onDelete={async (schema) => {
           if (confirm('Are you sure you want to delete this schema?')) {
             try {
-                  const response = await fetch(`http://localhost:5001/unified/schema/${schema.id}`, {
+                  const response = await fetch(`/unified/schema/${schema.id}`, {
                 method: 'DELETE',
               });
               if (!response.ok) throw new Error('Failed to delete schema');
