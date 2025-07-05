@@ -8,8 +8,9 @@ interface SidePanelProps {
   accounts: Record<string, any[]>; // namespaceId -> accounts
   schemas: any[];
   methods: Record<string, any[]>; // namespaceId -> methods
+  webhooks: Record<string, any[]>; // namespaceId -> webhooks
   onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
-  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace', parentData?: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace' | 'webhook' | 'allWebhooks' | 'webhookPage', parentData?: any) => void;
   fetchNamespaceDetails: (namespaceId: string) => void;
   selectedSchemaId?: string | null;
   onEditSchema?: (schema: any) => void;
@@ -95,7 +96,7 @@ const DraggableSchema: React.FC<{ schema: any; children: React.ReactNode; onClic
   );
 };
 
-const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace, onOpenAIAgent }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, webhooks, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace, onOpenAIAgent }) => {
   // Debug logs
   console.log('SidePanel namespaces:', namespaces);
   console.log('SidePanel schemas:', schemas);
@@ -108,7 +109,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
     requests: false,
   });
   const [expandedNs, setExpandedNs] = useState<Record<string, boolean>>({});
-  const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean; schemas: boolean }>>({});
+  const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean; schemas: boolean; webhooks: boolean }>>({});
   const [viewingNamespace, setViewingNamespace] = useState<any>(null);
   const [expandedNamespaces, setExpandedNamespaces] = useState(true);
 
@@ -122,7 +123,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       return newState;
     });
   };
-  const toggleSection = (nsId: string, section: 'accounts' | 'methods' | 'schemas') => {
+  const toggleSection = (nsId: string, section: 'accounts' | 'methods' | 'schemas' | 'webhooks') => {
     setExpandedSection(e => ({
       ...e,
       [nsId]: {
@@ -392,6 +393,50 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                                 </button>
                               </DraggableSchema>
                             ))}
+                          </div>
+                        )}
+                      </div>
+                      {/* Webhooks */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+                          <button
+                            className="flex items-center gap-1 group hover:underline cursor-pointer"
+                            onClick={() => {
+                              toggleSection(ns['namespace-id'], 'webhooks');
+                              onAdd('allWebhooks', ns);
+                            }}
+                            type="button"
+                          >
+                            {expandedSection[ns['namespace-id']]?.webhooks ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <span>Webhooks</span>
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
+                              <Plus size={14} className="text-pink-400" />
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => onAdd('webhook', ns)}
+                            className="p-1 rounded hover:bg-pink-50"
+                            title="Add Webhook"
+                            type="button"
+                          >
+                            <Plus size={14} className="text-pink-500" />
+                          </button>
+                        </div>
+                        {expandedSection[ns['namespace-id']]?.webhooks && (
+                          <div className="space-y-1">
+                            {(webhooks[ns['namespace-id']] && webhooks[ns['namespace-id']].length > 0) ? (
+                              webhooks[ns['namespace-id']].map((wh, whIdx) => (
+                                <button
+                                  key={wh['webhook-id'] || whIdx}
+                                  onClick={() => onAdd('webhookPage', { webhook: wh, namespace: ns })}
+                                  className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-pink-50 text-sm group"
+                                >
+                                  <span className="truncate group-hover:text-pink-600 text-xs">{wh['webhook-name']}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="text-xs text-gray-400 pl-2 py-2">No webhooks found</div>
+                            )}
                           </div>
                         )}
                       </div>

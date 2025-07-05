@@ -30,6 +30,8 @@ import SingleNamespacePage from './pages/SingleNamespacePage';
 import MethodTestPage from './pages/MethodTestPage';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import AllWebhookPage from './pages/AllWebhookPage';
+import WebhookPage from './pages/WebhookPage';
 
 // Dynamically import AIAgentWorkspace to prevent SSR issues
 const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
@@ -162,6 +164,15 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   // Add state for tab layout
   const [tabLayout, setTabLayout] = useState<'horizontal' | 'vertical'>('horizontal');
 
+  // Add state for all webhooks tabs
+  const [allWebhooksTabs, setAllWebhooksTabs] = useState<{ key: string; namespace?: any }[]>([]);
+
+  // Add state for webhooks per namespace
+  const [webhooksMap, setWebhooksMap] = useState<Record<string, any[]>>({});
+
+  // Add state for webhookPage tabs
+  const [webhookPageTabs, setWebhookPageTabs] = useState<{ key: string; webhook: any; namespace: any }[]>([]);
+
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
     Object.entries(namespaceDetailsMap).map(([nsId, v]) => [nsId, v.accounts])
@@ -236,7 +247,19 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     fetchData();
   }, []);
 
-  // Fetch accounts and methods for a namespace
+  // Fetch webhooks for a namespace
+  const fetchNamespaceWebhooks = async (namespaceId: string) => {
+    try {
+      const res = await fetch(`/unified/webhooks/namespace/${namespaceId}`);
+      if (!res.ok) throw new Error('Failed to fetch webhooks');
+      const data = await res.json();
+      setWebhooksMap(prev => ({ ...prev, [namespaceId]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      setWebhooksMap(prev => ({ ...prev, [namespaceId]: [] }));
+    }
+  };
+
+  // Update fetchNamespaceDetails to also fetch webhooks
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
@@ -248,6 +271,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         methodsRes.json()
       ]);
       setNamespaceDetailsMap(prev => ({ ...prev, [namespaceId]: { accounts, methods } }));
+      // Fetch webhooks for this namespace
+      fetchNamespaceWebhooks(namespaceId);
     } catch (err) {
       // handle error
     }
@@ -370,6 +395,28 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
       setSingleNamespaceTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'allWebhooks') {
+      const key = parentData ? `allWebhooks-${parentData['namespace-id']}` : 'allWebhooks';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Webhooks: ${parentData['namespace-name']}` : 'All Webhooks', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllWebhooksTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'webhookPage' && parentData?.webhook) {
+      const key = `webhookPage-${parentData.webhook['webhook-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Webhook: ${parentData.webhook['webhook-name']}`, pinned: false }]);
+      }
+      setActiveTab(key);
+      setWebhookPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, webhook: parentData.webhook, namespace: parentData.namespace }];
       });
       return;
     }
@@ -730,6 +777,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               accounts={accounts}
               schemas={schemas}
               methods={methods}
+              webhooks={webhooksMap}
               onItemClick={handleSidePanelClick}
               onAdd={handleSidePanelAdd}
               fetchNamespaceDetails={fetchNamespaceDetails}
@@ -1050,6 +1098,27 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
                         </div>
                       ))}
+                      {allWebhooksTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllWebhookPage
+                            namespace={namespace}
+                            onViewWebhook={(webhook, ns) => {
+                              // (Optional) Open single webhook tab here
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {webhookPageTabs.map(({ key, webhook, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <WebhookPage webhook={webhook} namespace={namespace} />
+                        </div>
+                      ))}
                       {/* {activeTab !== 'overview' &&
                         activeTab !== 'namespace' &&
                         activeTab !== 'schemaService' &&
@@ -1315,6 +1384,27 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
+              </div>
+            ))}
+            {allWebhooksTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllWebhookPage
+                  namespace={namespace}
+                  onViewWebhook={(webhook, ns) => {
+                    // (Optional) Open single webhook tab here
+                  }}
+                />
+              </div>
+            ))}
+            {webhookPageTabs.map(({ key, webhook, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <WebhookPage webhook={webhook} namespace={namespace} />
               </div>
             ))}
             {activeTab !== 'overview' &&
