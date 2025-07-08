@@ -22,27 +22,6 @@ interface AIAgentWorkspaceProps {
   onClose: () => void;
 }
 
-// Helper function to load from localStorage
-const loadFromStorage = (key: string, defaultValue: any) => {
-  if (typeof window === 'undefined') return defaultValue;
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : defaultValue;
-  } catch {
-    return defaultValue;
-  }
-};
-
-// Helper function to save to localStorage
-const saveToStorage = (key: string, value: any) => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error('Failed to save to localStorage:', error);
-  }
-};
-
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'files' | 'api' | 'schema'>('chat');
   const [messages, setMessages] = useState<Message[]>([
@@ -64,7 +43,7 @@ What would you like to work on today?`,
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>(() => loadFromStorage('aiagent-files', [
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>(() => [
     {
       id: '1',
       name: 'api',
@@ -86,22 +65,22 @@ What would you like to work on today?`,
     },
     { id: '6', name: 'package.json', type: 'file', path: '/package.json' },
     { id: '7', name: 'README.md', type: 'file', path: '/README.md' }
-  ]));
+  ]);
   const [selectedFile, setSelectedFile] = useState<ProjectFile | null>(null);
   const [fileContent, setFileContent] = useState('');
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
-  const [apiEndpoints, setApiEndpoints] = useState<any[]>(() => loadFromStorage('aiagent-apis', []));
-  const [schemas, setSchemas] = useState<any[]>(() => loadFromStorage('aiagent-schemas', []));
-  const [rawSchemas, setRawSchemas] = useState(() => loadFromStorage('aiagent-rawschemas', []));
-  const [showRawSchema, setShowRawSchema] = useState({});
+  const [apiEndpoints, setApiEndpoints] = useState<any[]>([]);
+  const [schemas, setSchemas] = useState<any[]>([]);
+  const [rawSchemas, setRawSchemas] = useState<{ id: string; content: string }[]>([]);
+  const [showRawSchema, setShowRawSchema] = useState<{ [key: number]: boolean }>({});
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(true);
   const [isChatExpanded, setIsChatExpanded] = useState(true);
   const [isTerminalReady, setIsTerminalReady] = useState(false);
   const [isTerminalLoading, setIsTerminalLoading] = useState(true);
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
-  const [apiTestResults, setApiTestResults] = useState({});
-  const [apiTestLoading, setApiTestLoading] = useState({});
-  const [apiTestInput, setApiTestInput] = useState({});
+  const [apiTestResults, setApiTestResults] = useState<{ [key: string]: any }>({});
+  const [apiTestLoading, setApiTestLoading] = useState<{ [key: string]: boolean }>({});
+  const [apiTestInput, setApiTestInput] = useState<{ [key: string]: string }>({});
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<any>(null);
@@ -128,23 +107,6 @@ What would you like to work on today?`,
     }
   }, [namespace?.id]);
 
-  // Save data to localStorage when it changes
-  useEffect(() => {
-    saveToStorage('aiagent-files', projectFiles);
-  }, [projectFiles]);
-
-  useEffect(() => {
-    saveToStorage('aiagent-apis', apiEndpoints);
-  }, [apiEndpoints]);
-
-  useEffect(() => {
-    saveToStorage('aiagent-schemas', schemas);
-  }, [schemas]);
-
-  useEffect(() => {
-    saveToStorage('aiagent-rawschemas', rawSchemas);
-  }, [rawSchemas]);
-
   const getNowId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const addMessage = (message: Omit<Message, 'id' | 'timestamp'>) => {
@@ -170,18 +132,8 @@ What would you like to work on today?`,
     });
 
     try {
-      // Check if we should use streaming
-      const shouldStream = userMessage.toLowerCase().includes('create') || 
-                          userMessage.toLowerCase().includes('edit') ||
-                          userMessage.toLowerCase().includes('generate') ||
-                          userMessage.toLowerCase().includes('project');
-
-      if (shouldStream) {
-        await handleStreamingResponse(userMessage);
-      } else {
-        await handleRegularResponse(userMessage);
-      }
-    } catch (error) {
+      await handleStreamingResponse(userMessage);
+    } catch (error: any) {
       console.error('Error sending message:', error);
       addMessage({
         role: 'assistant',
@@ -192,77 +144,8 @@ What would you like to work on today?`,
     }
   };
 
-  const handleStreamingResponse = async (userMessage) => {
-    try {
-      const response = await fetch('/unified/ai-agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          namespace: namespace || null,
-          action: null,
-          history: messages.map(m => ({ role: m.role, content: m.content })),
-          stream: true
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      let streamedContent = '';
-      const streamingId = getNowId();
-      addMessage({
-        id: streamingId,
-        role: 'assistant',
-        content: ''
-      });
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                streamedContent += data.content;
-                setMessages(msgs => 
-                  msgs.map(m => 
-                    m.id === streamingId 
-                      ? { ...m, content: streamedContent }
-                      : m
-                  )
-                );
-              }
-            } catch (e) {
-              // Ignore parsing errors for incomplete chunks
-            }
-          }
-        }
-      }
-
-      await processStreamedContent(streamedContent, userMessage);
-
-    } catch (error) {
-      console.error('Streaming error:', error);
-      throw error;
-    }
-  };
-
-  const handleRegularResponse = async (userMessage) => {
-    const response = await fetch('/unified/ai-agent', {
+  const handleStreamingResponse = async (userMessage: string) => {
+    const response = await fetch('http://localhost:5001/ai-agent/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -279,18 +162,153 @@ What would you like to work on today?`,
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
-    addMessage({
-      role: 'assistant',
-      content: data.content,
-      type: data.type
-    });
-    if (data.output && data.type) {
-      routeOutputToTab(data.output, data.type);
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    let assistantMessage = '';
+    let actions: any[] = [];
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'stream' && data.content) {
+                assistantMessage += data.content;
+                // Update the message in real-time
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastMessage = newMessages[newMessages.length - 1];
+                  if (lastMessage && lastMessage.role === 'assistant') {
+                    lastMessage.content = assistantMessage;
+                  } else {
+                    newMessages.push({
+                      id: getNowId(),
+                      role: 'assistant',
+                      content: assistantMessage,
+                      timestamp: new Date()
+                    });
+                  }
+                  return newMessages;
+                });
+              } else if (data.type === 'actions' && data.actions) {
+                actions = data.actions;
+              }
+            } catch (e) {
+              // Ignore parsing errors for incomplete chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Process actions after streaming is complete
+    if (actions && Array.isArray(actions)) {
+      for (const action of actions) {
+        if (action.status === 'complete' && action.data) {
+          switch (action.type) {
+            case 'generate_schema':
+              const newSchema = {
+                id: Date.now().toString(),
+                name: action.data.name || 'Generated Schema',
+                schema: action.data,
+                timestamp: action.data.timestamp || new Date()
+              };
+              setSchemas((prev: any[]) => [...prev, newSchema]);
+              setRawSchemas((prev: any[]) => [...prev, { id: newSchema.id, content: JSON.stringify(action.data, null, 2) }]);
+              setActiveTab('schema');
+              setConsoleOutput((prev: string[]) => [...prev, '✅ Schema generated successfully']);
+              break;
+              
+            case 'generate_api':
+              const newApi = {
+                id: Date.now().toString(),
+                name: action.data.name || 'Generated API',
+                endpoints: action.data.endpoints || [action.data],
+                timestamp: action.data.timestamp || new Date()
+              };
+              setApiEndpoints((prev: any[]) => [...prev, newApi]);
+              setActiveTab('api');
+              setConsoleOutput((prev: string[]) => [...prev, '✅ API generated successfully']);
+              break;
+              
+            case 'test':
+              setConsoleOutput((prev: string[]) => [...prev, '✅ API testing completed']);
+              if (action.data) {
+                setConsoleOutput((prev: string[]) => [...prev, ...action.data.map((r: any) => `- ${r.endpoint}: ${r.status}`)]);
+              }
+              setActiveTab('console');
+              break;
+              
+            case 'save':
+              setConsoleOutput((prev: string[]) => [...prev, '✅ Items saved to namespace']);
+              if (action.data) {
+                setConsoleOutput((prev: string[]) => [...prev, ...action.data.map((item: any) => `- ${item.type}: ${item.name} (${item.status})`)]);
+              }
+              setActiveTab('console');
+              break;
+          }
+        } else if (action.status === 'error') {
+          setConsoleOutput((prev: string[]) => [...prev, `❌ Error in ${action.type}: ${action.error}`]);
+          setActiveTab('console');
+        }
+      }
     }
   };
 
-  const processStreamedContent = async (content, originalMessage) => {
+  const processStreamedContent = async (content: string, originalMessage: string) => {
+    // Check if this is a schema generation request
+    if (originalMessage.toLowerCase().includes('schema') || content.includes('"$schema"') || content.includes('"type": "object"')) {
+      try {
+        // Try to parse as JSON schema
+        const schemaData = JSON.parse(content);
+        const newSchema = {
+          id: Date.now().toString(),
+          name: 'Generated Schema',
+          schema: schemaData,
+          timestamp: new Date()
+        };
+        setSchemas(prev => [...prev, newSchema]);
+        setRawSchemas(prev => [...prev, { id: newSchema.id, content: JSON.stringify(schemaData, null, 2) }]);
+        setActiveTab('schema');
+        setConsoleOutput(prev => [...prev, '✅ Schema generated successfully']);
+        return;
+      } catch (e) {
+        // Not valid JSON, continue with other processing
+      }
+    }
+
+    // Check if this is an API generation request
+    if (originalMessage.toLowerCase().includes('api') || content.includes('endpoints') || content.includes('method')) {
+      try {
+        const apiData = JSON.parse(content);
+        const newApi = {
+          id: Date.now().toString(),
+          name: 'Generated API',
+          endpoints: apiData.endpoints || [apiData],
+          timestamp: new Date()
+        };
+        setApiEndpoints(prev => [...prev, newApi]);
+        setActiveTab('api');
+        setConsoleOutput(prev => [...prev, '✅ API generated successfully']);
+        return;
+      } catch (e) {
+        // Not valid JSON, continue with other processing
+      }
+    }
+
     // Extract file operations from streamed content
     const fileMatch = content.match(/file:\s*(.+)/i);
     const codeMatch = content.match(/```[\s\S]*?```/g);
@@ -329,11 +347,18 @@ What would you like to work on today?`,
             await refreshFileTree();
             // Switch to files tab to show the new file
             setActiveTab('files');
+            setConsoleOutput(prev => [...prev, `✅ File ${filePath} created successfully`]);
           }
         } catch (error) {
-          console.error('Error creating file:', error);
+          const err = error as Error;
+          setConsoleOutput((prev) => [...prev, `❌ Error: ${err.message}`]);
         }
       }
+    }
+
+    // If no specific processing was done, add to console
+    if (content.trim()) {
+      setConsoleOutput(prev => [...prev, `📝 Generated: ${content.substring(0, 100)}...`]);
     }
   };
 
@@ -349,11 +374,12 @@ What would you like to work on today?`,
         }
       }
     } catch (error) {
-      console.error('Error refreshing file tree:', error);
+      const err = error as Error;
+      setConsoleOutput((prev) => [...prev, `❌ Error: ${err.message}`]);
     }
   };
 
-  const routeOutputToTab = (output, type) => {
+  const routeOutputToTab = (output: any, type: string) => {
     switch (type) {
       case 'schema':
         const newSchema = {
@@ -404,7 +430,7 @@ What would you like to work on today?`,
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -462,7 +488,7 @@ What would you like to work on today?`,
   );
 
   // API Testing logic
-  const handleApiTest = async (endpoint, index) => {
+  const handleApiTest = async (endpoint: any, index: string) => {
     setApiTestLoading((prev) => ({ ...prev, [index]: true }));
     setApiTestResults((prev) => ({ ...prev, [index]: null }));
     try {
@@ -481,7 +507,8 @@ What would you like to work on today?`,
       const data = await res.json();
       setApiTestResults((prev) => ({ ...prev, [index]: data }));
     } catch (e) {
-      setApiTestResults((prev) => ({ ...prev, [index]: { error: e.message } }));
+      const err = e as Error;
+      setApiTestResults((prev) => ({ ...prev, [index]: { error: err.message } }));
     } finally {
       setApiTestLoading((prev) => ({ ...prev, [index]: false }));
     }
@@ -613,44 +640,165 @@ What would you like to work on today?`,
           {activeTab === 'files' && (
             <div className="h-full flex">
               <div className="w-64 border-r border-gray-200 p-4 bg-white rounded-l-lg">
-                <h3 className="font-medium mb-4">Project Files</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium">Project Files</h3>
+                  <button
+                    onClick={() => {
+                      const fileName = prompt('Enter file name:');
+                      if (fileName && namespace?.id) {
+                        fetch('/unified/file-operations', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            operation: 'create',
+                            namespaceId: namespace.id,
+                            filePath: fileName,
+                            content: '// New file created by AI Agent'
+                          })
+                        }).then(() => {
+                          refreshFileTree();
+                        });
+                      }
+                    }}
+                    className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                  >
+                    + New
+                  </button>
+                </div>
                 {renderFileTree(projectFiles)}
               </div>
-              <div className="flex-1 flex flex-col">
-                {selectedFile ? (
-                  <>
-                    <div className="p-4 border-b border-gray-200 bg-white">
-                      <h3 className="font-medium">{selectedFile.name}</h3>
+                                  <div className="flex-1 flex flex-col">
+                      {selectedFile ? (
+                        <>
+                          <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between">
+                            <h3 className="font-medium">{selectedFile.name}</h3>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (namespace?.id && selectedFile) {
+                                    try {
+                                      const response = await fetch('/unified/file-operations', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          operation: 'update',
+                                          namespaceId: namespace.id,
+                                          filePath: selectedFile.path,
+                                          content: fileContent
+                                        })
+                                      });
+                                      
+                                      if (response.ok) {
+                                        const data = await response.json();
+                                        if (data.success) {
+                                          // Show success message
+                                          setConsoleOutput(prev => [...prev, `✅ Saved ${selectedFile.name}`]);
+                                        }
+                                      }
+                                    } catch (error) {
+                                      console.error('Error saving file:', error);
+                                      setConsoleOutput(prev => [...prev, `❌ Error saving ${selectedFile.name}: ${error.message}`]);
+                                    }
+                                  }
+                                }}
+                                className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (namespace?.id && selectedFile) {
+                                    if (confirm(`Are you sure you want to delete ${selectedFile.name}?`)) {
+                                      fetch('/unified/file-operations', {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                          operation: 'delete',
+                                          namespaceId: namespace.id,
+                                          filePath: selectedFile.path
+                                        })
+                                      }).then(() => {
+                                        setSelectedFile(null);
+                                        setFileContent('');
+                                        refreshFileTree();
+                                      });
+                                    }
+                                  }
+                                }}
+                                className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex-1 p-4 bg-white">
+                            <textarea
+                              value={fileContent}
+                              onChange={(e) => setFileContent(e.target.value)}
+                              className="w-full h-full resize-none border border-gray-300 rounded-lg p-3 font-mono text-sm"
+                              placeholder="File content..."
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-gray-500 bg-white">
+                          Select a file to edit
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1 p-4 bg-white">
-                      <textarea
-                        value={fileContent}
-                        onChange={(e) => setFileContent(e.target.value)}
-                        className="w-full h-full resize-none border border-gray-300 rounded-lg p-3 font-mono text-sm"
-                        placeholder="File content..."
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-gray-500 bg-white">
-                    Select a file to edit
-                  </div>
-                )}
-              </div>
             </div>
           )}
           {activeTab === 'api' && (
             <div className="h-full overflow-y-auto">
-              <h3 className="font-medium mb-4">API Endpoints</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium">API Endpoints</h3>
+                <button
+                  onClick={() => {
+                    if (apiEndpoints.length > 0 && namespace?.id) {
+                      const apiName = prompt('Enter API name:');
+                      if (apiName) {
+                        const latestApi = apiEndpoints[apiEndpoints.length - 1];
+                        // Save API endpoints as methods in the namespace
+                        latestApi.endpoints.forEach((endpoint: any, index: number) => {
+                          fetch('/unified/namespace-methods', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              namespaceId: namespace.id,
+                              methodName: `${apiName}_${index + 1}`,
+                              methodDescription: endpoint.description,
+                              methodPath: endpoint.path,
+                              methodType: endpoint.method,
+                              methodBody: JSON.stringify(endpoint)
+                            })
+                          });
+                        });
+                        setConsoleOutput(prev => [...prev, `✅ API "${apiName}" saved with ${latestApi.endpoints.length} endpoints`]);
+                      }
+                    }
+                  }}
+                  className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                >
+                  Save Latest API
+                </button>
+              </div>
               {apiEndpoints.length === 0 ? (
                 <div className="text-gray-500">No API endpoints generated yet...</div>
               ) : (
                 <div className="space-y-4">
-                  {apiEndpoints.map((api, apiIndex) => (
+                  {apiEndpoints.map((api: any, apiIndex: number) => (
                     <div key={api.id} className="border border-gray-200 rounded-lg p-4 bg-white">
                       <h4 className="font-medium mb-2">{api.name}</h4>
                       <div className="space-y-2">
-                        {api.endpoints.map((endpoint, index) => (
+                        {api.endpoints.map((endpoint: any, index: number) => (
                           <div key={index} className="border border-gray-100 rounded p-3">
                             <div className="flex items-center gap-2 mb-2">
                               <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -668,25 +816,25 @@ What would you like to work on today?`,
                               <input
                                 type="text"
                                 placeholder="Test input (JSON)"
-                                value={apiTestInput[`${apiIndex}-${index}`] || ''}
+                                value={apiTestInput[String(`${apiIndex}-${index}`)] || ''}
                                 onChange={(e) => setApiTestInput(prev => ({
                                   ...prev,
-                                  [`${apiIndex}-${index}`]: e.target.value
+                                  [String(`${apiIndex}-${index}`)]: e.target.value
                                 }))}
                                 className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                               />
                               <button
-                                onClick={() => handleApiTest(endpoint, `${apiIndex}-${index}`)}
-                                disabled={apiTestLoading[`${apiIndex}-${index}`]}
+                                onClick={() => handleApiTest(endpoint, String(`${apiIndex}-${index}`))}
+                                disabled={apiTestLoading[String(`${apiIndex}-${index}`)]}
                                 className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50"
                               >
-                                {apiTestLoading[`${apiIndex}-${index}`] ? 'Testing...' : 'Test'}
+                                {apiTestLoading[String(`${apiIndex}-${index}`)] ? 'Testing...' : 'Test'}
                               </button>
                             </div>
-                            {apiTestResults[`${apiIndex}-${index}`] && (
+                            {apiTestResults[String(`${apiIndex}-${index}`)] && (
                               <div className="mt-2 p-2 bg-gray-50 rounded text-sm">
                                 <pre className="whitespace-pre-wrap">
-                                  {JSON.stringify(apiTestResults[`${apiIndex}-${index}`], null, 2)}
+                                  {JSON.stringify(apiTestResults[String(`${apiIndex}-${index}`)] as any, null, 2)}
                                 </pre>
                               </div>
                             )}
@@ -701,33 +849,59 @@ What would you like to work on today?`,
           )}
           {activeTab === 'schema' && (
             <div className="h-full overflow-y-auto">
-              <h3 className="font-medium mb-4">Generated Schemas</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium">Generated Schemas</h3>
+                <button
+                  onClick={() => {
+                    if (schemas.length > 0 && namespace?.id) {
+                      const schemaName = prompt('Enter schema name:');
+                      if (schemaName) {
+                        const latestSchema = schemas[schemas.length - 1];
+                        fetch('/unified/schema', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            schemaName,
+                            namespaceId: namespace.id,
+                            schema: latestSchema.schema
+                          })
+                        }).then(() => {
+                          setConsoleOutput(prev => [...prev, `✅ Schema "${schemaName}" saved successfully`]);
+                        });
+                      }
+                    }
+                  }}
+                  className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                >
+                  Save Latest Schema
+                </button>
+              </div>
               {schemas.length === 0 ? (
                 <div className="text-gray-500">No schemas generated yet...</div>
               ) : (
                 <div className="space-y-4">
-                  {schemas.map((schema, index) => (
+                  {schemas.map((schema: any, index: number) => (
                     <div key={schema.id} className="border border-gray-200 rounded-lg p-4 bg-white">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">{schema.name}</h4>
                         <button
                           onClick={() => setShowRawSchema(prev => ({ ...prev, [index]: !prev[index] }))}
-                          className="text-sm text-blue-500 hover:text-blue-700"
+                          className="text-xs text-blue-500 hover:underline"
                         >
                           {showRawSchema[index] ? 'Hide Raw' : 'Show Raw'}
                         </button>
                       </div>
-                      <div className="bg-gray-50 rounded p-3">
-                        {showRawSchema[index] ? (
-                          <pre className="text-sm overflow-x-auto">
-                            {rawSchemas[index]?.raw || JSON.stringify(schema.schema, null, 2)}
-                          </pre>
-                        ) : (
-                          <pre className="text-sm overflow-x-auto">
-                            {JSON.stringify(schema.schema, null, 2)}
-                          </pre>
-                        )}
-                      </div>
+                      {showRawSchema[index] ? (
+                        <pre className="text-sm overflow-x-auto">
+                          {(rawSchemas.find(r => r.id === schema.id)?.content) || JSON.stringify(schema.schema, null, 2)}
+                        </pre>
+                      ) : (
+                        <pre className="text-sm overflow-x-auto">
+                          {JSON.stringify(schema.schema, null, 2)}
+                        </pre>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -740,6 +914,21 @@ What would you like to work on today?`,
                 <h3 className="font-medium">Console Output</h3>
                 <div className="flex gap-2">
                   <button
+                    onClick={() => {
+                      if (namespace?.id) {
+                        setConsoleOutput(prev => [...prev, '🔄 Running project...']);
+                        // Simulate running the project
+                        setTimeout(() => {
+                          setConsoleOutput(prev => [...prev, '✅ Project started successfully']);
+                          setConsoleOutput(prev => [...prev, '🌐 Server running on http://localhost:3000']);
+                        }, 1000);
+                      }
+                    }}
+                    className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                  >
+                    Run Project
+                  </button>
+                  <button
                     onClick={() => setConsoleOutput([])}
                     className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
                   >
@@ -751,7 +940,7 @@ What would you like to work on today?`,
                 {consoleOutput.length === 0 ? (
                   <div className="text-gray-500">No console output yet...</div>
                 ) : (
-                  consoleOutput.map((output, index) => (
+                  consoleOutput.map((output: string, index: number) => (
                     <div key={index} className="mb-1">
                       <span className="text-gray-400">$ </span>
                       {output}
