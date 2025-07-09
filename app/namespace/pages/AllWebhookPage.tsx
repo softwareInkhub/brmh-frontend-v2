@@ -22,6 +22,7 @@ const AllWebhookPage: React.FC<AllWebhookPageProps> = ({ namespace, onViewWebhoo
     'status': 'active',
     'tags': [],
     'tableName': '',
+    'pre-exec-url': '',
   });
   const [createMsg, setCreateMsg] = useState('');
   const [methods, setMethods] = useState<any[]>([]);
@@ -92,8 +93,8 @@ const AllWebhookPage: React.FC<AllWebhookPageProps> = ({ namespace, onViewWebhoo
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateMsg('');
-    if (!createData['webhook-name'] || !createData['post-exec-url'] || !createData['tableName']) {
-      setCreateMsg('Webhook Name, Post Exec URL, and Table Name are required.');
+    if (!createData['webhook-name'] || !createData['tableName']) {
+      setCreateMsg('Webhook Name and Table Name are required.');
       return;
     }
     try {
@@ -119,6 +120,7 @@ const AllWebhookPage: React.FC<AllWebhookPageProps> = ({ namespace, onViewWebhoo
           'status': 'active',
           'tags': [],
           'tableName': '',
+          'pre-exec-url': '',
         });
         // Refresh webhooks
         const nsId = namespace ? namespace['namespace-id'] : '';
@@ -156,13 +158,19 @@ const AllWebhookPage: React.FC<AllWebhookPageProps> = ({ namespace, onViewWebhoo
               onChange={e => handleCreateInput('webhook-name', e.target.value)}
               required
             />
-            <label className="block text-xs font-medium text-gray-700 mb-1">Post Exec URL *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Post Exec URL</label>
             <input
               type="text"
               className="w-full border border-blue-200 rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-blue-50 placeholder-gray-400"
               value={createData['post-exec-url']}
               onChange={e => handleCreateInput('post-exec-url', e.target.value)}
-              required
+            />
+            <label className="block text-xs font-medium text-gray-700 mb-1">Pre Exec URL</label>
+            <input
+              type="text"
+              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-blue-50 placeholder-gray-400"
+              value={createData['pre-exec-url']}
+              onChange={e => handleCreateInput('pre-exec-url', e.target.value)}
             />
             <label className="block text-xs font-medium text-gray-700 mb-1">Table Name *</label>
             <input
@@ -258,6 +266,7 @@ const AllWebhookPage: React.FC<AllWebhookPageProps> = ({ namespace, onViewWebhoo
             <div className="space-y-4 text-sm text-gray-700">
               <div><span className="font-semibold text-gray-500">ID:</span> <span className="font-mono text-gray-700 break-all">{wh['webhook-id']}</span></div>
               <div><span className="font-semibold text-gray-500">Post Exec URL:</span> <span className="text-gray-700">{wh['post-exec-url']}</span></div>
+              <div><span className="font-semibold text-gray-500">Pre Exec URL:</span> <span className="text-gray-700">{wh['pre-exec-url']}</span></div>
               <div><span className="font-semibold text-gray-500">Status:</span> <span className="text-gray-700">{wh['status']}</span></div>
               <div><span className="font-semibold text-gray-500">Tags:</span> {Array.isArray(wh.tags) && wh.tags.length > 0 ? wh.tags.map((tag: string, idx: number) => <span key={idx} className="bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full text-xs font-semibold shadow ml-1">{tag}</span>) : <span className="italic text-gray-400">No tags</span>}</div>
               <div><span className="font-semibold text-gray-500">Method ID:</span> <span className="text-gray-700">{wh['method-id']}</span></div>

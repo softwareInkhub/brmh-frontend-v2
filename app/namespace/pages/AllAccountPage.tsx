@@ -297,26 +297,26 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
             <Plus size={18} /> Create Account
           </button>
         </div>
-        {loading ? (
-          <div>Loading...</div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {accounts.map(acc => (
-              <div key={acc['namespace-account-id']} className="border border-gray-200 rounded-md p-2 flex flex-col gap-1 min-w-0 bg-white" style={{ width: '260px', margin: '0' }}>
-                <div className="flex items-center gap-2">
-                  <User size={16} className="text-blue-400" />
-                  <span className="text-base font-semibold text-gray-900 truncate">{acc['namespace-account-name']}</span>
-                </div>
-                <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
-                <div className="flex gap-2 mt-1">
-                  <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => setSidePanel({ account: acc })}><Eye size={16} /></button>
-                  <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
-                  <button className="text-red-600 hover:text-red-800 p-1" title="Delete"><Trash2 size={16} /></button>
-                </div>
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {accounts.map(acc => (
+            <div key={acc['namespace-account-id']} className="border border-gray-200 rounded-md p-2 flex flex-col gap-1 min-w-0 bg-white" style={{ width: '260px', margin: '0' }}>
+              <div className="flex items-center gap-2">
+                <User size={16} className="text-blue-400" />
+                <span className="text-base font-semibold text-gray-900 truncate">{acc['namespace-account-name']}</span>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
+              <div className="flex gap-2 mt-1">
+                  <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => setSidePanel({ account: acc })}><Eye size={16} /></button>
+                <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
+                <button className="text-red-600 hover:text-red-800 p-1" title="Delete"><Trash2 size={16} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
       {/* Side Panel with draggable resizer */}
       <div

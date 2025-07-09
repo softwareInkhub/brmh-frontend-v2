@@ -66,6 +66,10 @@ const WebhookPage: React.FC<WebhookPageProps> = ({ webhook, namespace }) => {
               <div className="text-base text-gray-700 break-all">{webhook['post-exec-url'] || <span className="italic text-gray-400">None</span>}</div>
             </div>
             <div>
+              <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Link2 size={16} className="text-blue-400" /> Pre Exec URL</div>
+              <div className="text-base text-gray-700 break-all">{webhook['pre-exec-url'] || <span className="italic text-gray-400">None</span>}</div>
+            </div>
+            <div>
               <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Sliders size={16} className="text-blue-400" /> Table Name</div>
               <div className="text-base text-gray-700">{webhook['table-name'] || webhook['tableName'] || <span className="italic text-gray-400">null</span>}</div>
             </div>
@@ -111,6 +115,7 @@ const WebhookPage: React.FC<WebhookPageProps> = ({ webhook, namespace }) => {
                   body: JSON.stringify({
                     'webhook-name': editWebhook['webhook-name'],
                     'post-exec-url': editWebhook['post-exec-url'],
+                    'pre-exec-url': editWebhook['pre-exec-url'],
                     'method-id': editWebhook['method-id'],
                     'namespace-id': editWebhook['namespace-id'],
                     'account-id': editWebhook['account-id'],
@@ -142,6 +147,16 @@ const WebhookPage: React.FC<WebhookPageProps> = ({ webhook, namespace }) => {
                 className="w-full border border-blue-200 rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-blue-50 placeholder-gray-400"
                 value={editWebhook['post-exec-url'] || ''}
                 onChange={e => handleInput('post-exec-url', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-gray-500 text-xs mb-1">
+                <Link2 size={16} className="text-blue-400" /> Pre Exec URL
+              </label>
+              <input
+                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-blue-50 placeholder-gray-400"
+                value={editWebhook['pre-exec-url'] || ''}
+                onChange={e => handleInput('pre-exec-url', e.target.value)}
               />
             </div>
             <div>

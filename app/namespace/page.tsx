@@ -5,12 +5,10 @@ import UnifiedNamespace, { UnifiedNamespaceModalTrigger } from './components/Uni
 import Namespace from './components/Namespace';
 import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
-import LLMTerminal from './components/LLMTerminal';
-import EnhancedLLMTerminal from './components/EnhancedLLMTerminal';
+
 import dynamic from 'next/dynamic';
-import SchemaModal from './Modals/SchemaModal';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
-import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database, Sparkles, Bot, View, LayoutGrid, LayoutPanelLeft, Pin, PinOff } from 'lucide-react';
+import { User, X, Plus, MoreHorizontal,  Zap, Box, FileText, GitBranch, Database, Sparkles, Bot, View, LayoutGrid, LayoutPanelLeft, Pin, PinOff } from 'lucide-react';
 import AccountModal from './Modals/AccountModal';
 import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
