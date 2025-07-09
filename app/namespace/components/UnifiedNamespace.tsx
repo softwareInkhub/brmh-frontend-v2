@@ -895,7 +895,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   {ns.tags && ns.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {ns.tags.map((tag: string) => (
-                        <span key={tag} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                        <span key={`${ns["namespace-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
                           {tag}
                         </span>
                       ))}
@@ -925,7 +925,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
                               {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string) => (
-                                <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                                <span key={`${account["namespace-account-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
@@ -952,7 +952,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
                               {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
-                                <span key={tag} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                                <span key={`${method["namespace-method-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                         <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
@@ -1189,7 +1189,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   <div className="flex flex-wrap gap-2 mt-2">
                     {namespaceForm.tags.map((tag, index) => (
                       <span
-                        key={index}
+                        key={`modal-${index}-${tag}`}
                         className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 group hover:bg-blue-100 transition-colors"
                       >
                         {tag}
@@ -1296,7 +1296,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 </div>
                 <div className="space-y-2">
                   {accountForm["namespace-account-header"].map((header, index) => (
-                    <div key={index} className="flex gap-2">
+                    <div key={header.key ? `header-${header.key}` : `header-${index}`} className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Key"
@@ -1348,7 +1348,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 </div>
                 <div className="space-y-2">
                   {accountForm.variables.map((variable, index) => (
-                    <div key={index} className="flex gap-2">
+                    <div key={variable.key ? `var-${variable.key}` : `var-${index}`} className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Key"
@@ -1481,7 +1481,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 </div>
                 <div className="space-y-2">
                   {methodForm["namespace-method-queryParams"].map((param, index) => (
-                    <div key={index} className="flex gap-2">
+                    <div key={param.key ? `param-${param.key}` : `param-${index}`} className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Key"
@@ -1533,7 +1533,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 </div>
                 <div className="space-y-2">
                   {methodForm["namespace-method-header"].map((header, index) => (
-                    <div key={index} className="flex gap-2">
+                    <div key={header.key ? `header-${header.key}` : `header-${index}`} className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Key"
