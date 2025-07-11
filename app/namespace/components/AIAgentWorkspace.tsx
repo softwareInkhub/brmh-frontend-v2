@@ -22,8 +22,16 @@ interface AIAgentWorkspaceProps {
   onClose: () => void;
 }
 
+interface WorkspaceState {
+  files: any[];
+  schemas: any[];
+  apis: any[];
+  projectType: string;
+  lastGenerated?: string;
+}
+
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'files' | 'api' | 'schema'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'files' | 'api' | 'schema' | 'codegen'>('chat');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -81,6 +89,11 @@ What would you like to work on today?`,
   const [apiTestResults, setApiTestResults] = useState<{ [key: string]: any }>({});
   const [apiTestLoading, setApiTestLoading] = useState<{ [key: string]: boolean }>({});
   const [apiTestInput, setApiTestInput] = useState<{ [key: string]: string }>({});
+  
+  // Memory service state
+  const [sessionId, setSessionId] = useState<string>('');
+  const [userId] = useState<string>('default-user');
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceState | null>(null);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<any>(null);
@@ -100,14 +113,147 @@ What would you like to work on today?`,
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load file tree when namespace changes
+  // Load file tree and workspace state when namespace changes
   useEffect(() => {
-    if (namespace?.id) {
+    if (namespace?.['namespace-id']) {
       refreshFileTree();
+      loadWorkspaceState();
+      
+      // Add a welcome message with context if workspace state exists
+      setTimeout(() => {
+        if (workspaceState && (workspaceState.schemas.length > 0 || workspaceState.apis.length > 0)) {
+          addMessage({
+            role: 'assistant',
+            content: `Welcome back! I can see you have ${workspaceState.schemas.length} schemas and ${workspaceState.apis.length} APIs in your workspace. I'll help you continue building on your previous work.`
+          });
+        }
+      }, 1000);
     }
-  }, [namespace?.id]);
+  }, [namespace?.['namespace-id'], workspaceState]);
+
+  // Initialize session and load history when component mounts
+  useEffect(() => {
+    if (namespace?.['namespace-id']) {
+      const newSessionId = `${userId}-ai-agent-workspace-${Date.now()}`;
+      setSessionId(newSessionId);
+      
+      // Load chat history and workspace state after a short delay
+      setTimeout(() => {
+        loadChatHistory();
+      }, 100);
+    }
+  }, [namespace?.['namespace-id'], userId]);
 
   const getNowId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Memory service functions
+  const loadWorkspaceState = async () => {
+    if (!sessionId || !namespace?.['namespace-id']) return;
+    
+    try {
+      const response = await fetch('http://localhost:5001/ai-agent/get-workspace-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, namespaceId: namespace['namespace-id'] })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.workspaceState) {
+          setWorkspaceState(data.workspaceState);
+          setSchemas(data.workspaceState.schemas || []);
+          setApiEndpoints(data.workspaceState.apis || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading workspace state:', error);
+    }
+  };
+
+  const saveWorkspaceState = async () => {
+    if (!sessionId || !namespace?.['namespace-id']) return;
+    
+    const currentState: WorkspaceState = {
+      files: [], // No longer tracking generated files
+      schemas,
+      apis: apiEndpoints,
+      projectType: 'nodejs', // No longer tracking project type
+      lastGenerated: new Date().toISOString()
+    };
+    
+    try {
+      await fetch('http://localhost:5001/ai-agent/save-workspace-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          namespaceId: namespace['namespace-id'],
+          workspaceState: currentState
+        })
+      });
+      
+      setWorkspaceState(currentState);
+    } catch (error) {
+      console.error('Error saving workspace state:', error);
+    }
+  };
+
+  const loadChatHistory = async () => {
+    if (!sessionId) return;
+    
+    try {
+      const response = await fetch('http://localhost:5001/ai-agent/chat-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, userId, limit: 50 })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.history && data.history.length > 0) {
+          const historyMessages = data.history.map((msg: any) => ({
+            id: getNowId(),
+            role: msg.Role === 'user' ? 'user' : 'assistant',
+            content: msg.Content,
+            timestamp: new Date(msg.Timestamp)
+          }));
+          setMessages(prev => [...prev, ...historyMessages]);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    }
+  };
+
+  const clearChatHistory = async () => {
+    if (!sessionId) return;
+    
+    try {
+      await fetch('http://localhost:5001/ai-agent/clear-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
+      
+      setMessages([{
+        id: '1',
+        role: 'assistant',
+        content: `Hello! I'm your AI development assistant. I can help you:
+
+• Design and generate API schemas
+• Write and test code
+• Create database models
+• Set up authentication
+• Run tests and debug issues
+• Manage your project structure
+
+What would you like to work on today?`,
+        timestamp: new Date()
+      }]);
+    } catch (error) {
+      console.error('Error clearing chat history:', error);
+    }
+  };
 
   const addMessage = (message: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = {
@@ -154,7 +300,8 @@ What would you like to work on today?`,
         message: userMessage,
         namespace: namespace || null,
         action: null,
-        history: messages.map(m => ({ role: m.role, content: m.content }))
+        history: messages.map(m => ({ role: m.role, content: m.content })),
+        userId
       })
     });
 
@@ -327,7 +474,7 @@ What would you like to work on today?`,
       }
       
       // Create file in workspace
-      if (filePath && fileContent && namespace?.id) {
+      if (filePath && fileContent && namespace?.['namespace-id']) {
         try {
           const fileResponse = await fetch('/unified/file-operations', {
             method: 'POST',
@@ -336,7 +483,7 @@ What would you like to work on today?`,
             },
             body: JSON.stringify({
               operation: 'create',
-              namespaceId: namespace.id,
+              namespaceId: namespace['namespace-id'],
               filePath,
               content: fileContent
             })
@@ -363,20 +510,78 @@ What would you like to work on today?`,
   };
 
   const refreshFileTree = async () => {
-    if (!namespace?.id) return;
+    if (!namespace?.['namespace-id']) return;
     
     try {
-      const response = await fetch(`/unified/file-tree/${namespace.id}`);
+      const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}`);
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.tree) {
-          setProjectFiles(data.tree);
+        if (data.files) {
+          // Convert flat file list to tree structure
+          const fileTree: ProjectFile[] = [];
+          const fileMap = new Map<string, ProjectFile>();
+          
+          data.files.forEach((file: any) => {
+            const pathParts = file.path.split('/');
+            const fileName = pathParts[pathParts.length - 1];
+            
+            const projectFile: ProjectFile = {
+              id: file.path,
+              name: fileName,
+              type: file.type,
+              path: file.path,
+              children: file.type === 'directory' ? [] : undefined
+            };
+            
+            if (file.type === 'file') {
+              fileMap.set(file.path, projectFile);
+            } else {
+              fileMap.set(file.path, projectFile);
+            }
+          });
+          
+          // Build tree structure
+          data.files.forEach((file: any) => {
+            const pathParts = file.path.split('/');
+            if (pathParts.length === 1) {
+              // Root level file/folder
+              fileTree.push(fileMap.get(file.path)!);
+            } else {
+              // Nested file/folder
+              const parentPath = pathParts.slice(0, -1).join('/');
+              const parent = fileMap.get(parentPath);
+              if (parent && parent.children) {
+                parent.children.push(fileMap.get(file.path)!);
+              }
+            }
+          });
+          
+          setProjectFiles(fileTree);
         }
       }
     } catch (error) {
       const err = error as Error;
       setConsoleOutput((prev) => [...prev, `❌ Error: ${err.message}`]);
     }
+  };
+
+  const readFileContent = async (filePath: string) => {
+    if (!namespace?.['namespace-id']) return;
+    
+    try {
+      const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(filePath)}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.content) {
+          setFileContent(data.content);
+          return data.content;
+        }
+      }
+    } catch (error) {
+      console.error('Error reading file:', error);
+    }
+    return null;
   };
 
   const routeOutputToTab = (output: any, type: string) => {
@@ -391,6 +596,8 @@ What would you like to work on today?`,
         setSchemas(prev => [...prev, newSchema]);
         setRawSchemas(prev => [...prev, { id: newSchema.id, content: output }]);
         setActiveTab('schema');
+        // Auto-save workspace state when schema is added
+        setTimeout(() => saveWorkspaceState(), 500);
         break;
         
       case 'api':
@@ -404,6 +611,8 @@ What would you like to work on today?`,
           };
           setApiEndpoints(prev => [...prev, newApi]);
           setActiveTab('api');
+          // Auto-save workspace state when API is added
+          setTimeout(() => saveWorkspaceState(), 500);
         } catch (error) {
           console.error('Error parsing API output:', error);
         }
@@ -414,15 +623,19 @@ What would you like to work on today?`,
         setActiveTab('console');
         break;
         
-      case 'file':
-        refreshFileTree();
-        setActiveTab('files');
-        break;
+              case 'file':
+          refreshFileTree();
+          setActiveTab('files');
+          break;
         
-      case 'project':
-        refreshFileTree();
-        setActiveTab('files');
-        break;
+        case 'project':
+          refreshFileTree();
+          setActiveTab('files');
+          break;
+        
+        case 'codegen':
+          generateBackendCode();
+          break;
         
       default:
         // Just show in chat
@@ -448,24 +661,14 @@ What would you like to work on today?`,
             style={{ paddingLeft: `${level * 16 + 8}px` }}
             onClick={async () => {
               setSelectedFile(file);
-              if (file.type === 'file' && namespace?.id) {
+              if (file.type === 'file' && namespace?.['namespace-id']) {
                 // Load actual file content
                 try {
-                  const response = await fetch('/unified/file-operations', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      operation: 'read',
-                      namespaceId: namespace.id,
-                      filePath: file.path
-                    })
-                  });
+                  const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(file.path)}`);
                   
                   if (response.ok) {
                     const data = await response.json();
-                    if (data.success) {
+                    if (data.content) {
                       setFileContent(data.content);
                     } else {
                       setFileContent('// Error loading file content');
@@ -514,10 +717,115 @@ What would you like to work on today?`,
     }
   };
 
+  const generateBackendCode = async () => {
+    console.log('🔍 Generate button clicked!');
+    console.log('Namespace:', namespace);
+    console.log('Project name:', projectName);
+    console.log('Project type:', projectType);
+    console.log('Schemas:', schemas);
+    console.log('APIs:', apiEndpoints);
+    
+    if (!namespace?.['namespace-id']) {
+      console.log('❌ No namespace ID');
+      setConsoleOutput(prev => [...prev, '❌ No namespace ID found']);
+      return;
+    }
+    
+    if (!projectName.trim()) {
+      console.log('❌ No project name');
+      setConsoleOutput(prev => [...prev, '❌ Please enter a project name']);
+      return;
+    }
+    
+    // Get current workspace schemas and APIs
+    const currentSchemas = schemas.map(s => s.schema);
+    const currentApis = apiEndpoints;
+    
+    console.log('Current schemas:', currentSchemas);
+    console.log('Current APIs:', currentApis);
+    
+    if (currentSchemas.length === 0 && currentApis.length === 0) {
+      console.log('❌ No schemas or APIs');
+      setConsoleOutput(prev => [...prev, '❌ Please generate at least one schema or API first using the AI agent']);
+      return;
+    }
+    
+    try {
+      setIsGenerating(true);
+      setConsoleOutput(prev => [...prev, `🔄 Generating ${projectType.toUpperCase()} backend code for "${projectName}"...`]);
+      setConsoleOutput(prev => [...prev, `📊 Using ${currentSchemas.length} schemas and ${currentApis.length} APIs from workspace`]);
+      
+      const requestBody = {
+        namespaceId: namespace['namespace-id'],
+        schemas: currentSchemas,
+        apis: currentApis,
+        projectType,
+        namespaceName: projectName
+      };
+      
+      console.log('🌐 Making request to:', 'http://localhost:5001/code-generation/generate-backend');
+      console.log('📤 Request body:', requestBody);
+      
+      const response = await fetch('http://localhost:5001/code-generation/generate-backend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Response ok:', response.ok);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📥 Response data:', data);
+        
+        if (data.success) {
+          setConsoleOutput(prev => [...prev, `✅ Generated ${data.files.length} files successfully!`]);
+          data.files.forEach((file: any) => {
+            setConsoleOutput(prev => [...prev, `📄 Created: ${file.path}`]);
+          });
+          
+          // Add to generation history
+          const generationRecord = {
+            id: Date.now(),
+            projectName,
+            projectType,
+            filesCount: data.files.length,
+            timestamp: new Date(),
+            files: data.files
+          };
+          setGenerationHistory(prev => [generationRecord, ...prev]);
+          
+          // Refresh file tree to show new files
+          await refreshFileTree();
+          setActiveTab('files');
+          
+          setConsoleOutput(prev => [...prev, `🚀 ${projectType.toUpperCase()} project "${projectName}" is ready! Check the Files tab.`]);
+        } else {
+          setConsoleOutput(prev => [...prev, `❌ Code generation failed: ${data.error}`]);
+        }
+      } else {
+        setConsoleOutput(prev => [...prev, `❌ Code generation failed with status: ${response.status}`]);
+      }
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Fetch error:', err);
+      setConsoleOutput(prev => [...prev, `❌ Error generating code: ${err.message}`]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // State for saved items
   const [savedSchemas, setSavedSchemas] = useState<any[]>([]);
   const [savedApis, setSavedApis] = useState<any[]>([]);
   const [savedFiles, setSavedFiles] = useState<ProjectFile[]>([]);
+
+  // Code generation state
+  const [projectType, setProjectType] = useState<'nodejs' | 'python'>('nodejs');
+  const [projectName, setProjectName] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationHistory, setGenerationHistory] = useState<any[]>([]);
 
   return (
     <div className="h-screen w-full flex bg-white">
@@ -533,6 +841,11 @@ What would you like to work on today?`,
               <h2 className="font-semibold text-gray-900">AI Assistant</h2>
               <p className="text-sm text-gray-500">
                 {namespace ? `Working with: ${namespace['namespace-name']}` : 'General Development'}
+                {sessionId && (
+                  <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                    Memory Active
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -634,6 +947,16 @@ What would you like to work on today?`,
           >
             <Play size={16} /> Console
           </button>
+          <button
+            onClick={() => setActiveTab('codegen')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+              activeTab === 'codegen'
+                ? 'border-blue-500 text-blue-600 bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Code size={16} /> Code Gen
+          </button>
         </div>
         {/* Tab Content */}
         <div className="flex-1 overflow-auto p-6">
@@ -645,15 +968,14 @@ What would you like to work on today?`,
                   <button
                     onClick={() => {
                       const fileName = prompt('Enter file name:');
-                      if (fileName && namespace?.id) {
-                        fetch('/unified/file-operations', {
+                      if (fileName && namespace?.['namespace-id']) {
+                        fetch('http://localhost:5001/code-generation/write-file', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
                           },
                           body: JSON.stringify({
-                            operation: 'create',
-                            namespaceId: namespace.id,
+                            namespaceId: namespace['namespace-id'],
                             filePath: fileName,
                             content: '// New file created by AI Agent'
                           })
@@ -677,16 +999,15 @@ What would you like to work on today?`,
                             <div className="flex gap-2">
                               <button
                                 onClick={async () => {
-                                  if (namespace?.id && selectedFile) {
+                                  if (namespace?.['namespace-id'] && selectedFile) {
                                     try {
-                                      const response = await fetch('/unified/file-operations', {
+                                      const response = await fetch('http://localhost:5001/code-generation/write-file', {
                                         method: 'POST',
                                         headers: {
                                           'Content-Type': 'application/json',
                                         },
                                         body: JSON.stringify({
-                                          operation: 'update',
-                                          namespaceId: namespace.id,
+                                          namespaceId: namespace['namespace-id'],
                                           filePath: selectedFile.path,
                                           content: fileContent
                                         })
@@ -711,16 +1032,15 @@ What would you like to work on today?`,
                               </button>
                               <button
                                 onClick={() => {
-                                  if (namespace?.id && selectedFile) {
+                                  if (namespace?.['namespace-id'] && selectedFile) {
                                     if (confirm(`Are you sure you want to delete ${selectedFile.name}?`)) {
-                                      fetch('/unified/file-operations', {
+                                      fetch('http://localhost:5001/code-generation/delete-file', {
                                         method: 'POST',
                                         headers: {
                                           'Content-Type': 'application/json',
                                         },
                                         body: JSON.stringify({
-                                          operation: 'delete',
-                                          namespaceId: namespace.id,
+                                          namespaceId: namespace['namespace-id'],
                                           filePath: selectedFile.path
                                         })
                                       }).then(() => {
@@ -760,7 +1080,7 @@ What would you like to work on today?`,
                 <h3 className="font-medium">API Endpoints</h3>
                 <button
                   onClick={() => {
-                    if (apiEndpoints.length > 0 && namespace?.id) {
+                    if (apiEndpoints.length > 0 && namespace?.['namespace-id']) {
                       const apiName = prompt('Enter API name:');
                       if (apiName) {
                         const latestApi = apiEndpoints[apiEndpoints.length - 1];
@@ -772,7 +1092,7 @@ What would you like to work on today?`,
                               'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({
-                              namespaceId: namespace.id,
+                              namespaceId: namespace['namespace-id'],
                               methodName: `${apiName}_${index + 1}`,
                               methodDescription: endpoint.description,
                               methodPath: endpoint.path,
@@ -853,7 +1173,7 @@ What would you like to work on today?`,
                 <h3 className="font-medium">Generated Schemas</h3>
                 <button
                   onClick={() => {
-                    if (schemas.length > 0 && namespace?.id) {
+                    if (schemas.length > 0 && namespace?.['namespace-id']) {
                       const schemaName = prompt('Enter schema name:');
                       if (schemaName) {
                         const latestSchema = schemas[schemas.length - 1];
@@ -864,7 +1184,7 @@ What would you like to work on today?`,
                           },
                           body: JSON.stringify({
                             schemaName,
-                            namespaceId: namespace.id,
+                            namespaceId: namespace['namespace-id'],
                             schema: latestSchema.schema
                           })
                         }).then(() => {
@@ -915,7 +1235,7 @@ What would you like to work on today?`,
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      if (namespace?.id) {
+                      if (namespace?.['namespace-id']) {
                         setConsoleOutput(prev => [...prev, '🔄 Running project...']);
                         // Simulate running the project
                         setTimeout(() => {
@@ -947,6 +1267,180 @@ What would you like to work on today?`,
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          )}
+          {activeTab === 'codegen' && (
+            <div className="h-full flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+                <h3 className="font-medium">Code Generation</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setGenerationHistory([])}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                  >
+                    Clear History
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="max-w-2xl mx-auto space-y-6">
+                  {/* Project Configuration */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h4 className="font-medium mb-4">Project Configuration</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Project Name
+                        </label>
+                        <input
+                          type="text"
+                          value={projectName}
+                          onChange={(e) => setProjectName(e.target.value)}
+                          placeholder="Enter project name (e.g., User Management API)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Project Type
+                        </label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center">
+                            <input
+                              type="radio"
+                              value="nodejs"
+                              checked={projectType === 'nodejs'}
+                              onChange={(e) => setProjectType(e.target.value as 'nodejs' | 'python')}
+                              className="mr-2"
+                            />
+                            <span className="text-sm">Node.js (Express)</span>
+                          </label>
+                          <label className="flex items-center">
+                            <input
+                              type="radio"
+                              value="python"
+                              checked={projectType === 'python'}
+                              onChange={(e) => setProjectType(e.target.value as 'nodejs' | 'python')}
+                              className="mr-2"
+                            />
+                            <span className="text-sm">Python (Flask)</span>
+                          </label>
+                        </div>
+                      </div>
+                                             <button
+                         onClick={() => {
+                           console.log('🔘 Button clicked!');
+                           generateBackendCode();
+                         }}
+                         disabled={isGenerating || !projectName.trim() || (schemas.length === 0 && apiEndpoints.length === 0)}
+                         className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                       >
+                         {isGenerating ? (
+                           <>
+                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                             Generating...
+                           </>
+                         ) : (
+                           <>
+                             🚀 Generate {projectType.toUpperCase()} Backend from Workspace
+                           </>
+                         )}
+                       </button>
+                    </div>
+                  </div>
+
+                  {/* Requirements */}
+                  <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-4">
+                    <h4 className="font-medium text-yellow-800 mb-2">Requirements</h4>
+                    <ul className="text-sm text-yellow-700 space-y-1">
+                      <li>• Generate schemas and APIs using the AI agent first</li>
+                      <li>• Enter a project name</li>
+                      <li>• Choose your preferred technology stack</li>
+                    </ul>
+                    <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                      <div className="text-sm text-blue-800">
+                        <strong>Current Workspace:</strong>
+                        <div className="mt-1">
+                          📊 Schemas: {schemas.length} | APIs: {apiEndpoints.length}
+                        </div>
+                        {schemas.length > 0 && (
+                          <div className="mt-1 text-xs">
+                            Schemas: {schemas.map(s => s.name || 'Unnamed').join(', ')}
+                          </div>
+                        )}
+                        {apiEndpoints.length > 0 && (
+                          <div className="mt-1 text-xs">
+                            APIs: {apiEndpoints.map(a => a.name || 'Unnamed').join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Generation Preview */}
+                  {(schemas.length > 0 || apiEndpoints.length > 0) && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                      <h4 className="font-medium mb-4">Generation Preview</h4>
+                      <div className="space-y-3">
+                        {schemas.length > 0 && (
+                          <div>
+                            <h5 className="text-sm font-medium text-gray-700 mb-2">📊 Models to Generate ({schemas.length})</h5>
+                            <div className="space-y-1">
+                              {schemas.map((schema, index) => (
+                                <div key={index} className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                  • {schema.name || `Schema ${index + 1}`} - {Object.keys(schema.schema?.properties || {}).length} properties
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {apiEndpoints.length > 0 && (
+                          <div>
+                            <h5 className="text-sm font-medium text-gray-700 mb-2">🔗 Routes to Generate ({apiEndpoints.length})</h5>
+                            <div className="space-y-1">
+                              {apiEndpoints.map((api, index) => (
+                                <div key={index} className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                  • {api.name || `API ${index + 1}`} - {api.endpoints?.length || 0} endpoints
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded">
+                          📁 Will also generate: package.json/requirements.txt, app.js/app.py, README.md
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Generation History */}
+                  {generationHistory.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                      <h4 className="font-medium mb-4">Generation History</h4>
+                      <div className="space-y-3">
+                        {generationHistory.map((record) => (
+                          <div key={record.id} className="border border-gray-100 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="font-medium">{record.projectName}</h5>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                record.projectType === 'nodejs' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {record.projectType.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600 mb-2">
+                              Generated {record.filesCount} files on {record.timestamp.toLocaleString()}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Files: {record.files.map((f: any) => f.name).join(', ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
