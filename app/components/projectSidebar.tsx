@@ -44,8 +44,11 @@ const sidebarItems = [
     path: '/ai',
     icon: <FileCode size={24} />, // You can use any icon you like
   },
-
-
+  {
+    name: 'Docs',
+    path: '/docs',
+    icon: <BookOpen size={24} />, // Documentation icon
+  },
   {
     name: 'Settings',
     path: '/settings',

@@ -2,7 +2,7 @@
 
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "./components/Sidebar";
+import Sidebar from "./components/projectSidebar";
 import Navbar from "./components/Navbar";
 import { useState } from "react";
 import { Toaster } from 'sonner';
@@ -12,27 +12,10 @@ import { SidePanelProvider } from "./components/SidePanelContext";
 import FooterWithCollapseButton from "./components/FooterWithCollapseButton";
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { usePathname } from 'next/navigation';
+import AppContentClient from "./components/AppContentClient";
 
 const inter = Inter({ subsets: ["latin"] });
-
-function AppContent({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  return (
-    <>
-      <div className="flex min-h-screen bg-gray-50 ml-20">
-        <Sidebar />
-        <div className="flex-1 min-h-screen overflow-auto">
-          <Navbar onMenuClick={() => setIsCollapsed(!isCollapsed)} />
-          <main className="w-full min-h-screen overflow-auto">
-            {children}
-          </main>
-        </div>
-      </div>
-      <FooterWithCollapseButton />
-    </>
-  );
-}
 
 export default function RootLayout({
   children,
@@ -48,9 +31,9 @@ export default function RootLayout({
         <DndProvider backend={HTML5Backend}>
           <QueryClientProvider client={queryClient}>
             <SidePanelProvider>
-              <AppContent>
+              <AppContentClient>
                 {children}
-              </AppContent>
+              </AppContentClient>
             </SidePanelProvider>
             <Toaster richColors position="top-right" />
           </QueryClientProvider>

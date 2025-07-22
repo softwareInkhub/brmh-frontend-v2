@@ -19,29 +19,9 @@ export default function AccountPage({ account, namespace }: Props) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveMsg('');
-    try {
-      const accountId = editAccount["namespace-account-id"];
-      const payload = {
-        "namespace-account-name": editAccount["namespace-account-name"],
-        "namespace-account-url-override": editAccount["namespace-account-url-override"],
-        "namespace-account-header": editAccount["namespace-account-header"] || [],
-        "variables": editAccount["variables"] || editAccount["namespace-account-variables"] || [],
-        "tags": editAccount.tags || []
-      };
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${accountId}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }
-      );
-      if (!response.ok) throw new Error('Failed to update account');
-      setSaveMsg('Account updated!');
-      setEditMode(false);
-    } catch (error) {
-      setSaveMsg('Failed to update account');
-    }
+    // TODO: Implement save logic (API call)
+    setSaveMsg('Account updated!');
+    setEditMode(false);
   };
 
   // Helper to render header variables if present
@@ -172,48 +152,6 @@ export default function AccountPage({ account, namespace }: Props) {
         alert('Failed to delete account');
       }
     }
-  };
-
-  // Add helpers for editing variables and headers
-  const handleVariableChange = (index: number, field: 'key' | 'value', value: string) => {
-    setEditAccount((prev: any) => {
-      const variables = [...(prev.variables || prev["namespace-account-variables"] || [])];
-      variables[index] = { ...variables[index], [field]: value };
-      return { ...prev, variables };
-    });
-  };
-  const addVariable = () => {
-    setEditAccount((prev: any) => {
-      const variables = [...(prev.variables || prev["namespace-account-variables"] || []), { key: '', value: '' }];
-      return { ...prev, variables };
-    });
-  };
-  const removeVariable = (index: number) => {
-    setEditAccount((prev: any) => {
-      const variables = [...(prev.variables || prev["namespace-account-variables"] || [])];
-      variables.splice(index, 1);
-      return { ...prev, variables };
-    });
-  };
-  const handleHeaderChange = (index: number, field: 'key' | 'value', value: string) => {
-    setEditAccount((prev: any) => {
-      const headers = [...(prev["namespace-account-header"] || [])];
-      headers[index] = { ...headers[index], [field]: value };
-      return { ...prev, "namespace-account-header": headers };
-    });
-  };
-  const addHeader = () => {
-    setEditAccount((prev: any) => {
-      const headers = [...(prev["namespace-account-header"] || []), { key: '', value: '' }];
-      return { ...prev, "namespace-account-header": headers };
-    });
-  };
-  const removeHeader = (index: number) => {
-    setEditAccount((prev: any) => {
-      const headers = [...(prev["namespace-account-header"] || [])];
-      headers.splice(index, 1);
-      return { ...prev, "namespace-account-header": headers };
-    });
   };
 
   return (
@@ -361,49 +299,11 @@ export default function AccountPage({ account, namespace }: Props) {
               )}
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Account Headers</label>
-                {(editAccount["namespace-account-header"] || []).map((header: any, idx: number) => (
-                  <div key={idx} className="flex gap-2 mb-1">
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 text-xs w-1/3"
-                      placeholder="Key"
-                      value={header.key}
-                      onChange={e => handleHeaderChange(idx, 'key', e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 text-xs w-1/2"
-                      placeholder="Value"
-                      value={header.value}
-                      onChange={e => handleHeaderChange(idx, 'value', e.target.value)}
-                    />
-                    <button type="button" className="text-red-500 text-xs" onClick={() => removeHeader(idx)}>Remove</button>
-                  </div>
-                ))}
-                <button type="button" className="text-blue-500 text-xs mt-1" onClick={addHeader}>+ Add Header</button>
+                {renderAccountHeaders(editAccount["namespace-account-header"])}
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-gray-700 mb-1">Account Variables</label>
-                {(editAccount["variables"] || editAccount["namespace-account-variables"] || []).map((variable: any, idx: number) => (
-                  <div key={idx} className="flex gap-2 mb-1">
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 text-xs w-1/3"
-                      placeholder="Key"
-                      value={variable.key}
-                      onChange={e => handleVariableChange(idx, 'key', e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 text-xs w-1/2"
-                      placeholder="Value"
-                      value={variable.value}
-                      onChange={e => handleVariableChange(idx, 'value', e.target.value)}
-                    />
-                    <button type="button" className="text-red-500 text-xs" onClick={() => removeVariable(idx)}>Remove</button>
-                  </div>
-                ))}
-                <button type="button" className="text-blue-500 text-xs mt-1" onClick={addVariable}>+ Add Variable</button>
+                {renderAccountVars(editAccount["variables"] || editAccount["namespace-account-variables"])}
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

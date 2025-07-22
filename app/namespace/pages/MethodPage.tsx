@@ -17,7 +17,14 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
-    setEditMethod(method || {});
+    if (method) {
+      // If method.data exists, merge it in
+      const merged = method.data ? { ...method.data, id: method.id?.S || (method.data["namespace-method-id"]?.S || method.data["namespace-method-id"]) } : method;
+      setEditMethod({
+        ...merged,
+        "namespace-method-id": merged["namespace-method-id"]?.S || merged["namespace-method-id"] || merged["id"] || merged["methodId"]
+      });
+    }
   }, [method]);
 
   const handleInput = (field: string, value: any) => {
@@ -147,7 +154,9 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
               </div>
               <div>
                 <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Hash size={16} className="text-purple-400" /> ID</div>
-                <div className="text-base font-mono text-gray-700">{editMethod["namespace-method-id"] || ''}</div>
+                <div className="text-base font-mono text-gray-700">
+                  {editMethod["namespace-method-id"] || editMethod["id"] || editMethod["methodId"] || <span className="italic text-gray-400">No ID</span>}
+                </div>
               </div>
               <div>
                 <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Type size={16} className="text-green-400" /> Type</div>

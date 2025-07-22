@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, Pencil, Trash2, User, Plus, X } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:5001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
 function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewAccount?: (account: any, ns?: any) => void }) {
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -147,6 +147,53 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
     }
   };
 
+  const handleDelete = async (account: any) => {
+    if (window.confirm(`Are you sure you want to delete the account "${account['namespace-account-name']}"?`)) {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/unified/accounts/${account['namespace-account-id']}`,
+          { method: 'DELETE' }
+        );
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to delete account: ${response.status}`);
+        }
+        alert('Account deleted successfully!');
+        // Refresh accounts list
+        const fetchAllAccounts = async () => {
+          setLoading(true);
+          try {
+            let allAccounts: any[] = [];
+            if (namespace) {
+              const accRes = await fetch(`${API_BASE_URL}/unified/namespaces/${namespace['namespace-id']}/accounts`);
+              const nsAccounts = await accRes.json();
+              allAccounts = (nsAccounts || []).map((acc: any) => ({ ...acc, namespace }));
+            } else {
+              const nsRes = await fetch(`${API_BASE_URL}/unified/namespaces`);
+              const namespaces = await nsRes.json();
+              for (const ns of namespaces) {
+                const accRes = await fetch(`${API_BASE_URL}/unified/namespaces/${ns['namespace-id']}/accounts`);
+                const nsAccounts = await accRes.json();
+                allAccounts = allAccounts.concat(
+                  (nsAccounts || []).map((acc: any) => ({ ...acc, namespace: ns }))
+                );
+              }
+            }
+            setAccounts(allAccounts);
+          } catch (err) {
+            setAccounts([]);
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchAllAccounts();
+      } catch (error) {
+        console.error('Delete account error:', error);
+        alert(`Failed to delete account: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
   const renderSidePanel = () => {
     if (sidePanel === 'create') {
       return (
@@ -267,6 +314,13 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
                 >
                   Open in Tab
                 </button>
+                <button
+                  className="bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-4 py-1 rounded-lg border border-red-200 shadow-sm transition-all"
+                  style={{ fontSize: '0.95rem' }}
+                  onClick={() => handleDelete(acc)}
+                >
+                  Delete
+                </button>
                 <button type="button" onClick={() => setSidePanel(null)} className="text-gray-400 hover:text-gray-700"><X size={24} /></button>
               </div>
             </div>
@@ -311,7 +365,7 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
               <div className="flex gap-2 mt-1">
                   <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => setSidePanel({ account: acc })}><Eye size={16} /></button>
                 <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
-                <button className="text-red-600 hover:text-red-800 p-1" title="Delete"><Trash2 size={16} /></button>
+                <button className="text-red-600 hover:text-red-800 p-1" title="Delete" onClick={() => handleDelete(acc)}><Trash2 size={16} /></button>
               </div>
             </div>
           ))}
