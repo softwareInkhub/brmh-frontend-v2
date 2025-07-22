@@ -436,6 +436,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  useEffect(() => {
+    const handler = () => { fetchData(); };
+    window.addEventListener('refresh-unified-namespace', handler);
+    return () => window.removeEventListener('refresh-unified-namespace', handler);
+  }, [fetchData]);
+
   // --- Handlers ---
   const handleNamespaceSave = async () => {
     try {
@@ -966,13 +972,13 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><FileCode size={14}/> Schemas</span>
-            <button
+                  <button
                     className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 rounded-full bg-purple-50 font-semibold"
                     onClick={() => { setSchemaModalNamespace(ns); setShowUnifiedSchemaModal(true); }}
-            >
+                  >
                     + Create Schema
-            </button>
-          </div>
+                  </button>
+                </div>
                 {
                   (() => {
                     const ns = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
