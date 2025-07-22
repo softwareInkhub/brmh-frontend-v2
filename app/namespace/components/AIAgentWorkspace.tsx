@@ -316,6 +316,7 @@ What would you like to work on today?`,
 
     let assistantMessage = '';
     let actions: any[] = [];
+    // Remove streamedSchema, streamedApi, streamedCode logic
 
     try {
       while (true) {
@@ -329,12 +330,13 @@ What would you like to work on today?`,
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              console.log('Received data:', data);
               
-              if (data.type === 'stream' && data.content) {
+              if (data.type === 'chat' && data.content) {
                 assistantMessage += data.content;
-                // Update the message in real-time
                 setMessages(prev => {
                   const newMessages = [...prev];
+                  // Only update the last assistant message, or add if not present
                   const lastMessage = newMessages[newMessages.length - 1];
                   if (lastMessage && lastMessage.role === 'assistant') {
                     lastMessage.content = assistantMessage;
@@ -366,7 +368,7 @@ What would you like to work on today?`,
       for (const action of actions) {
         if (action.status === 'complete' && action.data) {
           switch (action.type) {
-            case 'generate_schema':
+            case 'generate_schema': {
               const newSchema = {
                 id: Date.now().toString(),
                 name: action.data.name || 'Generated Schema',
@@ -378,19 +380,65 @@ What would you like to work on today?`,
               setActiveTab('schema');
               setConsoleOutput((prev: string[]) => [...prev, '✅ Schema generated successfully']);
               break;
-              
-            case 'generate_api':
+            }
+            case 'generate_api': {
+              // Parse OpenAPI spec and extract endpoints
+              const openApi = action.data;
+              const endpoints = [];
+              if (openApi && openApi.paths) {
+                for (const path in openApi.paths) {
+                  for (const method in openApi.paths[path]) {
+                    endpoints.push({
+                      path,
+                      method: method.toUpperCase(),
+                      summary: openApi.paths[path][method].summary || '',
+                      operation: openApi.paths[path][method]
+                    });
+                  }
+                }
+              }
               const newApi = {
                 id: Date.now().toString(),
-                name: action.data.name || 'Generated API',
-                endpoints: action.data.endpoints || [action.data],
-                timestamp: action.data.timestamp || new Date()
+                name: openApi.info?.title || 'Generated API',
+                openApi, // store the full spec for Swagger UI etc.
+                endpoints,
+                timestamp: new Date()
               };
               setApiEndpoints((prev: any[]) => [...prev, newApi]);
               setActiveTab('api');
               setConsoleOutput((prev: string[]) => [...prev, '✅ API generated successfully']);
               break;
-              
+            }
+            case 'generate_code': {
+              // Trigger backend code generation and update Files tab
+              setConsoleOutput((prev: string[]) => [...prev, '🚀 Generating backend code...']);
+              // Call backend codegen endpoint
+              fetch('http://localhost:5001/code-generation/generate-backend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  namespaceId: namespace['namespace-id'],
+                  schemas: schemas.map(s => s.schema),
+                  apis: apiEndpoints,
+                  projectType: 'nodejs',
+                  namespaceName: namespace['namespace-name'] || 'Project'
+                })
+              })
+                .then(res => res.json())
+                .then(data => {
+                  if (data.success) {
+                    setConsoleOutput(prev => [...prev, `✅ Generated ${data.files.length} files successfully!`]);
+                    refreshFileTree();
+                    setActiveTab('files');
+                  } else {
+                    setConsoleOutput(prev => [...prev, `❌ Code generation failed: ${data.error}`]);
+                  }
+                })
+                .catch(err => {
+                  setConsoleOutput(prev => [...prev, `❌ Error generating code: ${err.message}`]);
+                });
+              break;
+            }
             case 'test':
               setConsoleOutput((prev: string[]) => [...prev, '✅ API testing completed']);
               if (action.data) {
@@ -398,13 +446,15 @@ What would you like to work on today?`,
               }
               setActiveTab('console');
               break;
-              
             case 'save':
               setConsoleOutput((prev: string[]) => [...prev, '✅ Items saved to namespace']);
               if (action.data) {
                 setConsoleOutput((prev: string[]) => [...prev, ...action.data.map((item: any) => `- ${item.type}: ${item.name} (${item.status})`)]);
               }
               setActiveTab('console');
+              break;
+            default:
+              setConsoleOutput((prev: string[]) => [...prev, `ℹ️ Action: ${action.type}`]);
               break;
           }
         } else if (action.status === 'error') {
@@ -772,7 +822,7 @@ What would you like to work on today?`,
         body: JSON.stringify(requestBody)
       });
       
-      console.log('📥 Response status:', response.status);
+      console.log('�� Response status:', response.status);
       console.log('📥 Response ok:', response.ok);
       
       if (response.ok) {
