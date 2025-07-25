@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { NestedFieldsEditor, schemaToFields } from '../components/SchemaService';
 import RecursiveDataForm from '../../components/common/RecursiveDataForm';
 import Ajv from 'ajv';
+import { v4 as uuidv4 } from 'uuid';
+import { Edit, PlusCircle, RefreshCw, Eye, Trash2 } from "lucide-react";
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
   const properties: Record<string, any> = {};
@@ -42,7 +44,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
-const API_BASE_URL = "http://localhost:5001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
 
 interface SchemaCreatePageProps {
   onSchemaNameChange?: (name: string) => void;
@@ -69,7 +71,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<'edit' | 'createData'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'createData' | 'updateData' | 'readData' | 'deleteData'>('edit');
   const [createDataResult, setCreateDataResult] = useState<string | null>(null);
   const [formData, setFormData] = useState<any>({});
   const [tableName, setTableName] = useState<string | null>(null);
@@ -88,6 +90,16 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [selectedAccountForData, setSelectedAccountForData] = useState<string>('');
   const [methodName, setMethodName] = useState<string>('');
   const [resolvedNamespaceName, setResolvedNamespaceName] = useState('');
+
+  // Add state for update, read, delete forms
+  const [updateKey, setUpdateKey] = useState('');
+  const [updateFields, setUpdateFields] = useState('');
+  const [updateResult, setUpdateResult] = useState<string | null>(null);
+  const [readKey, setReadKey] = useState('');
+  const [readResult, setReadResult] = useState<string | null>(null);
+  const [readAllResult, setReadAllResult] = useState<string | null>(null);
+  const [deleteKey, setDeleteKey] = useState('');
+  const [deleteResult, setDeleteResult] = useState<string | null>(null);
 
   // 2. Fetch accounts for the namespace on mount or when schemaObj changes
   useEffect(() => {
@@ -512,22 +524,33 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   return (
     <div className="h-full w-full flex flex-col bg-white">
       {/* Tab Switcher */}
-      <div className="flex gap-2 mb-4 px-8">
-        <button
-          onClick={() => setActiveTab('edit')}
-          className={`px-4 py-2 rounded-t-lg ${activeTab === 'edit' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
-        >
-          Edit Schema
-        </button>
-        {isEditing && (
-          <button
-            onClick={() => setActiveTab('createData')}
-            className={`px-4 py-2 rounded-t-lg ${activeTab === 'createData' ? 'bg-white border-t border-x border-gray-200 font-bold' : 'bg-gray-100'}`}
-            title={!tableName ? "Create and activate a table for this schema first" : ""}
-          >
-            Create Data
-          </button>
-        )}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+        <nav className="flex gap-1 px-8 py-2 overflow-x-auto" role="tablist">
+          {[
+            { key: 'edit', label: 'Edit Schema', icon: <Edit size={16} /> },
+            { key: 'createData', label: 'Create Data', icon: <PlusCircle size={16} /> },
+            { key: 'updateData', label: 'Update Data', icon: <RefreshCw size={16} /> },
+            { key: 'readData', label: 'Read Data', icon: <Eye size={16} /> },
+            { key: 'deleteData', label: 'Delete Data', icon: <Trash2 size={16} /> },
+          ].map(tab => (
+            (tab.key === 'edit' || isEditing) && (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition
+                  ${activeTab === tab.key
+                    ? 'bg-white border-x border-t border-b-2 border-b-blue-600 border-gray-200 text-blue-700 shadow-sm'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                onClick={() => setActiveTab(tab.key as any)}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            )
+          ))}
+        </nav>
       </div>
 
       {/* Edit Schema Tab */}
@@ -745,10 +768,16 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 }
                 // If valid, proceed to submit
                 try {
-                    const res = await fetch(`${API_BASE_URL}/unified/schema/table/${tableNameForMethod}/items`, {
+                  // Ensure partition key is present (assume 'id' as PK, update if needed)
+                  const partitionKey = 'id'; // Change this if your PK is different
+                  const dataToSend: Record<string, any> = { ...(typeof formData === 'object' && formData !== null ? formData : {}) };
+                  if (!dataToSend[partitionKey]) {
+                    dataToSend[partitionKey] = uuidv4();
+                  }
+                  const res = await fetch(`${API_BASE_URL}/crud?tableName=${tableNameForMethod}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ item: formData }),
+                    body: JSON.stringify({ item: dataToSend }),
                   });
                   if (!res.ok) throw new Error('Failed to create data');
                   setCreateDataResult('Data created successfully!');
@@ -778,6 +807,210 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 <div className="mt-2 text-sm">{createDataResult}</div>
               )}
             </form>
+            );
+          })()}
+        </div>
+      )}
+      {/* Update Data Tab */}
+      {isEditing && activeTab === 'updateData' && (
+        <div className="px-8 pb-8">
+          <h2 className="text-lg font-semibold mb-4">Update Data in Table</h2>
+          <label className="block text-sm font-medium mb-2">Account</label>
+          <select
+            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            value={selectedAccountForData}
+            onChange={e => setSelectedAccountForData(e.target.value)}
+          >
+            <option value="">Select account</option>
+            {accounts.map(acc => (
+              <option key={acc['namespace-account-id']} value={acc['namespace-account-id']}>
+                {acc['namespace-account-name']}
+              </option>
+            ))}
+          </select>
+          {selectedAccountForData && (() => {
+            const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+            const tableNameMap = acc?.tableName || {};
+            const tableNameForMethod = tableNameMap[methodName];
+            if (!tableNameForMethod) {
+              return <div className="text-red-600 mb-2">No table exists for this account and method. Please create a table first.</div>;
+            }
+            return (
+              <form
+                onSubmit={async e => {
+                  e.preventDefault();
+                  setUpdateResult(null);
+                  try {
+                    const key = JSON.parse(updateKey || '{}');
+                    const updates = JSON.parse(updateFields || '{}');
+                    const res = await fetch(`${API_BASE_URL}/crud?tableName=${tableNameForMethod}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ key, updates }),
+                    });
+                    const data = await res.json();
+                    setUpdateResult(JSON.stringify(data, null, 2));
+                  } catch (err: any) {
+                    setUpdateResult('Error: ' + err.message);
+                  }
+                }}
+                className="max-w-xl"
+              >
+                <label className="block text-sm font-medium mb-1">Key (JSON)</label>
+                <input
+                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  value={updateKey}
+                  onChange={e => setUpdateKey(e.target.value)}
+                  placeholder='{"id": "..."}'
+                  required
+                />
+                <label className="block text-sm font-medium mb-1">Updates (JSON)</label>
+                <input
+                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  value={updateFields}
+                  onChange={e => setUpdateFields(e.target.value)}
+                  placeholder='{"field1": "new value"}'
+                  required
+                />
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-2">Update</button>
+                {updateResult ? <div className="mt-2 text-sm"><pre>{updateResult}</pre></div> : null}
+              </form>
+            );
+          })()}
+        </div>
+      )}
+      {/* Read Data Tab */}
+      {isEditing && activeTab === 'readData' && (
+        <div className="px-8 pb-8">
+          <h2 className="text-lg font-semibold mb-4">Read Data from Table</h2>
+          <label className="block text-sm font-medium mb-2">Account</label>
+          <select
+            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            value={selectedAccountForData}
+            onChange={e => setSelectedAccountForData(e.target.value)}
+          >
+            <option value="">Select account</option>
+            {accounts.map(acc => (
+              <option key={acc['namespace-account-id']} value={acc['namespace-account-id']}>
+                {acc['namespace-account-name']}
+              </option>
+            ))}
+          </select>
+          {selectedAccountForData && (() => {
+            const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+            const tableNameMap = acc?.tableName || {};
+            const tableNameForMethod = tableNameMap[methodName];
+            if (!tableNameForMethod) {
+              return <div className="text-red-600 mb-2">No table exists for this account and method. Please create a table first.</div>;
+            }
+            return (
+              <div>
+                <form
+                  onSubmit={async e => {
+                    e.preventDefault();
+                    setReadResult(null);
+                    try {
+                      const key = JSON.parse(readKey || '{}');
+                      const params = new URLSearchParams({ tableName: tableNameForMethod, ...key }).toString();
+                      const res = await fetch(`${API_BASE_URL}/crud?${params}`, { method: 'GET' });
+                      const data = await res.json();
+                      setReadResult(JSON.stringify(data, null, 2));
+                    } catch (err: any) {
+                      setReadResult('Error: ' + err.message);
+                    }
+                  }}
+                  className="max-w-xl"
+                >
+                  <label className="block text-sm font-medium mb-1">Key (JSON, optional)</label>
+                  <input
+                    className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                    value={readKey}
+                    onChange={e => setReadKey(e.target.value)}
+                    placeholder='{"id": "..."}'
+                  />
+                  <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-2">Read</button>
+                  {readResult ? <div className="mt-2 text-sm"><pre>{readResult}</pre></div> : null}
+                </form>
+                <button
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg mt-4"
+                  onClick={async () => {
+                    setReadAllResult(null);
+                    try {
+                      const params = new URLSearchParams({
+                        tableName: tableNameForMethod,
+                        pagination: 'true',
+                        itemPerPage: '50',
+                        maxPage: '1',
+                      }).toString();
+                      const res = await fetch(`${API_BASE_URL}/crud?${params}`, { method: 'GET' });
+                      const data = await res.json();
+                      setReadAllResult(JSON.stringify(data, null, 2));
+                    } catch (err: any) {
+                      setReadAllResult('Error: ' + err.message);
+                    }
+                  }}
+                >Read All</button>
+                {readAllResult ? <div className="mt-2 text-sm"><pre>{readAllResult}</pre></div> : null}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+      {/* Delete Data Tab */}
+      {isEditing && activeTab === 'deleteData' && (
+        <div className="px-8 pb-8">
+          <h2 className="text-lg font-semibold mb-4">Delete Data from Table</h2>
+          <label className="block text-sm font-medium mb-2">Account</label>
+          <select
+            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            value={selectedAccountForData}
+            onChange={e => setSelectedAccountForData(e.target.value)}
+          >
+            <option value="">Select account</option>
+            {accounts.map(acc => (
+              <option key={acc['namespace-account-id']} value={acc['namespace-account-id']}>
+                {acc['namespace-account-name']}
+              </option>
+            ))}
+          </select>
+          {selectedAccountForData && (() => {
+            const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+            const tableNameMap = acc?.tableName || {};
+            const tableNameForMethod = tableNameMap[methodName];
+            if (!tableNameForMethod) {
+              return <div className="text-red-600 mb-2">No table exists for this account and method. Please create a table first.</div>;
+            }
+            return (
+              <form
+                onSubmit={async e => {
+                  e.preventDefault();
+                  setDeleteResult(null);
+                  try {
+                    const key = JSON.parse(deleteKey || '{}');
+                    const res = await fetch(`${API_BASE_URL}/crud?tableName=${tableNameForMethod}`, {
+                      method: 'DELETE',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(key),
+                    });
+                    const data = await res.json();
+                    setDeleteResult(JSON.stringify(data, null, 2));
+                  } catch (err: any) {
+                    setDeleteResult('Error: ' + err.message);
+                  }
+                }}
+                className="max-w-xl"
+              >
+                <label className="block text-sm font-medium mb-1">Key (JSON)</label>
+                <input
+                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  value={deleteKey}
+                  onChange={e => setDeleteKey(e.target.value)}
+                  placeholder='{"id": "..."}'
+                  required
+                />
+                <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg mt-2">Delete</button>
+                {deleteResult ? <div className="mt-2 text-sm"><pre>{deleteResult}</pre></div> : null}
+              </form>
             );
           })()}
         </div>
