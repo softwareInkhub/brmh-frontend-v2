@@ -83,7 +83,7 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace }: {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
         {/* Accounts Card */}
         <div className="bg-white rounded-xl shadow p-6 flex flex-col">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">

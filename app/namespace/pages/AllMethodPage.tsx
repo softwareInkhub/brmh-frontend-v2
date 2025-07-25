@@ -368,12 +368,12 @@ export default function AllMethodPage({ namespace, onViewMethod }: { namespace?:
               onChange={e => setSearch(e.target.value)}
               style={{ minWidth: 200 }}
             />
-            <button
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-              onClick={() => setSidePanel('create')}
-            >
-              <Plus size={18} /> Create Method
-            </button>
+          <button
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+            onClick={() => setSidePanel('create')}
+          >
+            <Plus size={18} /> Create Method
+          </button>
           </div>
         </div>
         {loading ? (
