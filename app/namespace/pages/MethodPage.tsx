@@ -11,6 +11,19 @@ const methods = [
   { id: 'm3', name: 'DELETE /item' },
 ];
 
+// Helper to extract string from DynamoDB attribute or plain value
+function getString(val: any) {
+  if (val && typeof val === 'object' && 'S' in val) return val.S;
+  return val || '';
+}
+
+// Helper to extract the root partition key (id)
+function getPartitionKey(method: any) {
+  if (method && method.id && typeof method.id === 'object' && 'S' in method.id) return method.id.S;
+  if (method && typeof method.id === 'string') return method.id;
+  return '';
+}
+
 export default function MethodPage({ onSelect, method, namespace, onTest }: Props) {
   const [editMethod, setEditMethod] = useState<any>(method || {});
   const [saveMsg, setSaveMsg] = useState('');
@@ -18,12 +31,8 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
 
   useEffect(() => {
     if (method) {
-      // If method.data exists, merge it in
-      const merged = method.data ? { ...method.data, id: method.id?.S || (method.data["namespace-method-id"]?.S || method.data["namespace-method-id"]) } : method;
-      setEditMethod({
-        ...merged,
-        "namespace-method-id": merged["namespace-method-id"]?.S || merged["namespace-method-id"] || merged["id"] || merged["methodId"]
-      });
+      console.log('Method data from backend:', method);
+      setEditMethod({ ...method, ...(method.data || {}) });
     }
   }, [method]);
 
@@ -286,12 +295,8 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                   checked={!!editMethod['save-data']}
                   onChange={e => handleInput('save-data', e.target.checked)}
                   id="save-data-checkbox"
-                  disabled={!(editMethod["namespace-method-tableName"] || editMethod["tableName"])}
                 />
                 <label htmlFor="save-data-checkbox" className="text-xs font-medium text-gray-700">Save Data</label>
-                {!(editMethod["namespace-method-tableName"] || editMethod["tableName"]) && (
-                  <span className="text-xs text-red-500 ml-2">Create a table first to enable saving data.</span>
-                )}
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

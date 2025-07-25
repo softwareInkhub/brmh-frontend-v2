@@ -15,6 +15,7 @@ interface Account {
   'namespace-account-header': AccountHeader[];
   'namespace-account-url-override': string;
   'save-data': boolean;
+  tableName?: Record<string, string>;
 }
 
 interface KeyValuePair {
@@ -132,6 +133,17 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     return () => { mounted = false; };
   }, [namespaceId, namespaceMethodUrlOverride]);
 
+  useEffect(() => {
+    // Load default query params from method if available
+    if (method && Array.isArray(method['namespace-method-queryParams'])) {
+      const defaultParams = method['namespace-method-queryParams'].map((param: any) => ({
+        key: param.key || '',
+        value: param.value || ''
+      }));
+      setQueryParams(defaultParams.length > 0 ? defaultParams : [{ key: '', value: '' }]);
+    }
+  }, [method]);
+
   const executeTest = async (isPaginated: boolean = false) => {
     if (!selectedAccount || isSubmitting || loading) return;
     const controller = new AbortController();
@@ -143,9 +155,19 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       setResponse(null);
       setActiveButton(isPaginated ? 'loop' : 'send');
 
-      // Only show error if user wants to save data but tableName is missing
-      if (saveData && !tableName) {
-        setError('Table name is required to save data. You can still test the method, but data will not be saved.');
+      // Dynamically get tableName from selectedAccount.tableName[methodName]
+      let dynamicTableName = '';
+      if (saveData && selectedAccount && selectedAccount.tableName && methodName) {
+        dynamicTableName = selectedAccount.tableName[methodName] || '';
+      }
+
+      // Build query string from queryParams
+      const filteredParams = queryParams.filter(p => p.key && p.key.trim() !== '');
+      let urlWithParams = url;
+      if (filteredParams.length > 0) {
+        const searchParams = new URLSearchParams();
+        filteredParams.forEach(param => searchParams.append(param.key, param.value));
+        urlWithParams += (urlWithParams.includes('?') ? '&' : '?') + searchParams.toString();
       }
 
       const endpoint = isPaginated
@@ -158,7 +180,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
 
       const requestData = {
         method: methodType,
-        url: url,
+        url: urlWithParams,
         namespaceAccountId: selectedAccount['namespace-account-id'],
         queryParams: Object.fromEntries(
           queryParams.filter(p => p.key && p.key.trim() !== '').map(p => [p.key.trim(), p.value])
@@ -174,14 +196,23 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
           }
         } : {}),
         ...(activeTab === 'body' && requestBody ? { body: tryParseJSON(requestBody) } : {}),
-        ...(saveData && tableName ? {
-          tableName: tableName,
+        ...(saveData && dynamicTableName ? {
+          tableName: dynamicTableName,
           saveData: true,
           schemaId: method?.['schemaId'] || null
         } : {
           saveData: false
         })
       };
+      // Log the request details
+      console.log('[MethodTestPage] Sending request:', {
+        endpoint,
+        requestData,
+        selectedAccount,
+        methodName,
+        dynamicTableName,
+        isPaginated
+      });
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -286,10 +317,28 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       toast.error('No response data available to save as schema');
       return;
     }
-    const generatedSchema = generateResponseSchema(response.body);
+    // Generic: find the first array field in the response body (regardless of name)
+    const body = (response.body as any)?.body || response.body;
+    let arrayField: any[] | null = null;
+    let arrayFieldName: string | null = null;
+    if (body && typeof body === 'object') {
+      for (const key in body) {
+        if (Array.isArray(body[key])) {
+          arrayField = body[key];
+          arrayFieldName = key;
+          break;
+        }
+      }
+    }
+    if (!arrayField || arrayField.length === 0) {
+      toast.error('No array field found in response to generate schema');
+      return;
+    }
+    const generatedSchema = generateResponseSchema(arrayField[0]);
     if (onOpenSchemaTab) {
       onOpenSchemaTab(generatedSchema, methodName);
     }
+    toast.success(`Schema generated for array field: ${arrayFieldName}`);
   };
 
   const handleSchemaModalSave = async (finalSchemaName: string, finalJsonSchema: string) => {
@@ -401,6 +450,14 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   };
 
   // --- PAGE LAYOUT ---
+  // Build query string from queryParams for display
+  const filteredParams = queryParams.filter(p => p.key && p.key.trim() !== '');
+  let urlWithParams = url;
+  if (filteredParams.length > 0) {
+    const searchParams = new URLSearchParams();
+    filteredParams.forEach(param => searchParams.append(param.key, param.value));
+    urlWithParams += (urlWithParams.includes('?') ? '&' : '?') + searchParams.toString();
+  }
   return (
     <div className="w-full h-full bg-white p-8 overflow-auto">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Test Method</h2>
@@ -467,7 +524,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
           <div className="grid grid-cols-[1fr,120px] gap-2">
             <input
               type="text"
-              value={url}
+              value={urlWithParams}
               onChange={e => setUrl(e.target.value)}
               className="w-full p-2 border border-gray-200 rounded-md text-[13px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
               placeholder="Enter URL"
