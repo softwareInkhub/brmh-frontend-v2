@@ -119,6 +119,17 @@ What would you like to work on today?`,
   // Add state for schema names
   const [schemaNames, setSchemaNames] = useState<{ [id: string]: string }>({});
 
+  // 1. Add selectedSchema state at the top
+  const [selectedSchema, setSelectedSchema] = useState<any>(null);
+
+  // Add state for API endpoints
+  const [apiEndpoints, setApiEndpoints] = useState<any[]>([]);
+
+  // Lambda tab UI additions
+  // 1. Add state for lambdaPrompt and generatedLambdaCode
+  const [lambdaPrompt, setLambdaPrompt] = useState('');
+  const [generatedLambdaCode, setGeneratedLambdaCode] = useState('');
+
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -168,12 +179,36 @@ What would you like to work on today?`,
     }
   }, [namespace?.['namespace-id'], userId]);
 
-  // When the namespace changes, fetch only saved schemas for that namespace from the backend
+  // In useEffect for namespace change, only setSchemas from backend fetch
+  // useEffect(() => {
+  //   if (namespace?.['namespace-id']) {
+  //     setSchemas([]); // Clear all schemas (including unsaved) on namespace change/refresh
+  //     fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`)
+  //       .then(res => res.json())
+  //       .then(data => {
+  //         console.log('Schemas loaded from backend:', data);
+  //         setSchemas(data);
+  //       });
+  //   }
+  // }, [namespace?.['namespace-id']]);
+
+  useEffect(() => {
+    if (namespace?.['namespace-id'] && sessionId) {
+      // Clear generated schemas for this session/namespace on mount/refresh
+      fetch('http://localhost:5001/ai-agent/clear-generated-schemas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, namespaceId: namespace['namespace-id'] })
+      });
+    }
+  }, [namespace?.['namespace-id'], sessionId]);
+
+  // Fetch saved schemas for Lambda dropdown only
   useEffect(() => {
     if (namespace?.['namespace-id']) {
       fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`)
         .then(res => res.json())
-        .then(data => setSchemas(data));
+        .then(data => setSavedSchemas(data));
     }
   }, [namespace?.['namespace-id']]);
 
@@ -194,12 +229,7 @@ What would you like to work on today?`,
         const data = await response.json();
         if (data.workspaceState) {
           setWorkspaceState(data.workspaceState);
-          // Ensure all loaded schemas have the correct namespaceId
-          const loadedSchemas = (data.workspaceState.schemas || []).map(s => ({
-            ...s,
-            namespaceId: s.namespaceId || namespace['namespace-id']
-          }));
-          setSchemas(loadedSchemas);
+          // Do NOT restore schemas from workspace state
           setApiEndpoints(data.workspaceState.apis || []);
         }
       }
@@ -730,8 +760,7 @@ What would you like to work on today?`,
         setSchemas(prev => [...prev, newSchema]);
         setRawSchemas(prev => [...prev, { id: newSchema.id, content: output }]);
         setActiveTab('schema');
-        // Auto-save workspace state when schema is added
-        setTimeout(() => saveWorkspaceState(), 500);
+        // Removed auto-save to backend for session-only schemas
         break;
         
       case 'api':
@@ -1103,7 +1132,7 @@ What would you like to work on today?`,
   };
 
   // State for saved items
-  const [savedSchemas, setSavedSchemas] = useState<any[]>([]);
+  const [savedSchemas, setSavedSchemas] = useState<any[]>([]); // For Lambda dropdown only
   const [savedApis, setSavedApis] = useState<any[]>([]);
   const [savedFiles, setSavedFiles] = useState<ProjectFile[]>([]);
 
@@ -1114,7 +1143,7 @@ What would you like to work on today?`,
   const [generationHistory, setGenerationHistory] = useState<any[]>([]);
 
   // 1. Filter schemas for the current namespace in the Lambda tab dropdown
-  const filteredSchemas = schemas.filter(s => !namespace || !namespace['namespace-id'] || s.namespaceId === namespace['namespace-id']);
+  const filteredSavedSchemas = savedSchemas.filter(s => !namespace || !namespace['namespace-id'] || s.namespaceId === namespace['namespace-id']);
 
   return (
     <div className="h-screen w-full flex bg-white">
@@ -1230,192 +1259,135 @@ What would you like to work on today?`,
         {/* Tab Content */}
         <div className="flex-1 overflow-auto p-6">
           {activeTab === 'lambda' && (
-            <div className="h-full overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium">Lambda Functions</h3>
-              </div>
-              <form
-                className="space-y-4 bg-white p-4 rounded-lg border mb-6"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setIsCreatingLambda(true);
-                  setLambdaError('');
-                  try {
-                    const selectedSchema = schemas.find(s => s.id === lambdaForm.schemaId);
-                    if (!selectedSchema) {
-                      setLambdaError('Please select a schema.');
-                      setIsCreatingLambda(false);
-                      return;
-                    }
-                    const res = await fetch('http://localhost:5001/llm/generate-lambda-with-url', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        namespaceId: namespace?.['namespace-id'] || '',
-                        schemaData: selectedSchema.schema,
-                        functionName: lambdaForm.functionName,
-                        runtime: lambdaForm.runtime,
-                        handler: lambdaForm.handler,
-                        memorySize: lambdaForm.memory,
-                        timeout: lambdaForm.timeout,
-                        environment: lambdaForm.environment ? JSON.parse(lambdaForm.environment) : undefined,
-                      })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      setLambdaFunctions(prev => [...prev, data.lambdaConfig || {
-                        functionName: lambdaForm.functionName,
-                        runtime: lambdaForm.runtime,
-                        handler: lambdaForm.handler,
-                        memorySize: lambdaForm.memory,
-                        timeout: lambdaForm.timeout,
-                        environment: lambdaForm.environment ? JSON.parse(lambdaForm.environment) : undefined,
-                        url: data.estimatedUrl || '',
-                        code: data.lambdaConfig?.code || '',
-                      }]);
-                      setLambdaForm({
-                        schemaId: '',
-                        functionName: '',
-                        runtime: 'nodejs18.x',
-                        handler: 'index.handler',
-                        memory: 128,
-                        timeout: 3,
-                        environment: '',
-                      });
-                    } else {
-                      setLambdaError(data.error || 'Failed to generate Lambda function.');
-                    }
-                  } catch (err) {
-                    setLambdaError('Failed to generate Lambda function.');
-                  } finally {
-                    setIsCreatingLambda(false);
+            <div className="p-4">
+              <label className="block font-semibold mb-1">Select Schema</label>
+              <select
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.schemaId}
+                onChange={e => {
+                  const schemaId = e.target.value;
+                  const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
+                  setLambdaForm(f => ({ ...f, schemaId }));
+                  setSelectedSchema(schema);
+                }}
+                required
+              >
+                <option value="">Select a schema</option>
+                {filteredSavedSchemas.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
+                ))}
+              </select>
+              <label className="block font-semibold mt-4 mb-1">Function Name</label>
+              <input
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.functionName}
+                onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
+                placeholder="handler.js"
+                required
+              />
+              <label className="block font-semibold mt-4 mb-1">Runtime</label>
+              <select
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.runtime}
+                onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
+              >
+                <option value="nodejs18.x">Node.js 18.x</option>
+                <option value="nodejs20.x">Node.js 20.x</option>
+                <option value="python3.12">Python 3.12</option>
+                <option value="python3.11">Python 3.11</option>
+                <option value="python3.10">Python 3.10</option>
+                <option value="java21">Java 21</option>
+                <option value="java17">Java 17</option>
+                <option value="java11">Java 11</option>
+                <option value="dotnet8">.NET 8</option>
+                <option value="dotnet6">.NET 6</option>
+              </select>
+              <label className="block font-semibold mt-4 mb-1">Handler</label>
+              <input
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.handler}
+                onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
+                placeholder="index.handler"
+                required
+              />
+              <label className="block font-semibold mt-4 mb-1">Memory (MB)</label>
+              <input
+                type="number"
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.memory}
+                min={128}
+                max={10240}
+                onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
+                required
+              />
+              <label className="block font-semibold mt-4 mb-1">Timeout (seconds)</label>
+              <input
+                type="number"
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={lambdaForm.timeout}
+                min={1}
+                max={900}
+                onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
+                required
+              />
+              <label className="block font-semibold mt-4 mb-1">Environment Variables (JSON)</label>
+              <textarea
+                className="w-full border rounded px-2 py-1 mb-2 font-mono"
+                value={lambdaForm.environment}
+                onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
+                placeholder='{"KEY":"VALUE"}'
+                rows={2}
+              />
+              <label className="block font-semibold mt-4 mb-1">Describe the Lambda Handler</label>
+              <textarea
+                value={lambdaPrompt}
+                onChange={e => setLambdaPrompt(e.target.value)}
+                placeholder="Describe what Lambda handler you want to generate for the selected schema..."
+                className="w-full border rounded px-2 py-1 mb-2"
+                rows={3}
+              />
+              <button
+                onClick={async () => {
+                  console.log('selectedSchema:', selectedSchema);
+                  if (!selectedSchema) {
+                    alert('Please select a schema before generating a Lambda handler.');
+                    return;
+                  }
+                  if (!lambdaPrompt.trim()) {
+                    alert('Please enter a prompt describing the Lambda handler you want to generate.');
+                    return;
+                  }
+                  setGeneratedLambdaCode('');
+                  console.log('DEBUG: Submitting Lambda prompt:', lambdaPrompt, 'for schema:', selectedSchema);
+                  const response = await fetch('http://localhost:5001/llm/generate-lambda', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      message: lambdaPrompt,
+                      namespace,
+                      selectedSchema,
+                      functionName: lambdaForm.functionName,
+                      runtime: lambdaForm.runtime,
+                      handler: lambdaForm.handler,
+                      memory: lambdaForm.memory,
+                      timeout: lambdaForm.timeout,
+                      environment: lambdaForm.environment
+                    })
+                  });
+                  if (response.ok) {
+                    const data = await response.json();
+                    setGeneratedLambdaCode(data.generatedCode || data.code || '');
+                    console.log('DEBUG: Lambda code generated:', data.generatedCode || data.code);
                   }
                 }}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Schema</label>
-                    <select
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.schemaId}
-                      onChange={e => setLambdaForm(f => ({ ...f, schemaId: e.target.value }))}
-                      required
-                    >
-                      <option value="">Select a schema</option>
-                      {filteredSchemas.map(s => (
-                        <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Function Name</label>
-                    <input
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.functionName}
-                      onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Runtime</label>
-                    <select
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.runtime}
-                      onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
-                    >
-                      <option value="nodejs18.x">Node.js 18.x</option>
-                      <option value="nodejs20.x">Node.js 20.x</option>
-                      <option value="python3.12">Python 3.12</option>
-                      <option value="python3.11">Python 3.11</option>
-                      <option value="python3.10">Python 3.10</option>
-                      <option value="java21">Java 21</option>
-                      <option value="java17">Java 17</option>
-                      <option value="java11">Java 11</option>
-                      <option value="dotnet8">.NET 8</option>
-                      <option value="dotnet6">.NET 6</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Handler</label>
-                    <input
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.handler}
-                      onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Memory (MB)</label>
-                    <input
-                      type="number"
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.memory}
-                      min={128}
-                      max={10240}
-                      onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Timeout (seconds)</label>
-                    <input
-                      type="number"
-                      className="w-full border rounded px-2 py-1"
-                      value={lambdaForm.timeout}
-                      min={1}
-                      max={900}
-                      onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
-                      required
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Environment Variables (JSON)</label>
-                    <textarea
-                      className="w-full border rounded px-2 py-1 font-mono"
-                      value={lambdaForm.environment}
-                      onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
-                      placeholder='{"KEY":"VALUE"}'
-                      rows={2}
-                    />
-                  </div>
-                </div>
-                {lambdaError && <div className="text-red-500 text-sm mt-2">{lambdaError}</div>}
-                <button
-                  type="submit"
-                  className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-                  disabled={isCreatingLambda}
-                >
-                  {isCreatingLambda ? 'Generating Lambda...' : 'Generate Lambda Function'}
-                </button>
-              </form>
-              <div className="space-y-4">
-                {lambdaFunctions.length === 0 ? (
-                  <div className="text-gray-500">No Lambda functions generated yet...</div>
-                ) : (
-                  lambdaFunctions.map((fn, idx) => (
-                    <div key={fn.functionName + idx} className="border border-gray-200 rounded-lg p-4 bg-white">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">{fn.functionName}</h4>
-                        {fn.url && (
-                          <a href={fn.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline text-xs">Open URL</a>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                        <div><strong>Runtime:</strong> {fn.runtime}</div>
-                        <div><strong>Handler:</strong> {fn.handler}</div>
-                        <div><strong>Memory:</strong> {fn.memorySize || fn.memory} MB</div>
-                        <div><strong>Timeout:</strong> {fn.timeout} sec</div>
-                        {fn.environment && (
-                          <div className="md:col-span-2"><strong>Environment:</strong> <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto">{JSON.stringify(fn.environment, null, 2)}</pre></div>
-                        )}
-                        {fn.code && (
-                          <div className="md:col-span-2"><strong>Handler Code:</strong> <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto">{fn.code}</pre></div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                Generate Lambda Handler
+              </button>
+              <label className="block font-semibold mt-4 mb-1">Generated Lambda Code</label>
+              <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
+                {generatedLambdaCode || '// Lambda code will appear here'}
+              </pre>
             </div>
           )}
           {activeTab === 'schema' && (
