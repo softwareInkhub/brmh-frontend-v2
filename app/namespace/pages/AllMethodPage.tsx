@@ -21,6 +21,7 @@ export default function AllMethodPage({ namespace, onViewMethod }: { namespace?:
   const [sidePanelWidth, setSidePanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState('');
 
   const fetchAllMethods = async () => {
     setLoading(true);
@@ -342,23 +343,44 @@ export default function AllMethodPage({ namespace, onViewMethod }: { namespace?:
     return null;
   };
 
+  // Filtered methods based on search
+  const filteredMethods = methods
+    .filter(m => m['namespace-method-name']?.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const urlA = (a['namespace-method-url-override'] || '').toLowerCase();
+      const urlB = (b['namespace-method-url-override'] || '').toLowerCase();
+      if (urlA < urlB) return -1;
+      if (urlA > urlB) return 1;
+      return 0;
+    });
+
   return (
     <div className="p-8 w-full flex relative">
       <div className="flex-1 pr-0">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">All Methods</h2>
-          <button
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-            onClick={() => setSidePanel('create')}
-          >
-            <Plus size={18} /> Create Method
-          </button>
+          <div className="flex gap-2 items-center ">
+            <input
+              type="text"
+              className="border border-gray-300 rounded px-2 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none"
+              placeholder="Search methods..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ minWidth: 200 }}
+            />
+            <button
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+              onClick={() => setSidePanel('create')}
+            >
+              <Plus size={18} /> Create Method
+            </button>
+          </div>
         </div>
         {loading ? (
           <div>Loading...</div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {methods.map((m, idx) => {
+            {filteredMethods.map((m, idx) => {
               let typeIcon = <Database size={16} className="text-gray-400" />;
               if (m['namespace-method-type'] === 'GET') typeIcon = <Zap size={16} className="text-green-500" />;
               if (m['namespace-method-type'] === 'POST') typeIcon = <Send size={16} className="text-orange-500" />;
@@ -369,7 +391,13 @@ export default function AllMethodPage({ namespace, onViewMethod }: { namespace?:
                     <span className="text-base font-semibold text-gray-900 truncate cursor-pointer" onClick={() => setSidePanel({ method: m })}>{m['namespace-method-name']}</span>
                     <span className={`ml-auto px-2 py-0.5 rounded text-xs font-bold ${m['namespace-method-type'] === 'GET' ? 'bg-green-100 text-green-700' : m['namespace-method-type'] === 'POST' ? 'bg-orange-100 text-orange-700' : 'bg-gray-200 text-gray-700'}`}>{m['namespace-method-type']}</span>
                   </div>
-                  <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{m.namespace?.['namespace-name']}</span></div>
+                  <div className="text-xs text-gray-500 truncate">URL Override: <span className="font-medium text-gray-700" title={m['namespace-method-url-override'] || ''}>{
+                    m['namespace-method-url-override']
+                      ? (m['namespace-method-url-override'].length > 40
+                          ? `${m['namespace-method-url-override'].slice(0, 20)}...${m['namespace-method-url-override'].slice(-15)}`
+                          : m['namespace-method-url-override'])
+                      : <span className='italic text-gray-400'>No URL override</span>
+                  }</span></div>
                   <div className="flex gap-2 mt-1">
                     <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => setSidePanel({ method: m })}><Eye size={16} /></button>
                     <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
