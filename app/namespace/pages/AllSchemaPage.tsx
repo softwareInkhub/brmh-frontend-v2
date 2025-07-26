@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
 
 
@@ -14,7 +14,7 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
   const fetchSchemas = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/unified/schema`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema`);
       const data = await res.json();
       setSchemas(Array.isArray(data)
         ? (namespace

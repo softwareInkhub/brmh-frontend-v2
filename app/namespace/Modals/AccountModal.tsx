@@ -34,7 +34,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, account, n
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
   useEffect(() => {
     setForm({

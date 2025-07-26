@@ -45,7 +45,7 @@ interface MethodTestModalProps {
   methodId: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+const API_BASE_URL = 'http://localhost:5001';
 
 export default function MethodTestModal({
   isOpen,
@@ -122,7 +122,9 @@ export default function MethodTestModal({
       setResponse(null);
       setActiveButton(isPaginated ? 'loop' : 'send');
 
-      const endpoint = `${API_BASE_URL}/unified/execute`;
+      const endpoint = isPaginated
+        ? `${API_BASE_URL}/unified/execute/paginated`
+        : `${API_BASE_URL}/unified/execute`;
 
       // Prepare headers from the form
       const formHeaders = Object.fromEntries(
@@ -134,18 +136,25 @@ export default function MethodTestModal({
       const requestData = {
         method: methodType,
         url: url,
-        paginated: isPaginated,
-        ...(isPaginated && maxIterations ? { maxIterations: parseInt(maxIterations) } : {}),
+        namespaceAccountId: selectedAccount['namespace-account-id'],
         queryParams: Object.fromEntries(
           queryParams
             .filter(p => p.key && p.key.trim() !== '')
             .map(p => [p.key.trim(), p.value])
         ),
         headers: formHeaders,
+        ...(isPaginated ? { 
+          ...(maxIterations ? { maxIterations: parseInt(maxIterations) } : {}),
+          paginationType: 'link',
+          paginationConfig: {
+            limitParam: 'limit',
+            pageParam: 'page_info',
+            defaultLimit: '50'
+          }
+        } : {}),
         ...(activeTab === 'body' && requestBody ? { body: tryParseJSON(requestBody) } : {}),
         tableName: `${namespaceName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${selectedAccount['namespace-account-name'].toLowerCase().replace(/[^a-z0-9]/g, '_')}_${methodName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        saveData: saveData,
-        save: !isPaginated // Only save execution log for single requests
+        saveData: saveData
       };
 
       console.log('============ Request Details ============');

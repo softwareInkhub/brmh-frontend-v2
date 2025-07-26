@@ -55,7 +55,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
   const [webhookError, setWebhookError] = useState('');
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [allWebhooks, setAllWebhooks] = useState<any[]>([]);
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
   const [showTableModal, setShowTableModal] = useState(false);
   const [tableNameInput, setTableNameInput] = useState('');
 

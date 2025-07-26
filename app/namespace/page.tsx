@@ -32,19 +32,19 @@ import AllWebhookPage from './pages/AllWebhookPage';
 import WebhookPage from './pages/WebhookPage';
 
 // Dynamically import AIAgentWorkspace to prevent SSR issues
-const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
-  ssr: false,
-  loading: () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8">
-        <div className="flex items-center gap-3">
-          <Bot className="text-blue-500 animate-pulse" size={24} />
-          <span>Loading AI Agent Workspace...</span>
-        </div>
-      </div>
-    </div>
-  )
-});
+// const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
+//   ssr: false,
+//   loading: () => (
+//     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+//       <div className="bg-white rounded-lg p-8">
+//         <div className="flex items-center gap-3">
+//           <Bot className="text-blue-500 animate-pulse" size={24} />
+//           <span>Loading AI Agent Workspace...</span>
+//         </div>
+//       </div>
+//     </div>
+//   )
+// });
 
 
 const SIDEBAR_WIDTH = 80; // px, w-20
@@ -189,7 +189,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
       
       try {
     // Fetch namespaces
-        const namespacesRes = await fetch(`/unified/namespaces`);
+        const namespacesRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`);
         console.log('Namespaces response status:', namespacesRes.status);
         if (!namespacesRes.ok) {
           throw new Error(`HTTP error! status: ${namespacesRes.status}`);
@@ -216,7 +216,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
       try {
     // Fetch schemas
-        const schemasRes = await fetch(`/unified/schema`);
+        const schemasRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema`);
         console.log('Schemas response status:', schemasRes.status);
         if (!schemasRes.ok) {
           throw new Error(`HTTP error! status: ${schemasRes.status}`);
@@ -248,7 +248,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   // Fetch webhooks for a namespace
   const fetchNamespaceWebhooks = async (namespaceId: string) => {
     try {
-      const res = await fetch(`/unified/webhooks/namespace/${namespaceId}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/webhooks/namespace/${namespaceId}`);
       if (!res.ok) throw new Error('Failed to fetch webhooks');
       const data = await res.json();
       setWebhooksMap(prev => ({ ...prev, [namespaceId]: Array.isArray(data) ? data : [] }));
@@ -261,8 +261,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
-        fetch(`/unified/namespaces/${namespaceId}/accounts`),
-        fetch(`/unified/namespaces/${namespaceId}/methods`)
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/accounts`),
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/methods`)
       ]);
       const [accounts, methods] = await Promise.all([
         accountsRes.json(),
@@ -532,8 +532,8 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     try {
       const isEdit = !!namespace["namespace-id"];
       const url = isEdit
-        ? `/unified/namespaces/${namespace["namespace-id"]}`
-        : `/unified/namespaces`;
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`
+        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`;
       const method = isEdit ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
@@ -568,7 +568,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     if (!namespace || !namespace["namespace-id"]) return;
     if (!window.confirm('Are you sure you want to delete this namespace?')) return;
     try {
-              const response = await fetch(`/unified/namespaces/${namespace["namespace-id"]}`, {
+              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`, {
         method: 'DELETE',
       });
       if (!response.ok && response.status !== 204) {
@@ -768,7 +768,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               onDeleteSchema={async (schema) => {
                 if (confirm('Are you sure you want to delete this schema?')) {
                   try {
-                          const response = await fetch(`/unified/schema/${schema.id}`, {
+                          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                       method: 'DELETE',
                     });
                     if (!response.ok) throw new Error('Failed to delete schema');
@@ -1108,14 +1108,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              <AIAgentWorkspace
+                              {/* <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              />
+                              /> */}
                             </div>
                           );
                         }
@@ -1397,14 +1397,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              <AIAgentWorkspace
+                              {/* <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              />
+                              /> */}
           </div>
                           );
                         }
@@ -1424,7 +1424,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
             onDelete={async (schema) => {
               if (confirm('Are you sure you want to delete this schema?')) {
                 try {
-                        const response = await fetch(`/unified/schema/${schema.id}`, {
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                     method: 'DELETE',
                   });
                   if (!response.ok) throw new Error('Failed to delete schema');
@@ -1566,7 +1566,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         onDelete={async (schema) => {
           if (confirm('Are you sure you want to delete this schema?')) {
             try {
-                  const response = await fetch(`/unified/schema/${schema.id}`, {
+                  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                 method: 'DELETE',
               });
               if (!response.ok) throw new Error('Failed to delete schema');
