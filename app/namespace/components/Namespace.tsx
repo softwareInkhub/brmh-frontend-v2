@@ -82,7 +82,7 @@ export default function NamespacePage() {
   useEffect(() => {
     async function fetchNamespaces() {
       try {
-        const response = await fetch(`http://localhost:5001/unified/namespaces`);
+        const response = await fetch(`${API_BASE_URL}/unified/namespaces`);
         const data = await response.json();
         const namespacesArray = Array.isArray(data) ? data : 
                                (data && Array.isArray(data.body) ? data.body : []);

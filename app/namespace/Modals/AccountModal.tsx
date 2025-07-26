@@ -34,6 +34,7 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, account, n
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
 
   useEffect(() => {
     setForm({
@@ -56,8 +57,8 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, account, n
     try {
       const isEdit = !!form["namespace-account-id"];
       const url = isEdit
-        ? `http://localhost:5001/unified/accounts/${form["namespace-account-id"]}`
-        : `http://localhost:5001/unified/namespaces/${namespaceId}/accounts`;
+        ? `${API_BASE_URL}/unified/accounts/${form["namespace-account-id"]}`
+        : `${API_BASE_URL}/unified/namespaces/${namespaceId}/accounts`;
 
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',

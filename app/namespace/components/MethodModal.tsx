@@ -7,6 +7,8 @@ interface KeyValuePair {
   value: string;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+
 interface Method {
   "namespace-method-id": string;
   "namespace-method-name": string;
@@ -70,8 +72,8 @@ const MethodModal: React.FC<MethodModalProps> = ({ isOpen, onClose, method, name
     try {
       const isEdit = !!form["namespace-method-id"];
       const url = isEdit
-        ? `http://localhost:5001/unified/methods/${form["namespace-method-id"]}`
-        : `http://localhost:5001/unified/namespaces/${namespaceId}/methods`;
+        ? `${API_BASE_URL}/unified/methods/${form["namespace-method-id"]}`
+        : `${API_BASE_URL}/unified/namespaces/${namespaceId}/methods`;
 
       const response = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',

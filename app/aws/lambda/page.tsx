@@ -450,3 +450,43 @@
                     </div>
                     <div className="flex items-center">
                       <div className={`
+                        w-2 h-2 rounded-full ${
+                          func.State === 'Active' 
+                            ? 'bg-green-500' 
+                            : 'bg-gray-400'
+                        }
+                      `} />
+                      <span className="ml-2 text-xs text-gray-500">
+                        {func.State}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Function Details Modal */}
+        {selectedFunction && (
+          <FunctionDetailsModal
+            func={selectedFunction}
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setSelectedFunction(null);
+            }}
+          />
+        )}
+
+        {/* Create Function Modal */}
+        {isCreateModalOpen && (
+          <CreateFunctionModal
+            isOpen={isCreateModalOpen}
+            onClose={() => setIsCreateModalOpen(false)}
+            onSuccess={handleCreateSuccess}
+          />
+        )}
+      </div>
+    );
+  }

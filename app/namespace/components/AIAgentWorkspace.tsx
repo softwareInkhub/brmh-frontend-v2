@@ -135,6 +135,8 @@ What would you like to work on today?`,
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+
   // Initialize terminal only on client side
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -195,7 +197,7 @@ What would you like to work on today?`,
   useEffect(() => {
     if (namespace?.['namespace-id'] && sessionId) {
       // Clear generated schemas for this session/namespace on mount/refresh
-      fetch('http://localhost:5001/ai-agent/clear-generated-schemas', {
+      fetch(`${process.env.NEXT_PUBLIC_API_BACKEND_URL}/ai-agent/clear-generated-schemas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, namespaceId: namespace['namespace-id'] })

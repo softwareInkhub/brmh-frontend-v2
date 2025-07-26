@@ -534,7 +534,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
             { key: 'deleteData', label: 'Delete Data', icon: <Trash2 size={16} /> },
           ].map(tab => (
             (tab.key === 'edit' || isEditing) && (
-              <button
+        <button
                 key={tab.key}
                 role="tab"
                 aria-selected={activeTab === tab.key}
@@ -547,7 +547,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               >
                 {tab.icon}
                 <span>{tab.label}</span>
-              </button>
+        </button>
             )
           ))}
         </nav>
@@ -737,8 +737,8 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 }}
               >
                 Create Table
-              </button>
-                </div>
+                    </button>
+                  </div>
               );
             }
             // If table exists, show the form

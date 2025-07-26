@@ -24,6 +24,8 @@ interface AccountPreviewModalProps {
   onLink?: (account: Account) => void;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+
 const AccountPreviewModal: React.FC<AccountPreviewModalProps> = ({ isOpen, onClose, account, onEdit, onDelete, onLink }) => {
   if (!isOpen || !account) return null;
 
@@ -134,7 +136,7 @@ const AccountPreviewModal: React.FC<AccountPreviewModalProps> = ({ isOpen, onClo
               if (window.confirm('Are you sure you want to delete this account?')) {
                 try {
                   const response = await fetch(
-                    `http://localhost:5001/unified/accounts/${account['namespace-account-id']}`,
+                    `${API_BASE_URL}/unified/accounts/${account['namespace-account-id']}`,
                     { method: 'DELETE' }
                   );
                   if (!response.ok) throw new Error('Failed to delete account');

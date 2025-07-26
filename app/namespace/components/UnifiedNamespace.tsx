@@ -59,7 +59,7 @@ interface UnifiedSchema {
   [key: string]: any;
 }
 
-const API_BASE_URL = "http://localhost:5001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL ||   "http://localhost:5001";
 
 // --- MethodPreviewModal ---
 interface MethodPreviewModalProps {
@@ -974,7 +974,11 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><FileCode size={14}/> Schemas</span>
                   <button
                     className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 rounded-full bg-purple-50 font-semibold"
-                    onClick={() => { setSchemaModalNamespace(ns); setShowUnifiedSchemaModal(true); }}
+                    onClick={() => { 
+                      const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                      setSchemaModalNamespace(currentNamespace); 
+                      setShowUnifiedSchemaModal(true); 
+                    }}
                   >
                     + Create Schema
                   </button>

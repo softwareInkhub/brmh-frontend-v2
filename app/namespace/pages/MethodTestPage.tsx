@@ -170,9 +170,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
         urlWithParams += (urlWithParams.includes('?') ? '&' : '?') + searchParams.toString();
       }
 
-      const endpoint = isPaginated
-        ? `${API_BASE_URL}/unified/execute/paginated`
-        : `${API_BASE_URL}/unified/execute`;
+      const endpoint = `${API_BASE_URL}/unified/execute`;
 
       const formHeaders = Object.fromEntries(
         headers.filter(h => h.key && h.key.trim() !== '').map(h => [h.key.trim(), h.value])
@@ -181,28 +179,20 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       const requestData = {
         method: methodType,
         url: urlWithParams,
-        namespaceAccountId: selectedAccount['namespace-account-id'],
+        paginated: isPaginated,
+        ...(isPaginated && maxIterations ? { maxIterations: parseInt(maxIterations) } : {}),
         queryParams: Object.fromEntries(
           queryParams.filter(p => p.key && p.key.trim() !== '').map(p => [p.key.trim(), p.value])
         ),
         headers: formHeaders,
-        ...(isPaginated ? { 
-          ...(maxIterations ? { maxIterations: parseInt(maxIterations) } : {}),
-          paginationType: 'link',
-          paginationConfig: {
-            limitParam: 'limit',
-            pageParam: 'page_info',
-            defaultLimit: '50'
-          }
-        } : {}),
         ...(activeTab === 'body' && requestBody ? { body: tryParseJSON(requestBody) } : {}),
         ...(saveData && dynamicTableName ? {
           tableName: dynamicTableName,
-          saveData: true,
-          schemaId: method?.['schemaId'] || null
+          saveData: true
         } : {
           saveData: false
-        })
+        }),
+        save: !isPaginated // Only save execution log for single requests
       };
       // Log the request details
       console.log('[MethodTestPage] Sending request:', {
