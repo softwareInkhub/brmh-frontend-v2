@@ -148,15 +148,6 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       <div className="flex items-center gap-2 cursor-pointer hover:bg-blue-50 rounded-lg px-3 py-2 mb-2">
         <LayoutDashboard className="text-blue-600" size={20} />
         <span className="font-bold text-lg text-gray-900">BRMH</span>
-        {onOpenAIAgent && (
-          <button
-            onClick={() => onOpenAIAgent()}
-            className="ml-auto p-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-600 text-white hover:from-purple-600 hover:to-blue-700 transition-all"
-            title="Open AI Agent Workspace"
-          >
-            <Bot size={16} />
-          </button>
-        )}
       </div>
       {/* Search/Filter/Add Row */}
       <div className="flex items-center px-3 py-2 space-x-2 border-b border-gray-100 bg-white">

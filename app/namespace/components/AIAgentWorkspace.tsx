@@ -119,6 +119,7 @@ What would you like to work on today?`,
   const [liveSchema, setLiveSchema] = useState('');
   const [isStreamingSchema, setIsStreamingSchema] = useState(false);
   const [schemaEditPrompt, setSchemaEditPrompt] = useState('');
+  const [isEditingSchema, setIsEditingSchema] = useState(false);
 
   // Add state for schema names
   const [schemaNames, setSchemaNames] = useState<{ [id: string]: string }>({});
@@ -131,6 +132,9 @@ What would you like to work on today?`,
 
   // Lambda tab UI additions
   // 1. Add state for lambdaPrompt and generatedLambdaCode
+  
+  // Run Project functionality
+  const [isRunningProject, setIsRunningProject] = useState(false);
   const [lambdaPrompt, setLambdaPrompt] = useState('');
   const [generatedLambdaCode, setGeneratedLambdaCode] = useState('');
 
@@ -371,6 +375,30 @@ What would you like to work on today?`,
     let actions = [];
     let lastAssistantMessageId: string | null = null;
 
+    // Always pass the existing schema if we have one, regardless of the request type
+    let schemaToEdit = currentSchema;
+    if (!schemaToEdit && schemas.length > 0) {
+      // Always use the existing schema for any schema-related request
+      schemaToEdit = schemas[0].schema;
+      console.log('[Frontend] Using existing schema for request:', schemaToEdit);
+      
+      // Check if this is an edit command for visual feedback
+      const lowerMessage = userMessage.toLowerCase();
+      const editKeywords = ['edit', 'modify', 'update', 'change', 'add', 'remove', 'delete', 'rename'];
+      const isEditCommand = editKeywords.some(keyword => lowerMessage.includes(keyword));
+      
+      if (isEditCommand) {
+        setIsEditingSchema(true);
+        setConsoleOutput(prev => [...prev, `🔄 Editing schema: ${userMessage}`]);
+      }
+    }
+
+    console.log('[Frontend] Sending request to backend:', {
+      message: userMessage,
+      hasExistingSchema: !!schemaToEdit,
+      schemaToEdit: schemaToEdit ? 'Schema exists' : 'No schema'
+    });
+
     const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -380,7 +408,7 @@ What would you like to work on today?`,
         action: null,
         history: messages.map(m => ({ role: m.role, content: m.content })),
         userId,
-        schema: currentSchema,
+        schema: schemaToEdit,
       })
     });
 
@@ -413,7 +441,12 @@ What would you like to work on today?`,
               
               if (data.route === 'schema') {
                 // Live update the schema preview in the Schema tab
-                if (data.type === 'chat') setLiveSchema(prev => prev + data.content);
+                if (data.type === 'chat') {
+                  setLiveSchema(prev => prev + data.content);
+                  setIsStreamingSchema(true);
+                  // Add console output to show schema generation progress
+                  setConsoleOutput(prev => [...prev, `🔄 Generating schema...`]);
+                }
               } else if (data.route === 'chat') {
                 // Live update the assistant's message in the chat UI
                 if (data.type === 'chat') {
@@ -446,6 +479,10 @@ What would you like to work on today?`,
       }
     } finally {
       reader.releaseLock();
+      // Reset editing state if no actions were processed
+      if (actions.length === 0) {
+        setIsEditingSchema(false);
+      }
     }
 
         // Process actions after streaming is complete
@@ -457,7 +494,8 @@ What would you like to work on today?`,
           switch (action.type) {
             case 'generate_schema': {
               console.log('[Frontend] Processing generate_schema action:', action.data);
-              // When adding a new schema, always include the correct namespaceId
+              console.log('[Frontend] WARNING: Received generate_schema action when schema should be edited!');
+              // Replace existing schema or create new one (maintain only one schema)
               const newSchema = {
                 id: Date.now().toString(),
                 name: action.data.name || 'Generated Schema',
@@ -465,12 +503,40 @@ What would you like to work on today?`,
                 namespaceId: namespace?.['namespace-id'] || '',
                 timestamp: action.data.timestamp || new Date()
               };
-              console.log('[Frontend] Adding new schema:', newSchema);
-              setSchemas((prev) => [...prev, newSchema]);
-              setRawSchemas((prev) => [...prev, { id: newSchema.id, content: JSON.stringify(action.data, null, 2) }]);
+              console.log('[Frontend] Setting schema (replacing existing):', newSchema);
+              setSchemas([newSchema]); // Replace all schemas with just this one
+              setRawSchemas([{ id: newSchema.id, content: JSON.stringify(action.data, null, 2) }]); // Replace all raw schemas
               setActiveTab('schema');
               setConsoleOutput((prev) => [...prev, '✅ Schema generated successfully']);
               setLiveSchema('');
+              setIsStreamingSchema(false);
+              break;
+            }
+            case 'edit_schema': {
+              console.log('[Frontend] Processing edit_schema action:', action.data);
+              // Update the existing schema with the edited version
+              if (schemas.length > 0) {
+                const updatedSchema = {
+                  ...schemas[0], // Use the first (and only) schema
+                  schema: action.data,
+                  edited: true,
+                  lastEdited: new Date()
+                };
+                setSchemas([updatedSchema]); // Keep only one schema
+                
+                // Update the raw schema content
+                const updatedRawSchema = {
+                  ...rawSchemas[0], // Use the first (and only) raw schema
+                  content: JSON.stringify(action.data, null, 2)
+                };
+                setRawSchemas([updatedRawSchema]); // Keep only one raw schema
+                
+                setActiveTab('schema');
+                setConsoleOutput((prev) => [...prev, '✅ Schema edited successfully']);
+                setLiveSchema('');
+                setIsStreamingSchema(false);
+                setIsEditingSchema(false);
+              }
               break;
             }
             case 'generate_api': {
@@ -1333,6 +1399,108 @@ ${timestamp}
     return newFiles;
   };
 
+  // Run Project functionality
+  const runProject = async () => {
+    if (!namespace?.['namespace-id']) {
+      setConsoleOutput(prev => [...prev, '❌ Error: No namespace selected']);
+      return;
+    }
+
+    setIsRunningProject(true);
+    setConsoleOutput(prev => [...prev, '🔄 Starting project deployment...']);
+
+    try {
+      // Find Lambda functions in the project files
+      const lambdaFiles = projectFiles.filter(file => 
+        file.name === 'index.js' && file.content && file.content.includes('exports.handler')
+      );
+
+      if (lambdaFiles.length === 0) {
+        setConsoleOutput(prev => [...prev, '⚠️ No Lambda functions found to deploy']);
+        setConsoleOutput(prev => [...prev, '💡 Generate a Lambda function first using the Lambda tab']);
+        return;
+      }
+
+      setConsoleOutput(prev => [...prev, `📦 Found ${lambdaFiles.length} Lambda function(s) to deploy`]);
+
+      // Deploy each Lambda function
+      for (const lambdaFile of lambdaFiles) {
+        const functionName = lambdaFile.path.split('/').pop()?.replace('.js', '') || 'lambda-function';
+        const sanitizedFunctionName = functionName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+        
+        setConsoleOutput(prev => [...prev, `🚀 Deploying Lambda function: ${sanitizedFunctionName}`]);
+
+        try {
+          // Deploy the Lambda function
+          const deployResponse = await fetch('http://localhost:5001/lambda/deploy', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              functionName: sanitizedFunctionName,
+              code: lambdaFile.content,
+              runtime: 'nodejs18.x',
+              handler: 'index.handler',
+              memorySize: 128,
+              timeout: 30
+            })
+          });
+
+          if (!deployResponse.ok) {
+            const errorData = await deployResponse.json();
+            throw new Error(errorData.error || 'Failed to deploy Lambda function');
+          }
+
+          const deployResult = await deployResponse.json();
+          setConsoleOutput(prev => [...prev, `✅ Successfully deployed: ${deployResult.functionName}`]);
+          setConsoleOutput(prev => [...prev, `🔗 Function ARN: ${deployResult.functionArn}`]);
+
+          // Test the deployed function
+          setConsoleOutput(prev => [...prev, `🧪 Testing deployed function...`]);
+          
+          const testResponse = await fetch('http://localhost:5001/lambda/invoke', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              functionName: sanitizedFunctionName,
+              payload: {
+                test: true,
+                message: 'Hello from AI Agent Workspace!'
+              }
+            })
+          });
+
+          if (testResponse.ok) {
+            const testResult = await testResponse.json();
+            setConsoleOutput(prev => [...prev, `✅ Function test successful!`]);
+            setConsoleOutput(prev => [...prev, `📊 Status Code: ${testResult.statusCode}`]);
+            if (testResult.payload) {
+              setConsoleOutput(prev => [...prev, `📄 Response: ${JSON.stringify(testResult.payload, null, 2)}`]);
+            }
+          } else {
+            setConsoleOutput(prev => [...prev, `⚠️ Function deployed but test failed`]);
+          }
+
+        } catch (error: any) {
+          setConsoleOutput(prev => [...prev, `❌ Failed to deploy ${sanitizedFunctionName}: ${error.message}`]);
+        }
+      }
+
+      setConsoleOutput(prev => [...prev, '🎉 Project deployment completed!']);
+      setConsoleOutput(prev => [...prev, '🌐 Your Lambda functions are now live on AWS']);
+
+    } catch (error: any) {
+      setConsoleOutput(prev => [...prev, `❌ Project deployment failed: ${error.message}`]);
+    } finally {
+      setIsRunningProject(false);
+    }
+  };
+
+
+
   // State for saved items
   const [savedSchemas, setSavedSchemas] = useState<any[]>([]); // For Lambda dropdown only
   const [savedApis, setSavedApis] = useState<any[]>([]);
@@ -1660,16 +1828,24 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
             <div className="h-full overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium">Generated Schemas</h3>
+                <div className="flex gap-2">
+                  <span className="text-sm text-gray-600">
+                    {schemas.length > 0 ? 'Schema generated' : 'No schema generated yet'}
+                  </span>
+                </div>
               </div>
               {schemas.length === 0 ? (
                 <div className="text-gray-500">No schemas generated yet...</div>
               ) : (
                 <div className="space-y-4">
                   {schemas.map((schema: any, index: number) => (
-                    <div key={schema.id} className="border border-gray-200 rounded-lg p-4 bg-white">
+                    <div key={schema.id} className={`border border-gray-200 rounded-lg p-4 ${isEditingSchema && index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium">{schema.schemaName || schema.name || 'Unnamed Schema'}</h4>
+                          {schema.edited && (
+                            <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">Edited</span>
+                          )}
                           {!schema.saved && (
                             <>
                               <input
@@ -1796,19 +1972,15 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                 <h3 className="font-medium">Console Output</h3>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      if (namespace?.['namespace-id']) {
-                        setConsoleOutput(prev => [...prev, '🔄 Running project...']);
-                        // Simulate running the project
-                        setTimeout(() => {
-                          setConsoleOutput(prev => [...prev, '✅ Project started successfully']);
-                          setConsoleOutput(prev => [...prev, '🌐 Server running on http://localhost:3000']);
-                        }, 1000);
-                      }
-                    }}
-                    className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                    onClick={runProject}
+                    disabled={isRunningProject}
+                    className={`px-3 py-1 text-sm rounded ${
+                      isRunningProject 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-green-500 hover:bg-green-600'
+                    } text-white`}
                   >
-                    Run Project
+                    {isRunningProject ? 'Running...' : 'Run Project'}
                   </button>
                   <button
                     onClick={() => setConsoleOutput([])}
