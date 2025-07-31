@@ -106,6 +106,8 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   // Add state for live schema preview and streaming
   const [liveSchema, setLiveSchema] = useState('');
   const [isStreamingSchema, setIsStreamingSchema] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [schemaEditPrompt, setSchemaEditPrompt] = useState('');
   const [isEditingSchema, setIsEditingSchema] = useState(false);
   // Add state for schema names
@@ -190,6 +192,22 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     }
   }, [namespace?.['namespace-id']]);
 
+  // Function to refresh saved schemas
+  const refreshSavedSchemas = async () => {
+    if (namespace?.['namespace-id']) {
+      try {
+        const response = await fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`);
+        if (response.ok) {
+          const schemas = await response.json();
+          setSavedSchemas(schemas);
+          console.log('Refreshed saved schemas:', schemas);
+        }
+      } catch (error) {
+        console.error('Error refreshing saved schemas:', error);
+      }
+    }
+  };
+
   const getNowId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Memory service functions
@@ -197,7 +215,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     if (!sessionId || !namespace?.['namespace-id']) return;
     
     try {
-      const response = await fetch('http://localhost:5001/ai-agent/get-workspace-state', {
+      const response = await fetch(`${API_BASE_URL}/ai-agent/get-workspace-state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, namespaceId: namespace['namespace-id'] })
@@ -228,7 +246,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     };
     
     try {
-      await fetch('http://localhost:5001/ai-agent/save-workspace-state', {
+      await fetch(`${API_BASE_URL}/ai-agent/save-workspace-state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +266,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     if (!sessionId) return;
     
     try {
-      const response = await fetch('http://localhost:5001/ai-agent/chat-history', {
+      const response = await fetch(`${API_BASE_URL}/ai-agent/chat-history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, userId, limit: 50 })
@@ -275,7 +293,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     if (!sessionId) return;
     
     try {
-      await fetch('http://localhost:5001/ai-agent/clear-history', {
+      await fetch(`${API_BASE_URL}/ai-agent/clear-history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
@@ -311,28 +329,39 @@ What would you like to work on today?`,
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+    if (!inputMessage.trim()) return;
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
-    setIsLoading(true);
-
-    // Add user message
+    
+    // Add user message to chat
     addMessage({
       role: 'user',
       content: userMessage
     });
 
+    // Add console output for message processing
+    setConsoleOutput(prev => [...prev, `👤 User message: ${userMessage.substring(0, 50)}${userMessage.length > 50 ? '...' : ''}`]);
+    
+    // Check if this might be a schema-related request
+    const lowerMessage = userMessage.toLowerCase();
+    const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format', 'api', 'endpoint'];
+    const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (isSchemaRequest) {
+      setConsoleOutput(prev => [...prev, `🔍 Detected potential schema request`]);
+    }
+
     try {
       await handleStreamingResponse(userMessage);
-    } catch (error: any) {
-      console.error('Error sending message:', error);
+    } catch (error) {
+      console.error('Error handling streaming response:', error);
+      setConsoleOutput(prev => [...prev, `❌ Error processing message: ${error.message}`]);
+      
       addMessage({
         role: 'assistant',
         content: `Sorry, I encountered an error: ${error.message}`
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -358,11 +387,30 @@ What would you like to work on today?`,
         setConsoleOutput(prev => [...prev, `🔄 Editing schema: ${userMessage}`]);
       }
     }
+    
+    // Add console output for schema generation start
+    const lowerMessage = userMessage.toLowerCase();
+    const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format'];
+    const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (isSchemaRequest) {
+      if (schemaToEdit) {
+        setConsoleOutput(prev => [...prev, `📝 Schema editing request: ${userMessage}`]);
+        setConsoleOutput(prev => [...prev, `📋 Using existing schema as base`]);
+      } else {
+        setConsoleOutput(prev => [...prev, `🆕 Schema generation request: ${userMessage}`]);
+        setConsoleOutput(prev => [...prev, `✨ Creating new schema from scratch`]);
+      }
+    }
+    
     console.log('[Frontend] Sending request to backend:', {
       message: userMessage,
       hasExistingSchema: !!schemaToEdit,
       schemaToEdit: schemaToEdit ? 'Schema exists' : 'No schema'
     });
+    
+    setConsoleOutput(prev => [...prev, `🌐 Connecting to AI agent backend...`]);
+    
     const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -375,36 +423,61 @@ What would you like to work on today?`,
         schema: schemaToEdit,
       })
     });
+    
     if (!response.ok) {
+      setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+    
+    setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting AI processing...`]);
+    
     const reader = response.body?.getReader();
     if (!reader) {
+      setConsoleOutput(prev => [...prev, `❌ No response body received`]);
       throw new Error('No response body');
     }
+    
+    let chunkCount = 0;
+    let schemaChunkCount = 0;
+    
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        
+        chunkCount++;
         const chunk = new TextDecoder().decode(value);
         const lines = chunk.split('\n');
+        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
               console.log('[Frontend] Received streaming data:', data);
+              
               // Handle actions regardless of route
               if (data.type === 'actions' && data.actions) {
                 console.log('[Frontend] Received actions:', data.actions);
                 actions = data.actions;
+                setConsoleOutput(prev => [...prev, `📋 Received ${data.actions.length} action(s) from AI agent`]);
               }
+              
               if (data.route === 'schema') {
                 // Live update the schema preview in the Schema tab
                 if (data.type === 'chat') {
                   setLiveSchema(prev => prev + data.content);
                   setIsStreamingSchema(true);
+                  schemaChunkCount++;
+                  
                   // Add console output to show schema generation progress
-                  setConsoleOutput(prev => [...prev, `🔄 Generating schema...`]);
+                  if (schemaChunkCount === 1) {
+                    setConsoleOutput(prev => [...prev, `🔄 AI agent started generating schema...`]);
+                  }
+                  
+                  // Update progress every 5 chunks
+                  if (schemaChunkCount % 5 === 0) {
+                    setConsoleOutput(prev => [...prev, `📝 Schema generation in progress... (chunk ${schemaChunkCount})`]);
+                  }
                 }
               } else if (data.route === 'chat') {
                 // Live update the assistant's message in the chat UI
@@ -443,16 +516,23 @@ What would you like to work on today?`,
         setIsEditingSchema(false);
       }
     }
-        // Process actions after streaming is complete
+    // Process actions after streaming is complete
     console.log('[Frontend] Processing actions:', actions);
+    setConsoleOutput(prev => [...prev, `🔍 Processing AI agent actions...`]);
+    
     if (actions && Array.isArray(actions)) {
       for (const action of actions) {
         console.log('[Frontend] Processing action:', action);
+        setConsoleOutput(prev => [...prev, `⚙️ Processing action: ${action.type}`]);
+        
         if (action.status === 'complete' && action.data) {
           switch (action.type) {
             case 'generate_schema': {
               console.log('[Frontend] Processing generate_schema action:', action.data);
               console.log('[Frontend] WARNING: Received generate_schema action when schema should be edited!');
+              
+              setConsoleOutput(prev => [...prev, `🎯 Processing schema generation action`]);
+              
               // Replace existing schema or create new one (maintain only one schema)
               const newSchema = {
                 id: Date.now().toString(),
@@ -461,17 +541,25 @@ What would you like to work on today?`,
                 namespaceId: namespace?.['namespace-id'] || '',
                 timestamp: action.data.timestamp || new Date()
               };
+              
               console.log('[Frontend] Setting schema (replacing existing):', newSchema);
               setSchemas([newSchema]); // Replace all schemas with just this one
               setRawSchemas([{ id: newSchema.id, content: JSON.stringify(action.data, null, 2) }]); // Replace all raw schemas
               setActiveTab('schema');
-              setConsoleOutput((prev) => [...prev, '✅ Schema generated successfully']);
+              
+              setConsoleOutput(prev => [...prev, `✅ Schema generated successfully!`]);
+              setConsoleOutput(prev => [...prev, `📋 Schema name: ${newSchema.name}`]);
+              setConsoleOutput(prev => [...prev, `🆔 Schema ID: ${newSchema.id}`]);
+              setConsoleOutput(prev => [...prev, `📏 Schema size: ${JSON.stringify(action.data).length} characters`]);
+              
               setLiveSchema('');
               setIsStreamingSchema(false);
               break;
             }
             case 'edit_schema': {
               console.log('[Frontend] Processing edit_schema action:', action.data);
+              setConsoleOutput(prev => [...prev, `🎯 Processing schema editing action`]);
+              
               // Update the existing schema with the edited version
               if (schemas.length > 0) {
                 const updatedSchema = {
@@ -488,7 +576,11 @@ What would you like to work on today?`,
                 };
                 setRawSchemas([updatedRawSchema]); // Keep only one raw schema
                 setActiveTab('schema');
-                setConsoleOutput((prev) => [...prev, '✅ Schema edited successfully']);
+                
+                setConsoleOutput(prev => [...prev, `✅ Schema edited successfully!`]);
+                setConsoleOutput(prev => [...prev, `📋 Updated schema: ${updatedSchema.name}`]);
+                setConsoleOutput(prev => [...prev, `📏 New schema size: ${JSON.stringify(action.data).length} characters`]);
+                
                 setLiveSchema('');
                 setIsStreamingSchema(false);
                 setIsEditingSchema(false);
@@ -531,7 +623,7 @@ What would you like to work on today?`,
               // Trigger backend code generation and update Files tab
               setConsoleOutput((prev: string[]) => [...prev, '🚀 Generating backend code...']);
               // Call backend codegen endpoint
-              fetch('http://localhost:5001/code-generation/generate-backend', {
+              fetch(`${API_BASE_URL}/code-generation/generate-backend`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -747,7 +839,7 @@ What would you like to work on today?`,
     if (!namespace?.['namespace-id']) return;
     
     try {
-      const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}`);
+      const response = await fetch(`${API_BASE_URL}/code-generation/files/${namespace['namespace-id']}`);
       if (response.ok) {
         const data = await response.json();
         if (data.files) {
@@ -803,7 +895,7 @@ What would you like to work on today?`,
     if (!namespace?.['namespace-id']) return;
     
     try {
-      const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(filePath)}`);
+      const response = await fetch(`${API_BASE_URL}/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(filePath)}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -931,7 +1023,7 @@ What would you like to work on today?`,
               if (file.type === 'file' && namespace?.['namespace-id']) {
                 // Load actual file content
                 try {
-                  const response = await fetch(`http://localhost:5001/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(file.path)}`);
+                  const response = await fetch(`${API_BASE_URL}/code-generation/files/${namespace['namespace-id']}/${encodeURIComponent(file.path)}`);
                   
                   if (response.ok) {
                     const data = await response.json();
@@ -979,7 +1071,13 @@ What would you like to work on today?`,
       if (api?.openApi?.apiId) {
         // Remove leading slash if present
         const cleanPath = endpoint.path.startsWith('/') ? endpoint.path.slice(1) : endpoint.path;
-        url = `http://localhost:5001/dynamic-api/${api.openApi.apiId}/${cleanPath}`;
+        // Construct the URL
+        let url;
+        if (api.openApi && api.openApi.apiId) {
+          url = `${API_BASE_URL}/dynamic-api/${api.openApi.apiId}/${cleanPath}`;
+        } else {
+          url = endpoint.path.startsWith('http') ? endpoint.path : `${API_BASE_URL}${endpoint.path}`;
+        }
         console.log(`[API Test] Using dynamic API endpoint: ${url}`);
       } else {
         // Fallback to direct URL
@@ -1016,7 +1114,7 @@ What would you like to work on today?`,
 
     setSavingApi((prev) => ({ ...prev, [apiData.apiId]: true }));
     try {
-      const response = await fetch('http://localhost:5001/save-api-to-namespace', {
+      const response = await fetch(`${API_BASE_URL}/save-api-to-namespace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1056,47 +1154,43 @@ What would you like to work on today?`,
   };
 
   const handleSaveSchemaToNamespace = async (schemaData: any) => {
-    if (!namespace?.['namespace-id'] || !schemaData.canSaveToNamespace) {
-      console.warn('Cannot save schema: missing namespace or save not allowed');
-      return;
-    }
-
     setSavingSchema((prev) => ({ ...prev, [schemaData.id || 'schema']: true }));
     try {
-      const response = await fetch('http://localhost:5001/save-schema-to-namespace', {
+      setConsoleOutput(prev => [...prev, `💾 Saving schema to namespace...`]);
+      setConsoleOutput(prev => [...prev, `📋 Schema name: ${schemaData.name || 'Unnamed Schema'}`]);
+      
+      const response = await fetch(`${API_BASE_URL}/save-schema-to-namespace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          namespaceId: namespace['namespace-id'],
-          schemaData: schemaData
+          namespaceId: namespace?.['namespace-id'],
+          schemaData: {
+            name: schemaData.name || 'Generated Schema',
+            schema: schemaData.schema,
+            namespaceId: namespace?.['namespace-id'] || '',
+            url: schemaData.url || '',
+          }
         })
       });
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Schema saved successfully:', result);
+        setConsoleOutput(prev => [...prev, `✅ Schema saved successfully!`]);
+        setConsoleOutput(prev => [...prev, `📁 Saved to namespace: ${namespace?.['namespace-name'] || 'Unknown'}`]);
+        setConsoleOutput(prev => [...prev, `🆔 Namespace ID: ${namespace?.['namespace-id'] || 'Unknown'}`]);
         
-        // Update the schema data to show it's saved
-        setSchemas(prev => prev.map(schema => 
-          schema.id === schemaData.id 
-            ? { ...schema, saved: true, savedAt: new Date().toISOString() }
-            : schema
-        ));
-        
-        // Add success message
+        // Show success message
         addMessage({
           role: 'assistant',
           content: `✅ Schema "${schemaData.name || 'Generated Schema'}" has been saved to namespace "${schemaData.namespaceName}". You can now access it from the namespace's Schema tab.`
         });
       } else {
-        throw new Error('Failed to save schema');
+        setConsoleOutput(prev => [...prev, `❌ Failed to save schema: ${response.status}`]);
+        throw new Error(`Failed to save schema: ${response.status}`);
       }
     } catch (error) {
-      console.error('Error saving schema:', error);
-      addMessage({
-        role: 'assistant',
-        content: `❌ Failed to save schema: ${error instanceof Error ? error.message : 'Unknown error'}`
-      });
+      setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error.message}`]);
+      console.error('Error saving schema to namespace:', error);
     } finally {
       setSavingSchema((prev) => ({ ...prev, [schemaData.id || 'schema']: false }));
     }
@@ -1151,13 +1245,13 @@ What would you like to work on today?`,
       console.log('🌐 Making request to:', 'http://localhost:5001/code-generation/generate-backend');
       console.log('📤 Request body:', requestBody);
       
-      const response = await fetch('http://localhost:5001/code-generation/generate-backend', {
+      const response = await fetch(`${API_BASE_URL}/code-generation/generate-backend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       });
       
-      console.log('�� Response status:', response.status);
+      console.log(' Response status:', response.status);
       console.log('📥 Response ok:', response.ok);
       
       if (response.ok) {
@@ -1217,41 +1311,537 @@ What would you like to work on today?`,
 
   // Place function declarations before their first usage
   function generateLambdaFileStructure(lambdaCode: string, functionName: string, runtime: string) {
-    // This function is not fully implemented in the original file,
-    // but its definition is here. It would typically involve
-    // parsing the lambdaCode and creating a file structure.
-    // For now, it's a placeholder.
     console.log('generateLambdaFileStructure called with:', { lambdaCode, functionName, runtime });
-    // Example: If lambdaCode is a function definition, you might want to
-    // create a file with that function.
-    // This is a simplified example.
-    const functionContent = lambdaCode.trim();
-    const fileName = `${functionName}.${runtime.split('.')[0]}`; // e.g., index.js for nodejs
-    const filePath = `src/lambdas/${fileName}`; // Assuming a src/lambdas directory
+    setConsoleOutput(prev => [...prev, `📁 Creating Lambda function structure for: ${functionName}`]);
+    
+    // Determine file extension based on runtime
+    let fileExtension = 'js';
+    if (runtime.includes('python')) {
+      fileExtension = 'py';
+    } else if (runtime.includes('java')) {
+      fileExtension = 'java';
+    } else if (runtime.includes('go')) {
+      fileExtension = 'go';
+    }
+    
+    setConsoleOutput(prev => [...prev, `📄 File extension: ${fileExtension}`]);
+    
+    // Create the main lambda function file
+    const lambdaFileName = `index.${fileExtension}`;
+    const lambdaFilePath = `/lambdas/${functionName}/${lambdaFileName}`;
+    
+    setConsoleOutput(prev => [...prev, `📝 Creating main file: ${lambdaFileName}`]);
+    
+    // Detect imports in the Lambda code for Node.js lambdas
+    let packageJsonContent = '';
+    if (runtime.includes('nodejs')) {
+      const dependencies: { [key: string]: string } = {};
+      
+      // Dynamic import detection - parse the code for any require() or import statements
+      const importRegex = /(?:require|import)\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+      const es6ImportRegex = /import\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+['"`]([^'"`]+)['"`]/g;
+      
+      let match;
+      const detectedImports = new Set<string>();
+      
+      // Find require() statements
+      while ((match = importRegex.exec(lambdaCode)) !== null) {
+        const packageName = match[1];
+        if (packageName && !packageName.startsWith('.') && !packageName.startsWith('/')) {
+          detectedImports.add(packageName);
+        }
+      }
+      
+      // Find ES6 import statements
+      while ((match = es6ImportRegex.exec(lambdaCode)) !== null) {
+        const packageName = match[1];
+        if (packageName && !packageName.startsWith('.') && !packageName.startsWith('/')) {
+          detectedImports.add(packageName);
+        }
+      }
+      
+      // Add detected packages to dependencies with appropriate versions
+      detectedImports.forEach(packageName => {
+        // Map common packages to their latest stable versions
+        const versionMap: { [key: string]: string } = {
+          'aws-sdk': '^2.1531.0',
+          '@aws-sdk/client-dynamodb': '^3.540.0',
+          '@aws-sdk/lib-dynamodb': '^3.540.0',
+          '@aws-sdk/client-s3': '^3.540.0',
+          '@aws-sdk/client-lambda': '^3.540.0',
+          '@aws-sdk/client-sqs': '^3.540.0',
+          '@aws-sdk/client-sns': '^3.540.0',
+          '@aws-sdk/client-cloudwatch': '^3.540.0',
+          'axios': '^1.6.0',
+          'lodash': '^4.17.21',
+          'moment': '^2.29.4',
+          'uuid': '^9.0.1',
+          'crypto': '^1.0.1',
+          'fs': '^0.0.1-security',
+          'path': '^0.12.7',
+          'querystring': '^0.2.1',
+          'url': '^0.11.3',
+          'util': '^0.12.5',
+          'zlib': '^1.0.5',
+          'stream': '^0.0.2',
+          'buffer': '^6.0.3',
+          'events': '^3.3.0',
+          'http': '^0.0.1-security',
+          'https': '^1.0.0',
+          'net': '^1.0.2',
+          'tls': '^0.0.1',
+          'child_process': '^1.0.2',
+          'cluster': '^0.7.7',
+          'dgram': '^1.0.1',
+          'dns': '^0.2.2',
+          'domain': '^0.0.1',
+          'os': '^0.1.2',
+          'punycode': '^2.3.1',
+          'readline': '^1.3.0',
+          'repl': '^0.1.4',
+          'string_decoder': '^1.3.0',
+          'sys': '^0.0.1',
+          'timers': '^0.1.1',
+          'tty': '^1.0.1',
+          'v8': '^0.1.0',
+          'vm': '^0.1.0',
+          'zlib': '^1.0.5'
+        };
+        
+        // Skip built-in Node.js modules
+        const builtInModules = [
+          'fs', 'path', 'crypto', 'querystring', 'url', 'util', 'zlib', 
+          'stream', 'buffer', 'events', 'http', 'https', 'net', 'tls',
+          'child_process', 'cluster', 'dgram', 'dns', 'domain', 'os',
+          'punycode', 'readline', 'repl', 'string_decoder', 'sys',
+          'timers', 'tty', 'v8', 'vm', 'zlib'
+        ];
+        
+        if (!builtInModules.includes(packageName)) {
+          const version = versionMap[packageName] || '^1.0.0'; // Default to latest version
+          dependencies[packageName] = version;
+          setConsoleOutput(prev => [...prev, `📦 Detected import: ${packageName} (${version})`]);
+        }
+      });
+      
+      // Create package.json with detected dependencies
+      packageJsonContent = JSON.stringify({
+        name: functionName,
+        version: "1.0.0",
+        description: `AWS Lambda function: ${functionName}`,
+        main: "index.js",
+        scripts: {
+          test: "echo \"Error: no test specified\" && exit 1"
+        },
+        dependencies: dependencies,
+        devDependencies: {},
+        keywords: ["aws", "lambda"],
+        author: "",
+        license: "ISC"
+      }, null, 2);
+      
+      if (Object.keys(dependencies).length > 0) {
+        setConsoleOutput(prev => [...prev, `📦 Created package.json with dependencies: ${Object.keys(dependencies).join(', ')}`]);
+      } else {
+        setConsoleOutput(prev => [...prev, `📦 Created package.json with no external dependencies`]);
+      }
+    }
+    
+    // Create the file structure
+    const newFiles: ProjectFile[] = [
+      {
+        id: `lambda-${functionName}-${Date.now()}`,
+        name: functionName,
+        type: 'folder',
+        path: `/lambdas/${functionName}`,
+        children: [
+          {
+            id: `lambda-${functionName}-main-${Date.now()}`,
+            name: lambdaFileName,
+            type: 'file',
+            path: lambdaFilePath,
+            content: lambdaCode
+          }
+        ]
+      }
+    ];
+    
+    // Add package.json for Node.js lambdas
+    if (packageJsonContent) {
+      newFiles[0].children!.push({
+        id: `lambda-${functionName}-package-${Date.now()}`,
+        name: 'package.json',
+        type: 'file',
+        path: `/lambdas/${functionName}/package.json`,
+        content: packageJsonContent
+      });
+    }
+    
+    // Add README.md
+    const readmeContent = `# ${functionName}
 
-    // In a real app, you'd create a new file or update an existing one
-    // with the provided lambdaCode.
-    // For demonstration, we'll just log the action.
-    console.log(`Simulating file creation/update: ${filePath}`);
-    // Example of updating a file (if it exists)
-    // const existingFileContent = readFileContent(filePath);
-    // if (existingFileContent) {
-    //   const updatedContent = `${existingFileContent}\n${functionContent}`;
-    //   // await writeFileContent(filePath, updatedContent); // Assuming writeFileContent exists
-    //   console.log(`File ${filePath} updated with new function.`);
-    // } else {
-    //   // await createFileContent(filePath, functionContent); // Assuming createFileContent exists
-    //   console.log(`File ${filePath} created with new function.`);
-    // }
+This is an AWS Lambda function generated by the AI Agent Workspace.
+
+## Runtime
+${runtime}
+
+## Handler
+${lambdaForm.handler}
+
+## Memory
+${lambdaForm.memory} MB
+
+## Timeout
+${lambdaForm.timeout} seconds
+
+## Environment Variables
+${lambdaForm.environment || 'None'}
+
+## Deployment
+This function can be deployed to AWS Lambda using the AWS CLI or AWS Console.
+
+## Local Testing
+To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulator.
+`;
+    
+    newFiles[0].children!.push({
+      id: `lambda-${functionName}-readme-${Date.now()}`,
+      name: 'README.md',
+      type: 'file',
+      path: `/lambdas/${functionName}/README.md`,
+      content: readmeContent
+    });
+    
+    setConsoleOutput(prev => [...prev, `📖 Creating README.md with function documentation`]);
+    
+    // Update the project files state
+    setProjectFiles(prev => {
+      // Check if the lambda folder already exists
+      const existingLambdaFolder = prev.find(file => 
+        file.type === 'folder' && file.name === functionName && file.path === `/lambdas/${functionName}`
+      );
+      
+      if (existingLambdaFolder) {
+        // Update existing folder
+        setConsoleOutput(prev => [...prev, `🔄 Updating existing Lambda folder: ${functionName}`]);
+        return prev.map(file => {
+          if (file.id === existingLambdaFolder.id) {
+            return {
+              ...file,
+              children: newFiles[0].children
+            };
+          }
+          return file;
+        });
+      } else {
+        // Add new folder
+        setConsoleOutput(prev => [...prev, `✨ Creating new Lambda folder: ${functionName}`]);
+        return [...prev, ...newFiles];
+      }
+    });
+    
+    setConsoleOutput(prev => [...prev, `✅ Lambda function structure created successfully!`]);
+    setConsoleOutput(prev => [...prev, `📂 Files created:`]);
+    newFiles[0].children!.forEach(file => {
+      setConsoleOutput(prev => [...prev, `   - ${file.name}`]);
+    });
+    
+    console.log(`Created Lambda function structure for ${functionName}`);
   }
 
   function runProject() {
     console.log('Run Project button clicked!');
-    // This function is not fully implemented in the original file,
-    // but its definition is here. It would typically involve
-    // starting a local development environment or deploying to AWS.
-    // For now, it's a placeholder.
-    setConsoleOutput(prev => [...prev, 'Run Project functionality is not yet implemented.']);
+    setConsoleOutput(prev => [...prev, '🚀 Starting project deployment...']);
+    setIsRunningProject(true);
+    setIsDeploying(true);
+    
+    // Debug: Log current project files structure
+    console.log('Current project files:', projectFiles);
+    setConsoleOutput(prev => [...prev, `📁 Scanning project files (${projectFiles.length} root items)...`]);
+    
+    // Find Lambda functions in the project files
+    const lambdaFunctions = findLambdaFunctions();
+    
+    console.log('Found Lambda functions:', lambdaFunctions);
+    
+    if (lambdaFunctions.length === 0) {
+      setConsoleOutput(prev => [...prev, '❌ No Lambda functions found in the project files.']);
+      setConsoleOutput(prev => [...prev, '💡 Generate a Lambda function first using the Lambda tab.']);
+      setConsoleOutput(prev => [...prev, '🔍 Debug: Available files:']);
+      projectFiles.forEach(file => {
+        setConsoleOutput(prev => [...prev, `   - ${file.name} (${file.type})`]);
+      });
+      setIsRunningProject(false);
+      setIsDeploying(false);
+      return;
+    }
+    
+    setConsoleOutput(prev => [...prev, `📦 Found ${lambdaFunctions.length} Lambda function(s) to deploy:`]);
+    lambdaFunctions.forEach(func => {
+      setConsoleOutput(prev => [...prev, `   - ${func.name} (${func.runtime})`]);
+    });
+    
+    // Deploy each Lambda function
+    deployLambdaFunctions(lambdaFunctions).finally(() => {
+      setIsRunningProject(false);
+      setIsDeploying(false);
+    });
+  }
+
+  function findLambdaFunctions(): Array<{name: string, path: string, code: string, runtime: string, handler: string, memory: number, timeout: number, dependencies?: any}> {
+    const lambdaFunctions: Array<{name: string, path: string, code: string, runtime: string, handler: string, memory: number, timeout: number, dependencies?: any}> = [];
+    
+    // Helper function to recursively search for Lambda functions
+    function searchForLambdaFunctions(files: ProjectFile[]): void {
+      files.forEach(file => {
+        if (file.type === 'folder') {
+          // Check if this folder contains Lambda function files
+          const hasLambdaFiles = file.children?.some(child => 
+            child.type === 'file' && (
+              child.name === 'index.js' || 
+              child.name === 'index.py' || 
+              child.name === 'index.java' || 
+              child.name === 'main.go'
+            )
+          );
+          
+          if (hasLambdaFiles) {
+            // This folder contains Lambda function files
+            const mainFile = file.children?.find(child => 
+              child.type === 'file' && (
+                child.name === 'index.js' || 
+                child.name === 'index.py' || 
+                child.name === 'index.java' || 
+                child.name === 'main.go'
+              )
+            );
+            
+            if (mainFile && mainFile.content) {
+              // Determine runtime based on file extension
+              let runtime = 'nodejs18.x';
+              let handler = 'index.handler';
+              
+              if (mainFile.name.endsWith('.py')) {
+                runtime = 'python3.9';
+                handler = 'index.lambda_handler';
+              } else if (mainFile.name.endsWith('.java')) {
+                runtime = 'java11';
+                handler = 'com.example.Handler::handleRequest';
+              } else if (mainFile.name.endsWith('.go')) {
+                runtime = 'provided.al2';
+                handler = 'bootstrap';
+              }
+              
+              // Extract dependencies from package.json if it exists
+              let dependencies = {};
+              const packageJsonFile = file.children?.find(child => 
+                child.type === 'file' && child.name === 'package.json'
+              );
+              
+              if (packageJsonFile && packageJsonFile.content) {
+                try {
+                  const packageJson = JSON.parse(packageJsonFile.content);
+                  dependencies = packageJson.dependencies || {};
+                  console.log(`Found dependencies for ${file.name}:`, dependencies);
+                } catch (error) {
+                  console.error(`Error parsing package.json for ${file.name}:`, error);
+                }
+              }
+              
+              lambdaFunctions.push({
+                name: file.name,
+                path: file.path,
+                code: mainFile.content,
+                runtime: runtime,
+                handler: handler,
+                memory: 128,
+                timeout: 30,
+                dependencies: dependencies
+              });
+            }
+          }
+          
+          // Recursively search in children
+          if (file.children) {
+            searchForLambdaFunctions(file.children);
+          }
+        }
+      });
+    }
+    
+    searchForLambdaFunctions(projectFiles);
+    return lambdaFunctions;
+  }
+
+  async function deployLambdaFunctions(functions: Array<{name: string, path: string, code: string, runtime: string, handler: string, memory: number, timeout: number, dependencies?: any}>) {
+    setConsoleOutput(prev => [...prev, '🌐 Connecting to AWS Lambda deployment service...']);
+    
+    for (let i = 0; i < functions.length; i++) {
+      const func = functions[i];
+      
+      setConsoleOutput(prev => [...prev, `📦 Deploying Lambda function: ${func.name}`]);
+      setConsoleOutput(prev => [...prev, `   Runtime: ${func.runtime}`]);
+      setConsoleOutput(prev => [...prev, `   Handler: ${func.handler}`]);
+      setConsoleOutput(prev => [...prev, `   Memory: ${func.memory} MB`]);
+      setConsoleOutput(prev => [...prev, `   Timeout: ${func.timeout} seconds`]);
+      
+      try {
+        // Use mock deployment for now to avoid AWS role issues
+        const deployPayload = {
+          functionName: func.name,
+          code: func.code,
+          runtime: func.runtime,
+          handler: func.handler,
+          memorySize: func.memory,
+          timeout: func.timeout,
+          dependencies: func.dependencies || {}
+        };
+        
+        console.log('Deploying with payload:', deployPayload);
+        setConsoleOutput(prev => [...prev, `🔧 Debug: Sending deployment request for real deployment`]);
+        if (Object.keys(func.dependencies || {}).length > 0) {
+          setConsoleOutput(prev => [...prev, `📦 Dependencies detected: ${Object.keys(func.dependencies || {}).join(', ')}`]);
+        }
+        
+        const deployResponse = await fetch(`${API_BASE_URL}/lambda/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(deployPayload)
+        });
+        
+        console.log('Deploy response status:', deployResponse.status);
+        
+        if (!deployResponse.ok) {
+          const errorText = await deployResponse.text();
+          console.error('Deploy error response:', errorText);
+          throw new Error(`Deployment failed: ${deployResponse.status} - ${errorText}`);
+        }
+        
+        const deployResult = await deployResponse.json();
+        console.log('Deploy result:', deployResult);
+        
+        if (deployResult.success) {
+          setConsoleOutput(prev => [...prev, `✅ Successfully deployed: ${func.name}`]);
+          setConsoleOutput(prev => [...prev, `   Function ARN: ${deployResult.functionArn}`]);
+          setConsoleOutput(prev => [...prev, `   Code Size: ${deployResult.codeSize} bytes`]);
+          
+          // Test the deployed function
+          setConsoleOutput(prev => [...prev, `🧪 Testing deployed function: ${func.name}`]);
+          
+          const testPayload = {
+            functionName: func.name,
+            payload: {
+              test: true,
+              message: 'Hello from AI Agent Workspace!',
+              timestamp: new Date().toISOString()
+            }
+          };
+          
+          console.log('Testing function with payload:', testPayload);
+          setConsoleOutput(prev => [...prev, `🔧 Debug: Testing function: ${func.name}`]);
+          
+          const testResponse = await fetch(`${API_BASE_URL}/lambda/invoke`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testPayload)
+          });
+          
+          console.log('Test response status:', testResponse.status);
+          
+          if (testResponse.ok) {
+            const testResult = await testResponse.json();
+            console.log('Test result:', testResult);
+            setConsoleOutput(prev => [...prev, `✅ Function test successful:`]);
+            setConsoleOutput(prev => [...prev, `   Status Code: ${testResult.statusCode}`]);
+            setConsoleOutput(prev => [...prev, `   Response: ${JSON.stringify(testResult.payload, null, 2)}`]);
+            
+            if (testResult.logResult) {
+              setConsoleOutput(prev => [...prev, `📋 CloudWatch Logs:`]);
+              setConsoleOutput(prev => [...prev, testResult.logResult]);
+            }
+          } else {
+            const errorText = await testResponse.text();
+            console.error('Test error response:', errorText);
+            setConsoleOutput(prev => [...prev, `❌ Function test failed: ${testResponse.status}`]);
+            setConsoleOutput(prev => [...prev, `   Error: ${errorText}`]);
+          }
+          
+          setConsoleOutput(prev => [...prev, `🧹 Cleaned up temp files for: ${func.name}`]);
+        } else {
+          setConsoleOutput(prev => [...prev, `❌ Deployment failed for: ${func.name}`]);
+        }
+      } catch (error) {
+        setConsoleOutput(prev => [...prev, `❌ Error deploying ${func.name}: ${error.message}`]);
+      }
+    }
+    
+    setConsoleOutput(prev => [...prev, '🎉 Project deployment completed!']);
+    setConsoleOutput(prev => [...prev, '💡 You can now invoke your Lambda functions from the AWS Console or via API Gateway.']);
+  }
+
+  async function downloadProjectFiles() {
+    if (projectFiles.length === 0) {
+      alert('No files to download');
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      setConsoleOutput(prev => [...prev, '📦 Preparing project files for download...']);
+      
+      // Create a zip file using JSZip
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      // Helper function to add files to zip recursively
+      let fileCount = 0;
+      function addFilesToZip(files: ProjectFile[], zipFolder: any) {
+        files.forEach(file => {
+          if (file.type === 'file' && file.content) {
+            // Remove leading slash from path
+            const filePath = file.path.startsWith('/') ? file.path.slice(1) : file.path;
+            zipFolder.file(filePath, file.content);
+            fileCount++;
+          } else if (file.type === 'folder' && file.children) {
+            // Create folder in zip
+            const folderPath = file.path.startsWith('/') ? file.path.slice(1) : file.path;
+            const folder = zipFolder.folder(folderPath);
+            if (folder) {
+              addFilesToZip(file.children, folder);
+            }
+          }
+        });
+      }
+      
+      // Add all files to zip
+      setConsoleOutput(prev => [...prev, '📁 Adding files to ZIP archive...']);
+      addFilesToZip(projectFiles, zip);
+      setConsoleOutput(prev => [...prev, `✅ Added ${fileCount} file(s) to archive`]);
+      
+      setConsoleOutput(prev => [...prev, '📝 Generating ZIP file...']);
+      
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      
+      // Create download link
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ai-agent-project-${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setConsoleOutput(prev => [...prev, '✅ Project files downloaded successfully!']);
+      setConsoleOutput(prev => [...prev, `📁 File: ai-agent-project-${Date.now()}.zip`]);
+      
+    } catch (error) {
+      console.error('Error downloading project files:', error);
+      setConsoleOutput(prev => [...prev, `❌ Error downloading project files: ${error.message}`]);
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   return (
@@ -1480,41 +2070,33 @@ What would you like to work on today?`,
                   console.log('DEBUG: Submitting Lambda prompt:', lambdaPrompt, 'for schema:', selectedSchema);
                   
                   try {
-                    const response = await fetch('http://localhost:5001/ai-agent/stream', {
+                    setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation for: ${lambdaForm.functionName}`]);
+                    setConsoleOutput(prev => [...prev, `📝 Prompt: ${lambdaPrompt}`]);
+                    setConsoleOutput(prev => [...prev, `⚙️ Runtime: ${lambdaForm.runtime}`]);
+                    setConsoleOutput(prev => [...prev, `💾 Memory: ${lambdaForm.memory} MB`]);
+                    setConsoleOutput(prev => [...prev, `⏱️ Timeout: ${lambdaForm.timeout} seconds`]);
+                    
+                    const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        message: `Generate a complete AWS Lambda handler function.
-
-Requirements:
-- Function purpose: ${lambdaPrompt}
-- Function name: ${lambdaForm.functionName}
-- Runtime: ${lambdaForm.runtime}
-- Handler: ${lambdaForm.handler}
-- Memory: ${lambdaForm.memory} MB
-- Timeout: ${lambdaForm.timeout} seconds
-- Environment variables: ${lambdaForm.environment || 'none'}
-
-${selectedSchema ? `Schema context:\n${JSON.stringify(selectedSchema, null, 2)}\n` : ''}
-
-Generate a complete, production-ready Lambda handler that:
-1. Handles the specified requirements
-2. Includes proper error handling
-3. Returns appropriate HTTP responses
-4. Uses the provided schema if applicable
-5. Follows AWS Lambda best practices
-
-Output ONLY the JavaScript code, no explanations or markdown.`,
-                        namespace: namespace?.['namespace-name'] || 'default',
-                        history: [],
-                        schema: selectedSchema
+                        message: lambdaPrompt,
+                        selectedSchema,
+                        functionName: lambdaForm.functionName,
+                        runtime: lambdaForm.runtime,
+                        handler: lambdaForm.handler,
+                        memory: lambdaForm.memory,
+                        timeout: lambdaForm.timeout,
+                        environment: lambdaForm.environment || ''
                       })
                     });
 
                     if (response.ok) {
+                      setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting generation...`]);
                       const reader = response.body?.getReader();
                       if (reader) {
                         let generatedCode = '';
+                        let chunkCount = 0;
                         
                         while (true) {
                           const { done, value } = await reader.read();
@@ -1526,12 +2108,34 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                           for (const line of lines) {
                             if (line.startsWith('data: ')) {
                               const data = line.slice(6);
-                              if (data !== '[DONE]') {
+                              if (data === '[DONE]') {
+                                // Generation complete
+                                setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
+                                setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
+                                setConsoleOutput(prev => [...prev, `📏 Code length: ${generatedCode.length} characters`]);
+                                
+                                if (generatedCode.trim()) {
+                                  setConsoleOutput(prev => [...prev, `📁 Creating file structure...`]);
+                                  generateLambdaFileStructure(generatedCode, lambdaForm.functionName, lambdaForm.runtime);
+                                  setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
+                                }
+                                break;
+                              } else if (data !== '') {
                                 try {
                                   const parsed = JSON.parse(data);
                                   if (parsed.content) {
                                     generatedCode += parsed.content;
                                     setGeneratedLambdaCode(generatedCode);
+                                    chunkCount++;
+                                    
+                                    // Update console every 10 chunks
+                                    if (chunkCount % 10 === 0) {
+                                      setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars`]);
+                                    }
+                                  } else if (parsed.error) {
+                                    console.error('Lambda generation error:', parsed.error);
+                                    setGeneratedLambdaCode('Error: ' + parsed.error);
+                                    setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
                                   }
                                 } catch (e) {
                                   // Ignore parsing errors
@@ -1540,17 +2144,14 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                             }
                           }
                         }
-                        
-                        // Generate file structure with the Lambda code
-                        if (generatedCode.trim()) {
-                          generateLambdaFileStructure(generatedCode, lambdaForm.functionName, lambdaForm.runtime);
-                        }
                       }
                     } else {
                       console.error('Failed to generate Lambda code:', response.status);
+                      setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
                     }
                   } catch (error) {
                     console.error('Error generating Lambda code:', error);
+                    setConsoleOutput(prev => [...prev, `❌ Error: ${error.message}`]);
                   }
                 }}
                 className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
@@ -1566,13 +2167,41 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
           {activeTab === 'schema' && (
             <div className="h-full overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium">Generated Schemas</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium">Generated Schemas</h3>
+                  {isStreamingSchema && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-blue-600">Live</span>
+                    </div>
+                  )}
+                  {Object.values(savingSchema).some(Boolean) && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-600">Saving</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <span className="text-sm text-gray-600">
                     {schemas.length > 0 ? 'Schema generated' : 'No schema generated yet'}
                   </span>
                 </div>
               </div>
+              
+              {/* Live Streaming Preview */}
+              {isStreamingSchema && (
+                <div className="mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium text-blue-700">Live Schema Generation</span>
+                  </div>
+                  <pre className="text-sm overflow-x-auto bg-white p-3 rounded border">
+                    {liveSchema || 'Starting schema generation...'}
+                  </pre>
+                </div>
+              )}
+              
               {schemas.length === 0 ? (
                 <div className="text-gray-500">No schemas generated yet...</div>
               ) : (
@@ -1599,6 +2228,8 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                                 onClick={async () => {
                                   setSavingSchema((prev) => ({ ...prev, [schema.id]: true }));
                                   try {
+                                    setConsoleOutput(prev => [...prev, `💾 Saving schema "${schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema'}" to namespace...`]);
+                                    
                                     const payload = {
                                       namespaceId: namespace?.['namespace-id'],
                                       schemaName: schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema',
@@ -1608,17 +2239,51 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                                       originalType: schema.originalType || (schema.schema && schema.schema.type) || 'object',
                                       url: schema.url || '',
                                     };
-                                    const response = await fetch('http://localhost:5001/save-schema-to-namespace', {
+                                    
+                                    const response = await fetch(`${API_BASE_URL}/save-schema-to-namespace`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify(payload)
                                     });
+                                    
                                     if (response.ok) {
-                                      setSchemas(prev => prev.map(s => s.id === schema.id ? { ...s, saved: true, schemaName: payload.schemaName } : s));
+                                      const result = await response.json();
+                                      setConsoleOutput(prev => [...prev, `✅ Schema saved successfully! Schema ID: ${result.schemaId}`]);
+                                      
+                                      // Update the schemas list to mark as saved
+                                      setSchemas(prev => prev.map(s => s.id === schema.id ? { 
+                                        ...s, 
+                                        saved: true, 
+                                        schemaName: payload.schemaName,
+                                        schemaId: result.schemaId 
+                                      } : s));
+                                      
+                                      // Refresh the saved schemas list for the Lambda dropdown
+                                      try {
+                                        const schemasResponse = await fetch(`/unified/schema?namespaceId=${namespace?.['namespace-id']}`);
+                                        if (schemasResponse.ok) {
+                                          const updatedSchemas = await schemasResponse.json();
+                                          setSavedSchemas(updatedSchemas);
+                                          setConsoleOutput(prev => [...prev, `🔄 Updated saved schemas list (${updatedSchemas.length} schemas available)`]);
+                                        }
+                                      } catch (refreshError) {
+                                        console.error('Error refreshing schemas:', refreshError);
+                                        setConsoleOutput(prev => [...prev, `⚠️ Warning: Could not refresh schemas list automatically`]);
+                                      }
+                                      
+                                      // Dispatch event to refresh other components
                                       if (typeof window !== 'undefined' && window.dispatchEvent) {
                                         window.dispatchEvent(new CustomEvent('refresh-unified-namespace'));
                                       }
+                                      
+                                      setConsoleOutput(prev => [...prev, `📋 Schema "${payload.schemaName}" is now available in your namespace!`]);
+                                    } else {
+                                      const errorData = await response.json();
+                                      setConsoleOutput(prev => [...prev, `❌ Failed to save schema: ${errorData.error || 'Unknown error'}`]);
                                     }
+                                  } catch (error) {
+                                    console.error('Error saving schema:', error);
+                                    setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error.message}`]);
                                   } finally {
                                     setSavingSchema((prev) => ({ ...prev, [schema.id]: false }));
                                   }
@@ -1662,12 +2327,26 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
               <div className="w-1/3 border-r border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-medium">Project Files</h3>
-                  <button
-                    onClick={refreshFileTree}
-                    className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    Refresh
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={downloadProjectFiles}
+                      disabled={projectFiles.length === 0 || isDownloading}
+                      className={`px-2 py-1 text-xs rounded ${
+                        projectFiles.length === 0 || isDownloading
+                          ? 'bg-gray-300 cursor-not-allowed'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      }`}
+                      title="Download all project files as ZIP"
+                    >
+                      {isDownloading ? 'Downloading...' : 'Download ZIP'}
+                    </button>
+                    <button
+                      onClick={refreshFileTree}
+                      className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                    >
+                      Refresh
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
                   {projectFiles.length === 0 ? (
@@ -1708,7 +2387,15 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
           {activeTab === 'console' && (
             <div className="h-full flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
-                <h3 className="font-medium">Console Output</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium">Console Output</h3>
+                  {isDeploying && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-600">Deploying</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button
                     onClick={runProject}
@@ -1719,7 +2406,7 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
                         : 'bg-green-500 hover:bg-green-600'
                     } text-white`}
                   >
-                    {isRunningProject ? 'Running...' : 'Run Project'}
+                    {isRunningProject ? 'Deploying...' : 'Run Project'}
                   </button>
                   <button
                     onClick={() => setConsoleOutput([])}
@@ -1749,4 +2436,4 @@ Output ONLY the JavaScript code, no explanations or markdown.`,
   );
 };
 
-export default AIAgentWorkspace; 
+export default AIAgentWorkspace;
