@@ -443,7 +443,7 @@ What would you like to work on today?`,
         setIsEditingSchema(false);
       }
     }
-    // Process actions after streaming is complete
+        // Process actions after streaming is complete
     console.log('[Frontend] Processing actions:', actions);
     if (actions && Array.isArray(actions)) {
       for (const action of actions) {

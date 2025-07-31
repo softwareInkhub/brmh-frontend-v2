@@ -27,7 +27,7 @@ export default function AccountPage({ account, namespace }: Props) {
   // Helper to render header variables if present
   const renderHeaderVars = (headers: any) => {
     if (!headers || typeof headers !== 'object') return <span className="italic text-gray-400">None</span>;
-    return (
+  return (
       <ul className="space-y-1 mt-1">
         {Object.entries(headers).map(([key, value]) => (
           <li key={key} className="flex items-center gap-2 text-xs">

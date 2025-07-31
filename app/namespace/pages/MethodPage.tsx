@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Edit3, Hash, Type, Link2, Tag, Sliders, CheckCircle, Database, Clock } from 'lucide-react';
 import MethodTestModal from '@/app/components/MethodTestModal';
+import { v4 as uuidv4 } from 'uuid';
 
 type Method = { id: string; name: string };
 type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void };
@@ -38,12 +39,15 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const [showCreateTableModal, setShowCreateTableModal] = useState(false);
   const [cacheFormData, setCacheFormData] = useState({
     tableName: '',
+    project: 'my-project', // Default project name
     timeToLive: 3600, // 1 hour in seconds
     status: 'active',
     itemsPerKey: 100
   });
   const [resolvedNamespaceName, setResolvedNamespaceName] = useState('');
   const [methodName, setMethodName] = useState('');
+  const [cacheData, setCacheData] = useState<any[]>([]);
+  const [loadingCache, setLoadingCache] = useState(false);
 
   useEffect(() => {
     if (method) {
@@ -54,6 +58,7 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
       fetchAccounts();
       resolveNamespaceName();
       resolveMethodName();
+      fetchCacheData(); // Fetch cache data for this method
     }
   }, [method]);
 
@@ -232,10 +237,11 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const handleSaveCache = async () => {
     try {
       const cacheData = {
-        id: `${editMethod['namespace-method-id']}-${selectedAccountId}`,
+        id: uuidv4(),
         methodId: editMethod['namespace-method-id'],
         accountId: selectedAccountId,
         tableName: cacheFormData.tableName,
+        project: cacheFormData.project, // Use project name from form
         timeToLive: cacheFormData.timeToLive,
         status: cacheFormData.status,
         itemsPerKey: cacheFormData.itemsPerKey,
@@ -254,10 +260,13 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
         setShowCacheModal(false);
         setCacheFormData({
           tableName: '',
+          project: 'my-project',
           timeToLive: 3600,
           status: 'active',
           itemsPerKey: 100
         });
+        // Refresh the cache data to show the new configuration
+        fetchCacheData();
       } else {
         alert('Failed to save cache configuration');
       }
@@ -305,6 +314,101 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
       }
     } catch {
       setSaveMsg('Failed to update method.');
+    }
+  };
+
+  const fetchCacheData = async () => {
+    try {
+      setLoadingCache(true);
+      const methodId = editMethod['namespace-method-id'] || method?.['namespace-method-id'];
+      
+      if (!methodId) {
+        console.log('No method ID available for cache fetch');
+        return;
+      }
+
+      console.log('Fetching cache data for method ID:', methodId);
+      
+      // Use the CRUD endpoint to get cache configurations for this method
+      const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache&pagination=true&itemPerPage=50`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Raw cache data:', data);
+        
+        if (data.success && data.items) {
+          // Filter cache configurations for this specific method
+          const methodCacheConfigs = data.items.filter((cacheConfig: any) => 
+            cacheConfig.methodId === methodId || cacheConfig['methodId'] === methodId
+          );
+          
+          console.log('Filtered cache configs for method:', methodCacheConfigs);
+          setCacheData(methodCacheConfigs);
+        } else {
+          console.log('No cache data found or invalid response');
+          setCacheData([]);
+        }
+      } else {
+        console.error('Failed to fetch cache data:', response.status, response.statusText);
+        setCacheData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching cache data:', error);
+      setCacheData([]);
+    } finally {
+      setLoadingCache(false);
+    }
+  };
+
+  const handleDeleteCache = async (cacheId: string) => {
+    if (!window.confirm('Are you sure you want to delete this cache configuration?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cacheId })
+      });
+
+      if (response.ok) {
+        alert('Cache configuration deleted successfully!');
+        fetchCacheData(); // Refresh the cache data
+      } else {
+        alert('Failed to delete cache configuration');
+      }
+    } catch (error) {
+      console.error('Error deleting cache:', error);
+      alert('Failed to delete cache configuration');
+    }
+  };
+
+  const handleToggleCacheStatus = async (cacheConfig: any) => {
+    const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: { id: cacheConfig.id },
+          updates: { 
+            status: newStatus,
+            updatedAt: new Date().toISOString()
+          }
+        })
+      });
+
+      if (response.ok) {
+        alert(`Cache configuration ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+        fetchCacheData(); // Refresh the cache data
+      } else {
+        alert('Failed to update cache configuration');
+      }
+    } catch (error) {
+      console.error('Error updating cache status:', error);
+      alert('Failed to update cache configuration');
     }
   };
 
@@ -416,7 +520,7 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
               </div>
               
               {/* Cache Section */}
-              <div className="sm:col-span-2 mt-6 p-4 bg-gray-50 rounded-lg">
+              <div className=" flex  justify-between items-center sm:col-span-2 mt-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <Database size={20} className="text-blue-500" />
                   <h3 className="text-lg font-semibold text-gray-800">Cache Configuration</h3>
@@ -427,6 +531,105 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                 >
                   Enable Caching
                 </button>
+              </div>
+
+              {/* Cache Data Display */}
+              <div className="sm:col-span-2 mt-4">
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-gray-700">Configured Cache Data</h4>
+                      <button
+                        onClick={fetchCacheData}
+                        disabled={loadingCache}
+                        className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                      >
+                        {loadingCache ? 'Loading...' : 'Refresh'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {loadingCache ? (
+                    <div className="p-4 text-center text-gray-500">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      Loading cache data...
+                    </div>
+                  ) : cacheData.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      No cache configurations found for this method
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Table</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">TTL</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items/Key</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {cacheData.map((cacheConfig, index) => (
+                            <tr key={cacheConfig.id || index} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-gray-900 font-mono">
+                                {cacheConfig.project || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900">
+                                {cacheConfig.accountId || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 font-mono">
+                                {cacheConfig.tableName || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900">
+                                {cacheConfig.timeToLive ? `${cacheConfig.timeToLive}s` : 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900">
+                                {cacheConfig.itemsPerKey || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  cacheConfig.status === 'active' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {cacheConfig.status || 'unknown'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-500">
+                                {cacheConfig.createdAt ? new Date(cacheConfig.createdAt).toLocaleDateString() : 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleToggleCacheStatus(cacheConfig)}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                                      cacheConfig.status === 'active'
+                                        ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
+                                        : 'bg-green-100 hover:bg-green-200 text-green-700'
+                                    }`}
+                                  >
+                                    {cacheConfig.status === 'active' ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCache(cacheConfig.id)}
+                                    className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded transition-colors"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </>
@@ -609,6 +812,16 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                 <div className="mb-6">
                   <h4 className="text-lg font-semibold mb-3">3. Cache Configuration</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                      <input
+                        type="text"
+                        value={cacheFormData.project}
+                        onChange={(e) => setCacheFormData(prev => ({ ...prev, project: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                        placeholder="Enter project name"
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
                       <input
