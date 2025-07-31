@@ -370,11 +370,11 @@ const ExecutionsContent = () => {
           {isPolling && executionLogs.length === 0 ? (
             <div className="text-gray-500">Polling for updates...</div>
           ) : currentExecutionId && executionLogs.length > 0 ? (
-            <div>
+                        <div>
               <div className="font-mono text-sm mb-2">Execution ID: {currentExecutionId}</div>
               {executionLogs.map((log, idx) => (
                 <div key={idx} className="border-b py-2 flex items-center justify-between">
-                  <div>
+                      <div>
                     <div className="font-semibold">Iteration {log.data['iteration-no']}</div>
                     <div className="text-xs text-gray-500">Items: {log.data['items-in-current-page']}</div>
                     <div className="text-xs text-gray-500">Status: {log.data['response-status']}</div>

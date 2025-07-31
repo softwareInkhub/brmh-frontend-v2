@@ -32,19 +32,19 @@ import AllWebhookPage from './pages/AllWebhookPage';
 import WebhookPage from './pages/WebhookPage';
 
 // Dynamically import AIAgentWorkspace to prevent SSR issues
-// const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
-//   ssr: false,
-//   loading: () => (
-//     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-//       <div className="bg-white rounded-lg p-8">
-//         <div className="flex items-center gap-3">
-//           <Bot className="text-blue-500 animate-pulse" size={24} />
-//           <span>Loading AI Agent Workspace...</span>
-//         </div>
-//       </div>
-//     </div>
-//   )
-// });
+const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8">
+        <div className="flex items-center gap-3">
+          <Bot className="text-blue-500 animate-pulse" size={24} />
+          <span>Loading AI Agent Workspace...</span>
+        </div>
+      </div>
+    </div>
+  )
+});
 
 
 const SIDEBAR_WIDTH = 80; // px, w-20
@@ -1108,14 +1108,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              {/* <AIAgentWorkspace
+                             <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              /> */}
+                              /> 
                             </div>
                           );
                         }
@@ -1397,14 +1397,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              {/* <AIAgentWorkspace
+                               <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              /> */}
+                              /> 
           </div>
                           );
                         }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Hash, Tag, Edit3, CheckCircle, Globe, Key, List, X, Edit2, Trash2, Link as LinkIcon } from 'lucide-react';
+import { User, Hash, Tag, Edit3, CheckCircle, Globe, Key, List, X, Edit2, Trash2, Link as LinkIcon, Database } from 'lucide-react';
 
 type Props = {
   account: any;
@@ -53,6 +53,44 @@ export default function AccountPage({ account, namespace }: Props) {
           </li>
         ))}
       </ul>
+    );
+  };
+
+  // Helper to render table names if present
+  const renderTableNames = (tableName: any) => {
+    if (!tableName) return <span className="italic text-gray-400">No tables</span>;
+    
+    // Handle DynamoDB structure
+    let tableNameMap: Record<string, string> = {};
+    if (tableName.M) {
+      // Extract from DynamoDB format
+      tableNameMap = Object.fromEntries(
+        Object.entries(tableName.M).map(([key, value]: [string, any]) => [
+          key, 
+          value.S || value
+        ])
+      );
+    } else if (typeof tableName === 'object') {
+      // Handle plain object format
+      tableNameMap = tableName;
+    }
+    
+    if (Object.keys(tableNameMap).length === 0) {
+      return <span className="italic text-gray-400">No tables</span>;
+    }
+    
+    return (
+      <div className="space-y-2 mt-1">
+        {Object.entries(tableNameMap).map(([methodName, tableNameValue]) => (
+          <div key={methodName} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+            <Database size={14} className="text-blue-400" />
+            <div className="flex-1">
+              <div className="text-xs font-medium text-gray-700">{methodName}</div>
+              <div className="text-xs text-gray-500 font-mono">{tableNameValue}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     );
   };
 
@@ -232,6 +270,10 @@ export default function AccountPage({ account, namespace }: Props) {
               <div className="sm:col-span-2">
                 <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Key size={16} className="text-green-400" /> Account Variables</div>
                 {renderAccountVars(editAccount["variables"] || editAccount["namespace-account-variables"])}
+              </div>
+              <div className="sm:col-span-2">
+                <div className="flex items-center gap-2 text-gray-500 text-xs mb-1"><Database size={16} className="text-blue-400" /> Tables</div>
+                {renderTableNames(editAccount.data?.M?.tableName || editAccount.tableName)}
               </div>
               <div className="sm:col-span-2 flex items-center gap-2 mt-2">
                 <CheckCircle size={18} className="text-green-500" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit3, Hash, Type, Link2, Tag, Sliders, CheckCircle } from 'lucide-react';
+import { Edit3, Hash, Type, Link2, Tag, Sliders, CheckCircle, Database, Clock } from 'lucide-react';
 import MethodTestModal from '@/app/components/MethodTestModal';
 
 type Method = { id: string; name: string };
@@ -28,13 +28,100 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const [editMethod, setEditMethod] = useState<any>(method || {});
   const [saveMsg, setSaveMsg] = useState('');
   const [editMode, setEditMode] = useState(false);
+  
+  // Caching state
+  const [showCacheModal, setShowCacheModal] = useState(false);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [tableExists, setTableExists] = useState(false);
+  const [showCreateTableModal, setShowCreateTableModal] = useState(false);
+  const [cacheFormData, setCacheFormData] = useState({
+    tableName: '',
+    timeToLive: 3600, // 1 hour in seconds
+    status: 'active',
+    itemsPerKey: 100
+  });
+  const [resolvedNamespaceName, setResolvedNamespaceName] = useState('');
+  const [methodName, setMethodName] = useState('');
 
   useEffect(() => {
     if (method) {
       console.log('Method data from backend:', method);
       setEditMethod({ ...method, ...(method.data || {}) });
+      
+      // Fetch accounts and resolve namespace name
+      fetchAccounts();
+      resolveNamespaceName();
+      resolveMethodName();
     }
   }, [method]);
+
+  const fetchAccounts = async () => {
+    try {
+      // Try different possible field names for namespace ID
+      const namespaceId = method?.['namespace-id'] || method?.namespaceId || method?.data?.['namespace-id'] || editMethod?.['namespace-id'];
+      console.log('Fetching accounts for namespaceId:', namespaceId);
+      console.log('Method object:', method);
+      console.log('EditMethod object:', editMethod);
+      
+      if (!namespaceId) {
+        console.error('No namespace ID found in method data');
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}/accounts`);
+      console.log('Accounts response:', response);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Accounts data:', data);
+        const accountsList = data.accounts || data || [];
+        console.log('Accounts list structure:', accountsList);
+        if (accountsList.length > 0) {
+          console.log('First account object:', accountsList[0]);
+        }
+        setAccounts(accountsList);
+      } else {
+        console.error('Failed to fetch accounts:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    }
+  };
+
+  const resolveNamespaceName = async () => {
+    try {
+      const namespaceId = method?.['namespace-id'] || method?.namespaceId || method?.data?.['namespace-id'] || editMethod?.['namespace-id'];
+      if (!namespaceId) return;
+      
+      const response = await fetch(`${API_BASE_URL}/unified/namespaces/${namespaceId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setResolvedNamespaceName(data.namespace?.name || '');
+      }
+    } catch (error) {
+      console.error('Error resolving namespace name:', error);
+    }
+  };
+
+  const resolveMethodName = () => {
+    // Try to get method name from different possible sources
+    const methodNameFromMethod = method?.['namespace-method-name'] || method?.name || method?.data?.['namespace-method-name'];
+    const methodId = method?.['namespace-method-id'] || method?.methodId;
+    
+    if (methodNameFromMethod) {
+      setMethodName(methodNameFromMethod);
+    } else if (methodId) {
+      // Extract method name from the method ID (assuming format: namespace-method-id)
+      const parts = methodId.split('-');
+      if (parts.length >= 3) {
+        setMethodName(parts.slice(2).join('-'));
+      }
+    }
+    
+    console.log('Resolved method name:', methodNameFromMethod || methodId);
+  };
 
   const handleInput = (field: string, value: any) => {
     setEditMethod((prev: any) => ({ ...prev, [field]: value }));
@@ -61,6 +148,123 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
       arr.splice(idx, 1);
       return { ...prev, [field]: arr };
     });
+  };
+
+  // Cache-related functions
+  const handleEnableCache = () => {
+    setShowCacheModal(true);
+    // Re-fetch accounts when modal opens
+    fetchAccounts();
+  };
+
+  const handleAccountSelect = (accountId: string) => {
+    setSelectedAccountId(accountId);
+    const account = accounts.find(acc => acc['namespace-account-id'] === accountId);
+    setSelectedAccount(account);
+    
+    // Check if table exists for this account and method (handle DynamoDB structure)
+    if (account && methodName) {
+      // Handle DynamoDB nested structure
+      let tableNameMap: Record<string, string> = {};
+      if (account.data && account.data.M && account.data.M.tableName && account.data.M.tableName.M) {
+        // Extract tableName from DynamoDB format
+        const tableNameObj = account.data.M.tableName.M;
+        tableNameMap = Object.fromEntries(
+          Object.entries(tableNameObj).map(([key, value]: [string, any]) => [
+            key, 
+            value.S || value // Extract string value from DynamoDB format
+          ])
+        );
+      } else if (account.tableName) {
+        // Fallback to direct tableName access
+        tableNameMap = account.tableName;
+      }
+      
+      const tableNameForMethod = tableNameMap[methodName];
+      console.log('=== TABLE EXISTENCE CHECK ===');
+      console.log('Account:', account['namespace-account-name']);
+      console.log('Method name:', methodName);
+      console.log('Available tables:', Object.keys(tableNameMap));
+      console.log('Table name map:', tableNameMap);
+      console.log('Table name for method:', tableNameForMethod);
+      console.log('Table exists:', !!tableNameForMethod);
+      
+      if (tableNameForMethod) {
+        setTableExists(true);
+        setCacheFormData(prev => ({ ...prev, tableName: tableNameForMethod }));
+      } else {
+        setTableExists(false);
+        setCacheFormData(prev => ({ ...prev, tableName: '' }));
+      }
+    }
+  };
+
+  const handleCreateTable = async () => {
+    try {
+      const newTableName = `${resolvedNamespaceName}-${selectedAccount?.['namespace-account-name']}-${methodName}`;
+      
+      const response = await fetch(`${API_BASE_URL}/unified/schema/table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schemaId: editMethod.schemaId || '',
+          accountId: selectedAccountId,
+          methodName: methodName,
+          tableName: newTableName
+        })
+      });
+
+      if (response.ok) {
+        setTableExists(true);
+        setCacheFormData(prev => ({ ...prev, tableName: newTableName }));
+        setShowCreateTableModal(false);
+        // Refresh accounts to get updated tableName map
+        fetchAccounts();
+      } else {
+        alert('Failed to create table');
+      }
+    } catch (error) {
+      console.error('Error creating table:', error);
+      alert('Failed to create table');
+    }
+  };
+
+  const handleSaveCache = async () => {
+    try {
+      const cacheData = {
+        id: `${editMethod['namespace-method-id']}-${selectedAccountId}`,
+        methodId: editMethod['namespace-method-id'],
+        accountId: selectedAccountId,
+        tableName: cacheFormData.tableName,
+        timeToLive: cacheFormData.timeToLive,
+        status: cacheFormData.status,
+        itemsPerKey: cacheFormData.itemsPerKey,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: cacheData })
+      });
+
+      if (response.ok) {
+        alert('Cache configuration saved successfully!');
+        setShowCacheModal(false);
+        setCacheFormData({
+          tableName: '',
+          timeToLive: 3600,
+          status: 'active',
+          itemsPerKey: 100
+        });
+      } else {
+        alert('Failed to save cache configuration');
+      }
+    } catch (error) {
+      console.error('Error saving cache:', error);
+      alert('Failed to save cache configuration');
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -210,6 +414,20 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
                   <span className="text-xs text-gray-500 mt-1">Table Name: {editMethod["namespace-method-tableName"] || editMethod["tableName"] || <span className="italic text-gray-400">null</span>}</span>
                 </div>
               </div>
+              
+              {/* Cache Section */}
+              <div className="sm:col-span-2 mt-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <Database size={20} className="text-blue-500" />
+                  <h3 className="text-lg font-semibold text-gray-800">Cache Configuration</h3>
+                </div>
+                <button
+                  onClick={handleEnableCache}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Enable Caching
+                </button>
+              </div>
             </div>
           </>
         ) : (
@@ -316,6 +534,186 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
             </div>
             {saveMsg && <div className="text-green-600 text-sm mt-2">{saveMsg}</div>}
           </form>
+        )}
+
+        {/* Cache Modal */}
+        {showCacheModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Enable Caching</h3>
+                <button
+                  onClick={() => setShowCacheModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Step 1: Account Selection */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold mb-3">1. Select Account</h4>
+                <div className="mb-2 text-sm text-gray-600">
+                  Found {accounts.length} accounts
+                </div>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => handleAccountSelect(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                >
+                  <option value="">Select an account...</option>
+                  {accounts.map((account, index) => {
+                    // Use the correct field names for accounts
+                    const accountId = account['namespace-account-id'] || account.id || `account-${index}`;
+                    const accountName = account['namespace-account-name'] || account.name || `Account ${index + 1}`;
+                    
+                    return (
+                      <option key={accountId} value={accountId}>
+                        {accountName}
+                      </option>
+                    );
+                  })}
+                </select>
+                {accounts.length === 0 && (
+                  <div className="mt-2 text-sm text-red-600">
+                    No accounts found. Please check if the namespace has accounts.
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Table Check */}
+              {selectedAccountId && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold mb-3">2. Table Status</h4>
+                  {tableExists ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-green-800">✓ Table exists for this account and method</p>
+                      <p className="text-sm text-green-600 mt-1">Table: {cacheFormData.tableName}</p>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-yellow-800">⚠ No table found for this account and method</p>
+                      <button
+                        onClick={() => setShowCreateTableModal(true)}
+                        className="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+                      >
+                        Create Table
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: Cache Configuration */}
+              {selectedAccountId && tableExists && (
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold mb-3">3. Cache Configuration</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
+                      <input
+                        type="text"
+                        value={cacheFormData.tableName}
+                        onChange={(e) => setCacheFormData(prev => ({ ...prev, tableName: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Time to Live (seconds)</label>
+                      <input
+                        type="number"
+                        value={cacheFormData.timeToLive}
+                        onChange={(e) => setCacheFormData(prev => ({ ...prev, timeToLive: parseInt(e.target.value) || 3600 }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                        min="60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={cacheFormData.status}
+                        onChange={(e) => setCacheFormData(prev => ({ ...prev, status: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Items per Key</label>
+                      <input
+                        type="number"
+                        value={cacheFormData.itemsPerKey}
+                        onChange={(e) => setCacheFormData(prev => ({ ...prev, itemsPerKey: parseInt(e.target.value) || 100 }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCacheModal(false)}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                {selectedAccountId && tableExists && (
+                  <button
+                    onClick={handleSaveCache}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Save Cache Configuration
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Table Modal */}
+        {showCreateTableModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Create Table</h3>
+                <button
+                  onClick={() => setShowCreateTableModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-gray-600 mb-3">
+                  Create a table for account <strong>{selectedAccount?.['namespace-account-name']}</strong> and method <strong>{methodName}</strong>?
+                </p>
+                <p className="text-sm text-gray-500">
+                  Table name: <code className="bg-gray-100 px-2 py-1 rounded">{resolvedNamespaceName}-{selectedAccount?.['namespace-account-name']}-{methodName}</code>
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCreateTableModal(false)}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateTable}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Create Table
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

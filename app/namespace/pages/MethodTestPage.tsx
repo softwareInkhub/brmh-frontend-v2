@@ -58,7 +58,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'schema'>('body');
   const [requestBody, setRequestBody] = useState<string>('');
   const [copied, setCopied] = useState(false);
-  const [activeButton, setActiveButton] = useState<'send' | 'loop' | null>(null);
+  const [activeButton, setActiveButton] = useState<'send' | 'loop' | 'sync' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [responseSchema, setResponseSchema] = useState<Record<string, unknown> | null>(null);
   const [schemaTabValue, setSchemaTabValue] = useState<Record<string, unknown> | null>(null);
@@ -72,6 +72,19 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [fields, setFields] = useState<any[]>([]);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncFormData, setSyncFormData] = useState({
+    tableName: '',
+    url: '',
+    headers: {},
+    idField: 'id',
+    stopOnExisting: false,
+    nextPageIn: 'header',
+    nextPageField: 'link',
+    isAbsoluteUrl: true,
+    maxPages: 200,
+    tokenParam: ''
+  });
 
   useEffect(() => {
     const fetchNamespaceDetails = async () => {
@@ -144,7 +157,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     }
   }, [method]);
 
-  const executeTest = async (isPaginated: boolean = false) => {
+  const executeTest = async (isPaginated: boolean = false, isSync: boolean = false) => {
     if (!selectedAccount || isSubmitting || loading) return;
     const controller = new AbortController();
     const signal = controller.signal;
@@ -153,7 +166,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       setError(null);
       setLoading(true);
       setResponse(null);
-      setActiveButton(isPaginated ? 'loop' : 'send');
+      setActiveButton(isSync ? 'sync' : isPaginated ? 'loop' : 'send');
 
       // Dynamically get tableName from selectedAccount.tableName[methodName]
       let dynamicTableName = '';
@@ -161,14 +174,8 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
         dynamicTableName = selectedAccount.tableName[methodName] || '';
       }
 
-      // Build query string from queryParams
-      const filteredParams = queryParams.filter(p => p.key && p.key.trim() !== '');
+      // Use the base URL without query parameters
       let urlWithParams = url;
-      if (filteredParams.length > 0) {
-        const searchParams = new URLSearchParams();
-        filteredParams.forEach(param => searchParams.append(param.key, param.value));
-        urlWithParams += (urlWithParams.includes('?') ? '&' : '?') + searchParams.toString();
-      }
 
       const endpoint = isPaginated
         ? `${API_BASE_URL}/unified/execute/paginated`
@@ -204,15 +211,23 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
           saveData: false
         })
       };
-      // Log the request details
-      console.log('[MethodTestPage] Sending request:', {
-        endpoint,
-        requestData,
-        selectedAccount,
-        methodName,
-        dynamicTableName,
-        isPaginated
-      });
+      // Log the complete request body
+      console.log('=== METHOD TEST REQUEST BODY ===');
+      console.log('Endpoint:', endpoint);
+      console.log('Request Data:', JSON.stringify(requestData, null, 2));
+      console.log('Selected Account:', selectedAccount);
+      console.log('Method Name:', methodName);
+      console.log('Dynamic Table Name:', dynamicTableName);
+      console.log('Is Paginated:', isPaginated);
+      console.log('URL with Params:', urlWithParams);
+      console.log('Headers:', formHeaders);
+      console.log('Query Params:', Object.fromEntries(
+        queryParams.filter(p => p.key && p.key.trim() !== '').map(p => [p.key.trim(), p.value])
+      ));
+      if (activeTab === 'body' && requestBody) {
+        console.log('Request Body:', requestBody);
+      }
+      console.log('=== END REQUEST BODY ===');
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -339,6 +354,71 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       onOpenSchemaTab(generatedSchema, methodName);
     }
     toast.success(`Schema generated for array field: ${arrayFieldName}`);
+  };
+
+  const handleSync = async () => {
+    if (!selectedAccount || isSubmitting || loading) return;
+    
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      setLoading(true);
+      setResponse(null);
+      setActiveButton('sync');
+
+      const requestData = {
+        method: 'GET', // Default method for sync
+        url: syncFormData.url,
+        queryParams: {},
+        headers: syncFormData.headers,
+        tableName: syncFormData.tableName,
+        saveData: true,
+        paginationType: 'sync', // This tells backend to use lambda
+        // Sync-specific parameters
+        idField: syncFormData.idField,
+        stopOnExisting: syncFormData.stopOnExisting,
+        nextPageIn: syncFormData.nextPageIn,
+        nextPageField: syncFormData.nextPageField,
+        isAbsoluteUrl: syncFormData.isAbsoluteUrl,
+        maxPages: syncFormData.maxPages,
+        ...(syncFormData.tokenParam && { tokenParam: syncFormData.tokenParam })
+      };
+
+      console.log('=== SYNC REQUEST ===');
+      console.log('Request Data:', JSON.stringify(requestData, null, 2));
+
+      const response = await fetch(`${API_BASE_URL}/unified/execute/paginated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+      });
+
+      const data = await response.json();
+      const responseObj: Response = {
+        success: response.ok,
+        data: data.data || data,
+        error: data.error,
+        status: response.status,
+        headers: {},
+        body: data
+      };
+
+      setResponse(responseObj);
+      if (!response.ok) setError(data.error || `Request failed with status ${response.status}`);
+      setResponseTab('body');
+      setResponseData(response.body);
+      setShowSyncModal(false);
+
+    } catch (err) {
+      console.error('Error executing sync:', err);
+      setError(err instanceof Error ? err.message : 'Network error during sync execution');
+    } finally {
+      setTimeout(() => {
+        setLoading(false);
+        setActiveButton(null);
+        setIsSubmitting(false);
+      }, 300);
+    }
   };
 
   const handleSchemaModalSave = async (finalSchemaName: string, finalJsonSchema: string) => {
@@ -763,9 +843,207 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
                 )}
               </div>
             </button>
+
+            <button
+              className={`px-4 py-2 text-[13px] text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm ${activeButton === 'sync' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+              onClick={e => {
+                e.preventDefault();
+                if (!isSubmitting && !loading) {
+                  // Pre-fill form with current data
+                  setSyncFormData({
+                    tableName: selectedAccount?.tableName?.[methodName] || '',
+                    url: url,
+                    headers: Object.fromEntries(
+                      headers.filter(h => h.key && h.key.trim() !== '').map(h => [h.key.trim(), h.value])
+                    ),
+                    idField: 'id',
+                    stopOnExisting: false,
+                    nextPageIn: 'header',
+                    nextPageField: 'link',
+                    isAbsoluteUrl: true,
+                    maxPages: 200,
+                    tokenParam: ''
+                  });
+                  setShowSyncModal(true);
+                }
+              }}
+              disabled={loading || !selectedAccount || isSubmitting}
+              type="button"
+            >
+              <div className="flex items-center gap-2 min-w-[70px] justify-center">
+                {(loading || isSubmitting) && activeButton === 'sync' ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Syncing...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Sync</span>
+                  </>
+                )}
+              </div>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Sync Modal */}
+      {showSyncModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Sync Configuration</h3>
+              <button
+                onClick={() => setShowSyncModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
+                  <input
+                    type="text"
+                    value={syncFormData.tableName}
+                    onChange={(e) => setSyncFormData({...syncFormData, tableName: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    placeholder="e.g., shopify_inkhub_get_products"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ID Field</label>
+                  <input
+                    type="text"
+                    value={syncFormData.idField}
+                    onChange={(e) => setSyncFormData({...syncFormData, idField: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    placeholder="e.g., id"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                <input
+                  type="text"
+                  value={syncFormData.url}
+                  onChange={(e) => setSyncFormData({...syncFormData, url: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  placeholder="https://api.example.com/endpoint"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Headers (JSON)</label>
+                <textarea
+                  value={JSON.stringify(syncFormData.headers, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const headers = JSON.parse(e.target.value);
+                      setSyncFormData({...syncFormData, headers});
+                    } catch (error) {
+                      // Ignore invalid JSON
+                    }
+                  }}
+                  className="w-full h-24 p-2 border border-gray-300 rounded-md font-mono text-sm"
+                  placeholder='{"Authorization": "Bearer token"}'
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next Page In</label>
+                  <select
+                    value={syncFormData.nextPageIn}
+                    onChange={(e) => setSyncFormData({...syncFormData, nextPageIn: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="header">Header</option>
+                    <option value="body">Body</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Next Page Field</label>
+                  <input
+                    type="text"
+                    value={syncFormData.nextPageField}
+                    onChange={(e) => setSyncFormData({...syncFormData, nextPageField: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    placeholder="e.g., link, bookmark"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Token Parameter (Optional)</label>
+                  <input
+                    type="text"
+                    value={syncFormData.tokenParam}
+                    onChange={(e) => setSyncFormData({...syncFormData, tokenParam: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    placeholder="e.g., bookmark"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Pages</label>
+                  <input
+                    type="number"
+                    value={syncFormData.maxPages || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSyncFormData({...syncFormData, maxPages: value ? parseInt(value) : 200});
+                    }}
+                    className="w-full p-2 border border-gray-300 rounded-md"
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={syncFormData.stopOnExisting}
+                    onChange={(e) => setSyncFormData({...syncFormData, stopOnExisting: e.target.checked})}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Stop on existing items</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={syncFormData.isAbsoluteUrl}
+                    onChange={(e) => setSyncFormData({...syncFormData, isAbsoluteUrl: e.target.checked})}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">Is absolute URL</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowSyncModal(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSync}
+                disabled={isSubmitting || !syncFormData.tableName || !syncFormData.url}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Syncing...' : 'Start Sync'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
