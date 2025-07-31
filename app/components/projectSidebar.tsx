@@ -40,11 +40,6 @@ const sidebarItems = [
     icon: <Play size={24} />, // Tests icon
   },
   {
-    name: 'AI',
-    path: '/ai',
-    icon: <FileCode size={24} />, // You can use any icon you like
-  },
-  {
     name: 'Docs',
     path: '/docs',
     icon: <BookOpen size={24} />, // Documentation icon

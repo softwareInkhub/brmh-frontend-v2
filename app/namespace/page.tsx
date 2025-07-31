@@ -1108,14 +1108,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                             <AIAgentWorkspace
+                              <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              /> 
+                              />
                             </div>
                           );
                         }
@@ -1397,14 +1397,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                         if (tab.key === 'ai-agent') {
                           return (
                             <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                               <AIAgentWorkspace
+                              <AIAgentWorkspace
                                 namespace={aiAgentTab?.namespace}
                                 onClose={() => {
                                   setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
                                   setAIAgentTab(null);
                                   setActiveTab('overview');
                                 }}
-                              /> 
+                              />
           </div>
                           );
                         }
