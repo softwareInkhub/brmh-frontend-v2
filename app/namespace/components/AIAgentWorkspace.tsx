@@ -356,11 +356,11 @@ What would you like to work on today?`,
       await handleStreamingResponse(userMessage);
     } catch (error) {
       console.error('Error handling streaming response:', error);
-      setConsoleOutput(prev => [...prev, `❌ Error processing message: ${error.message}`]);
+      setConsoleOutput(prev => [...prev, `❌ Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}`]);
       
       addMessage({
         role: 'assistant',
-        content: `Sorry, I encountered an error: ${error.message}`
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
     }
   };
@@ -1189,7 +1189,7 @@ What would you like to work on today?`,
         throw new Error(`Failed to save schema: ${response.status}`);
       }
     } catch (error) {
-      setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error.message}`]);
+      setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error instanceof Error ? error.message : 'Unknown error'}`]);
       console.error('Error saving schema to namespace:', error);
     } finally {
       setSavingSchema((prev) => ({ ...prev, [schemaData.id || 'schema']: false }));
@@ -1771,7 +1771,7 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           setConsoleOutput(prev => [...prev, `❌ Deployment failed for: ${func.name}`]);
         }
       } catch (error) {
-        setConsoleOutput(prev => [...prev, `❌ Error deploying ${func.name}: ${error.message}`]);
+        setConsoleOutput(prev => [...prev, `❌ Error deploying ${func.name}: ${error instanceof Error ? error.message : 'Unknown error'}`]);
       }
     }
     
@@ -1838,7 +1838,7 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
       
     } catch (error) {
       console.error('Error downloading project files:', error);
-      setConsoleOutput(prev => [...prev, `❌ Error downloading project files: ${error.message}`]);
+      setConsoleOutput(prev => [...prev, `❌ Error downloading project files: ${error instanceof Error ? error.message : 'Unknown error'}`]);
     } finally {
       setIsDownloading(false);
     }
@@ -2151,7 +2151,7 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
                     }
                   } catch (error) {
                     console.error('Error generating Lambda code:', error);
-                    setConsoleOutput(prev => [...prev, `❌ Error: ${error.message}`]);
+                    setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
                   }
                 }}
                 className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
@@ -2283,7 +2283,7 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
                                     }
                                   } catch (error) {
                                     console.error('Error saving schema:', error);
-                                    setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error.message}`]);
+                                    setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error instanceof Error ? error.message : 'Unknown error'}`]);
                                   } finally {
                                     setSavingSchema((prev) => ({ ...prev, [schema.id]: false }));
                                   }
