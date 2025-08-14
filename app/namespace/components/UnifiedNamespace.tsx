@@ -7,7 +7,6 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 import AccountPreviewModal from '../Modals/AccountPreviewModal';
 import CreateDataModal from '../Modals/CreateDataModal';
-import MockDataPanel from './MockDataPanel';
 import { useSidePanel } from "@/app/components/SidePanelContext";
 import { toast } from 'react-hot-toast';
 
@@ -401,9 +400,6 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [dataForm, setDataForm] = useState<any>({});
   const [dataTableName, setDataTableName] = useState('');
   const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
-
-  // Mock data panel state
-  const [showMockDataPanel, setShowMockDataPanel] = useState(false);
 
   // Add state for schema modal namespace context
   const [schemaModalNamespace, setSchemaModalNamespace] = useState<any>(null);
@@ -799,32 +795,6 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
     if (onModalClose) onModalClose();
   };
 
-  // Handle mock data insertion
-  const handleInsertMockData = async (data: any[]) => {
-    try {
-      for (const item of data) {
-        const res = await fetch(`${API_BASE_URL}/unified/schema/table/${dataTableName}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            item: item
-          })
-        });
-        
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Failed to insert data');
-        }
-      }
-      
-      toast.success(`Successfully inserted ${data.length} record(s)`);
-      refreshData();
-    } catch (err) {
-      toast.error('Failed to insert data: ' + (err instanceof Error ? err.message : String(err)));
-      throw err;
-    }
-  };
-
   // --- UI ---
   useEffect(() => {
     if (showModal.type === 'namespace') {
@@ -979,12 +949,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No accounts found.</div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map((account, accountIndex) => (
-                            <div key={account["namespace-account-id"] || `account-${accountIndex}`} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
+                    {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map(account => (
+                            <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
-                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string, tagIndex: number) => (
-                                <span key={`${account["namespace-account-id"] || accountIndex}-${tag}-${tagIndex}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string) => (
+                                <span key={`${account["namespace-account-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
@@ -1006,12 +976,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
                       ) : (
                         <div className="space-y-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map((method, methodIndex) => (
-                            <div key={method["namespace-method-id"] || `method-${methodIndex}`} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
+                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map(method => (
+                            <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
-                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string, tagIndex: number) => (
-                                <span key={`${method["namespace-method-id"] || methodIndex}-${tag}-${tagIndex}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
+                                <span key={`${method["namespace-method-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                         <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
@@ -1047,8 +1017,8 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     }
               return (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {nsSchemas.map((schema, schemaIndex) => (
-                          <div key={schema.id || `schema-${schemaIndex}`} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
+                        {nsSchemas.map(schema => (
+                          <div key={schema.id} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
                             <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
                             <span className="text-xs text-gray-500">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
                   </div>
@@ -1074,7 +1044,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         }}
         onDelete={schema => { handleDelete('schema', schema.id); setPreviewSchema(null); }}
       />
-      {/* Extra actions: Create Table, Create Data & Insert Mock Data */}
+      {/* Extra actions: Create Table & Create Data */}
       {previewSchema && (
         <div className="flex gap-2 mt-4 justify-end">
           <button
@@ -1088,16 +1058,6 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             onClick={() => { setDataFormSchema(previewSchema?.schema); setDataTableName(previewSchema?.tableName || previewSchema?.schemaName); setDataForm({}); setShowDataModal(true); }}
           >
             Create Data
-          </button>
-          <button
-            className="p-2 rounded-full bg-purple-50 hover:bg-purple-100 text-purple-600 transition"
-            onClick={() => { 
-              setDataFormSchema(previewSchema?.schema); 
-              setDataTableName(previewSchema?.tableName || previewSchema?.schemaName); 
-              setShowMockDataPanel(true); 
-            }}
-          >
-            Insert Mock Data
           </button>
         </div>
       )}
@@ -1787,19 +1747,6 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         schema={dataFormSchema}
         tableName={dataTableName}
         onSuccess={() => { setShowDataModal(false); }}
-      />
-
-      {/* Mock Data Panel */}
-      <MockDataPanel
-        isOpen={showMockDataPanel}
-        onClose={() => setShowMockDataPanel(false)}
-        tableName={dataTableName}
-        schema={dataFormSchema}
-        onInsertData={handleInsertMockData}
-        onFillForm={(data) => {
-          setDataForm(data);
-          setShowMockDataPanel(false);
-        }}
       />
     </div>
   );

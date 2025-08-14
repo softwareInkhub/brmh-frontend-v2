@@ -52,14 +52,14 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   // Search indexing state
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchFormData, setSearchFormData] = useState({
-    project: 'my-project',
-    table: '',
+    project: 'myProject',
+    table: 'shopify-inkhub-get-products',
     customFields: [] as string[]
   });
   const [searchIndices, setSearchIndices] = useState<any[]>([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('ankit');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchFilters, setSearchFilters] = useState('');
   const [searchHitsPerPage, setSearchHitsPerPage] = useState(20);
@@ -70,11 +70,13 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const [indexingConfigs, setIndexingConfigs] = useState<any[]>([]);
   const [loadingIndexingConfigs, setLoadingIndexingConfigs] = useState(false);
   const [showCreateIndexingModal, setShowCreateIndexingModal] = useState(false);
+  const [showEditIndexingModal, setShowEditIndexingModal] = useState(false);
+  const [editingIndexingConfig, setEditingIndexingConfig] = useState<any>(null);
   const [indexingFormData, setIndexingFormData] = useState({
-    project: 'my-project',
+    project: 'myProject',
     table: '',
-    customFields: [] as string[],
     description: '',
+    customFields: [] as string[],
     status: 'active'
   });
   const [showExecuteModal, setShowExecuteModal] = useState(false);
@@ -82,7 +84,7 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
   const [selectedIndexingAccountId, setSelectedIndexingAccountId] = useState('');
   const [selectedIndexingAccount, setSelectedIndexingAccount] = useState<any>(null);
   const [indexingTableExists, setIndexingTableExists] = useState(false);
-  const [selectedConfigForSearch, setSelectedConfigForSearch] = useState<string>('');
+  const [selectedConfigForSearch, setSelectedConfigForSearch] = useState<string | null>(null);
   const [showEditCacheModal, setShowEditCacheModal] = useState(false);
   const [editingCacheConfig, setEditingCacheConfig] = useState<any>(null);
   const [editCacheFormData, setEditCacheFormData] = useState({
@@ -92,6 +94,7 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
     status: 'active',
     itemsPerKey: 100
   });
+  const [showSearchInterface, setShowSearchInterface] = useState(false);
 
   useEffect(() => {
     if (method) {
@@ -715,7 +718,7 @@ Please select an indexing configuration above.`);
     try {
       setLoadingSearch(true);
       
-      console.log('Searching with parameters:', {
+      console.log('🔍 Searching with parameters:', {
         project: searchFormData.project,
         table: searchFormData.table,
         query: searchQuery,
@@ -737,18 +740,35 @@ Please select an indexing configuration above.`);
         })
       });
 
+      console.log('🔍 Search response status:', response.status);
+      console.log('🔍 Search response headers:', Object.fromEntries(response.headers.entries()));
+
       if (response.ok) {
         const result = await response.json();
-        console.log('Search result:', result);
+        console.log('✅ Search result:', result);
         setSearchResults(result.hits || []);
       } else {
-        const errorData = await response.json();
-        console.error('Search error:', errorData);
-        alert(`Search failed: ${errorData.error || errorData.message || 'Unknown error'}`);
+        const errorText = await response.text();
+        console.error('❌ Search error response:', errorText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        
+        console.error('❌ Search error:', errorData);
+        
+        if (response.status === 404) {
+          alert(`Search failed: No indices found for table "${searchFormData.table}". Please create and execute an indexing configuration first.`);
+        } else {
+          alert(`Search failed: ${errorData.error || errorData.message || 'Unknown error'}`);
+        }
       }
     } catch (error) {
-      console.error('Error searching:', error);
-      alert('Search failed: Network error');
+      console.error('❌ Error searching:', error);
+      alert('Search failed: Network error - ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setLoadingSearch(false);
     }
@@ -996,10 +1016,45 @@ Please select an indexing configuration above.`);
     }
   };
 
-  const handleIndexingAccountSelect = (accountId: string) => {
-    const account = accounts.find(acc => acc['account-id'] === accountId);
+  const handleIndexingAccountSelect = async (accountId: string) => {
+    const account = accounts.find(acc => acc['namespace-account-id'] === accountId);
     setSelectedIndexingAccountId(accountId);
     setSelectedIndexingAccount(account);
+    
+    if (!accountId || !editMethod['namespace-method-name']) {
+      setIndexingTableExists(false);
+      return;
+    }
+
+    try {
+      // Check if table exists for this account and method
+      const methodName = editMethod['namespace-method-name'];
+      const tableNameMap = account?.tableName || {};
+      const tableNameForMethod = tableNameMap[methodName];
+      
+      if (tableNameForMethod) {
+        // Table exists, set the form data
+        setIndexingTableExists(true);
+        setIndexingFormData(prev => ({
+          ...prev,
+          project: 'myProject',
+          table: tableNameForMethod,
+          description: `Indexing for ${methodName}`
+        }));
+      } else {
+        // No table found, but allow manual entry
+        setIndexingTableExists(false);
+        setIndexingFormData(prev => ({
+          ...prev,
+          project: 'myProject',
+          table: '',
+          description: `Indexing for ${methodName}`
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking table existence:', error);
+      setIndexingTableExists(false);
+    }
   };
 
   // Function to select indexing configuration for search
@@ -1016,21 +1071,119 @@ Please select an indexing configuration above.`);
   const handleSearchConfigSelection = (configId: string, config: any) => {
     if (selectedConfigForSearch === configId) {
       // Deselect if already selected
-      setSelectedConfigForSearch('');
-      setSearchFormData(prev => ({
-        ...prev,
-        project: 'my-project',
-        table: ''
-      }));
+      setSelectedConfigForSearch(null);
+      setShowSearchInterface(false);
+      setSearchFormData(prev => ({ ...prev, project: '', table: '' }));
     } else {
-      // Select this configuration
+      // Select new configuration
       setSelectedConfigForSearch(configId);
+      setShowSearchInterface(true);
       setSearchFormData(prev => ({
         ...prev,
-        project: config.project || prev.project,
-        table: config.table || prev.table
+        project: config.project || 'my-project',
+        table: config.table || ''
       }));
-      console.log('Selected indexing config for search:', config);
+    }
+  };
+
+  // Function to check available indices for the current table
+  const checkTableIndices = async () => {
+    if (!searchFormData.project || !searchFormData.table) return;
+    
+    try {
+      console.log('🔍 Checking indices for table:', searchFormData.table);
+      
+      const response = await fetch(`${API_BASE_URL}/search/indices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project: searchFormData.project,
+          table: searchFormData.table
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('📊 Available indices:', result);
+        
+        if (result.groupedIndices && 
+            result.groupedIndices[searchFormData.project] && 
+            result.groupedIndices[searchFormData.project][searchFormData.table]) {
+          const indices = result.groupedIndices[searchFormData.project][searchFormData.table];
+          console.log(`✅ Found ${indices.length} indices for table ${searchFormData.table}`);
+        } else {
+          console.log(`⚠️ No indices found for table ${searchFormData.table}`);
+        }
+      } else {
+        console.log('❌ Failed to check indices');
+      }
+    } catch (error) {
+      console.error('❌ Error checking indices:', error);
+    }
+  };
+
+  // Check indices when search interface is opened
+  useEffect(() => {
+    if (showSearchInterface && searchFormData.table) {
+      checkTableIndices();
+    }
+  }, [showSearchInterface, searchFormData.table]);
+
+  const handleEditIndexingConfig = (config: any) => {
+    setEditingIndexingConfig(config);
+    setIndexingFormData({
+      project: config.project || 'myProject',
+      table: config.table || '',
+      description: config.description || '',
+      customFields: config.customFields || [],
+      status: config.status || 'active'
+    });
+    setShowEditIndexingModal(true);
+  };
+
+  const handleUpdateIndexingConfig = async () => {
+    if (!editingIndexingConfig?.id) {
+      alert('No configuration selected for editing');
+      return;
+    }
+
+    if (!indexingFormData.project || !indexingFormData.table) {
+      alert('Project and table are required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-indexing`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: { id: editingIndexingConfig.id },
+          updates: {
+            project: indexingFormData.project,
+            table: indexingFormData.table,
+            description: indexingFormData.description,
+            customFields: indexingFormData.customFields,
+            status: indexingFormData.status,
+            updatedAt: new Date().toISOString()
+          }
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Indexing configuration updated:', result);
+        alert('Indexing configuration updated successfully!');
+        setShowEditIndexingModal(false);
+        setEditingIndexingConfig(null);
+        fetchIndexingConfigs(); // Refresh the list
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Failed to update indexing configuration:', errorData);
+        alert(`Failed to update configuration: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error updating indexing configuration:', error);
+      alert('Failed to update configuration: Network error');
     }
   };
 
@@ -1326,27 +1479,12 @@ Please select an indexing configuration above.`);
             {activeTab === 'search' && (
               <div className="px-4 py-3 space-y-4">
                 {/* Search Indexing Section */}
-                <div className="flex justify-between items-center p-3 bg-green-50 rounded border">
-                  <div className="flex items-center gap-2">
-                    <Search size={16} className="text-green-500" />
-                    <h3 className="text-sm font-semibold text-gray-800">Search Indexing</h3>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        // Debug: Show all indexing configs
-                        const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-indexing&pagination=true&itemPerPage=50`);
-                        if (response.ok) {
-                          const data = await response.json();
-                          console.log('🔍 DEBUG: All indexing configurations:', data.items);
-                          alert(`Found ${data.items?.length || 0} total indexing configurations. Check console for details.`);
-                        }
-                      }}
-                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      title="Debug: Show all indexing configs"
-                    >
-                      Debug All
-                    </button>
+               
+
+                {/* Indexing Configurations Display */}
+                <div className="bg-white border border-gray-200 rounded overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <h4 className="text-xs font-semibold text-gray-700">Search Indexing</h4>
                     <button
                       onClick={() => setShowCreateIndexingModal(true)}
                       className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
@@ -1354,48 +1492,21 @@ Please select an indexing configuration above.`);
                       Create Indexing Config
                     </button>
                   </div>
-                </div>
-
-                {/* Indexing Configurations Display */}
-                <div className="bg-white border border-gray-200 rounded overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                    <h4 className="text-xs font-semibold text-gray-700">Search Indexing</h4>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={async () => {
-                          // Debug: Show all indexing configs
-                          const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-indexing&pagination=true&itemPerPage=50`);
-                          if (response.ok) {
-                            const data = await response.json();
-                            console.log('🔍 DEBUG: All indexing configurations:', data.items);
-                            alert(`Found ${data.items?.length || 0} total indexing configurations. Check console for details.`);
-                          }
-                        }}
-                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                        title="Debug: Show all indexing configs"
-                      >
-                        Debug All
-                      </button>
-                      <button
-                        onClick={() => setShowCreateIndexingModal(true)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                      >
-                        Create Indexing Config
-                      </button>
-                    </div>
-                  </div>
                   <div className="p-3">
                     <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
                       <div className="text-xs text-yellow-800">
                         <strong>💡 How to use Search:</strong>
                         <div className="mt-1">
-                          • Check the "Search" checkbox next to an indexing configuration to use it for searching
+                          • Check the "Search" checkbox next to an indexing configuration to activate the search interface
                         </div>
                         <div className="mt-1">
                           • Only one configuration can be selected for search at a time
                         </div>
                         <div className="mt-1">
-                          • The selected configuration's project and table will be automatically used in the Search Interface below
+                          • The search interface will appear below when you select a configuration
+                        </div>
+                        <div className="mt-1">
+                          • Click on the search interface header to expand/collapse it
                         </div>
                       </div>
                     </div>
@@ -1460,6 +1571,13 @@ Please select an indexing configuration above.`);
                                 <td className="px-3 py-2 text-xs text-gray-900">
                                   <div className="flex gap-1">
                                     <button
+                                      onClick={() => handleEditIndexingConfig(config)}
+                                      className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-1.5 py-0.5 rounded transition-colors"
+                                      title="Edit configuration"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
                                       onClick={() => handleExecuteIndexing(config)}
                                       disabled={config.status !== 'active'}
                                       className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded transition-colors disabled:opacity-50"
@@ -1493,206 +1611,139 @@ Please select an indexing configuration above.`);
                   </div>
                 </div>
 
-                {/* Search Results */}
-                {searchResults.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold mb-3">3. Search Results</h4>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                      <div className="text-sm text-gray-600 mb-2">
-                        Found {searchResults.length} results
-                      </div>
-                      {searchResults.map((result, idx) => (
-                        <div key={`result-${idx}`} className="bg-white border border-gray-200 rounded p-3 mb-2">
-                          <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                            {JSON.stringify(result, null, 2)}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              
 
                 {/* Search Indices Display */}
-                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-semibold text-gray-700">Search Indices</h4>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={fetchSearchIndices}
-                          disabled={loadingSearch}
-                          className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                        >
-                          {loadingSearch ? 'Loading...' : 'Refresh'}
-                        </button>
-                        <button
-                          onClick={handleDeleteIndices}
-                          disabled={loadingSearch || searchIndices.length === 0}
-                          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                        >
-                          Clean Old
-                        </button>
+               
+
+                {/* Search Interface - Collapsible */}
+                {selectedConfigForSearch && (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <div 
+                      className="px-4 py-3 bg-blue-50 border-b border-gray-200 cursor-pointer hover:bg-blue-100 transition-colors"
+                      onClick={() => setShowSearchInterface(!showSearchInterface)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-blue-700 flex items-center gap-2">
+                          <span>🔍 Search Interface</span>
+                          {indexingConfigs.find(c => (c.id || c.id === 0) === selectedConfigForSearch) && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              {indexingConfigs.find(c => (c.id || c.id === 0) === selectedConfigForSearch)?.project}/{indexingConfigs.find(c => (c.id || c.id === 0) === selectedConfigForSearch)?.table}
+                            </span>
+                          )}
+                        </h4>
+                        <span className="text-blue-600 text-sm">
+                          {showSearchInterface ? '▼' : '▶'}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                  
-                  {loadingSearch ? (
-                    <div className="p-4 text-center text-gray-500">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500 mx-auto mb-2"></div>
-                      Loading search indices...
-                    </div>
-                  ) : searchIndices.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500">
-                      No search indices found for this method
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Index Name</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entries</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Size</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {searchIndices.map((index, indexIdx) => (
-                            <tr key={index.name || `index-${indexIdx}`} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-sm text-gray-900 font-mono">
-                                {index.name || 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900">
-                                {index.entries?.toLocaleString() || 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900">
-                                {index.dataSize ? `${(index.dataSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-500">
-                                {index.createdAt ? new Date(index.createdAt).toLocaleDateString() : 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900">
-                                <button
-                                  onClick={() => {
-                                    setSearchFormData(prev => ({ ...prev, table: editMethod["namespace-method-tableName"] || editMethod["tableName"] || '' }));
-                                    setShowSearchModal(true);
-                                  }}
-                                  className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition-colors"
-                                >
-                                  Search
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                    
+                    {showSearchInterface && (
+                      <div className="p-4">
+                        {/* Compact Search Form */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Search Query</label>
+                              <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                                placeholder="Enter search query..."
+                              />
+                            </div>
+                            <div className="w-20">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Hits</label>
+                              <input
+                                type="number"
+                                value={searchHitsPerPage}
+                                onChange={(e) => setSearchHitsPerPage(parseInt(e.target.value) || 20)}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                                min="1"
+                                max="100"
+                              />
+                            </div>
+                            <div className="w-16">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Page</label>
+                              <input
+                                type="number"
+                                value={searchPage}
+                                onChange={(e) => setSearchPage(parseInt(e.target.value) || 0)}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                                min="0"
+                              />
+                            </div>
+                            <div className="w-40">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Table</label>
+                              <input
+                                type="text"
+                                value={searchFormData.table}
+                                onChange={(e) => setSearchFormData(prev => ({ ...prev, table: e.target.value }))}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                                placeholder="Table name"
+                              />
+                            </div>
+                            <div className="pt-5">
+                              <button
+                                onClick={handleSearchQuery}
+                                disabled={!searchQuery.trim() || loadingSearch}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {loadingSearch ? (
+                                  <div className="flex items-center gap-1">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b border-white"></div>
+                                    <span>Searching...</span>
+                                  </div>
+                                ) : (
+                                  'Search'
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
 
-                {/* Search Interface */}
-                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-700">Search Interface</h4>
-                  </div>
-                  <div className="p-4">
-                    {/* Debug Information */}
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="text-sm text-blue-800">
-                        <div><strong>Current Search Configuration:</strong></div>
-                        <div>Project: <span className="font-mono">{searchFormData.project || 'Not set'}</span></div>
-                        <div>Table: <span className="font-mono">{searchFormData.table || 'Not set'}</span></div>
-                        {selectedConfigForSearch && (
-                          <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded">
-                            <div className="text-green-800">
-                              <strong>✓ Selected Configuration:</strong>
-                              <div className="font-mono text-xs">
-                                {indexingConfigs.find(c => (c.id || c.id === 0) === selectedConfigForSearch)?.project}/{indexingConfigs.find(c => (c.id || c.id === 0) === selectedConfigForSearch)?.table}
+                        {/* Search Results */}
+                        {searchResults.length > 0 && (
+                          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-sm font-semibold text-gray-700">
+                                  Search Results ({searchResults.length} found)
+                                </h5>
+                                <button
+                                  onClick={() => setSearchResults([])}
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  Clear
+                                </button>
                               </div>
+                            </div>
+                            <div className="max-h-96 overflow-y-auto">
+                              {searchResults.map((result, idx) => (
+                                <div key={`result-${idx}`} className="border-b border-gray-100 last:border-b-0">
+                                  <div className="p-3 hover:bg-gray-50">
+                                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
+                                      {JSON.stringify(result, null, 2)}
+                                    </pre>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         )}
-                        {!searchFormData.table && (
-                          <div className="text-red-600 mt-1">
-                            ⚠️ Table is not set. Please select an indexing configuration above or manually enter the table name.
+
+                        {/* No Results Message */}
+                        {searchResults.length === 0 && !loadingSearch && (
+                          <div className="text-center py-8 text-gray-500">
+                            <div className="text-sm">No search results yet</div>
+                            <div className="text-xs mt-1">Enter a search query and click Search to find results</div>
                           </div>
                         )}
                       </div>
-                    </div>
-                    
-                    {/* Manual Table Override */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Manual Table Override (if auto-detection fails):</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={searchFormData.table}
-                          onChange={(e) => setSearchFormData(prev => ({ ...prev, table: e.target.value }))}
-                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
-                          placeholder="Enter table name (e.g., shopify-inkhub-get-orders)"
-                        />
-                        <button
-                          onClick={() => setSearchFormData(prev => ({ ...prev, table: 'shopify-inkhub-get-orders' }))}
-                          className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-                        >
-                          Set Example
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Search Query</label>
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                          placeholder="Enter search query"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Filters (optional)</label>
-                        <input
-                          type="text"
-                          value={searchFilters}
-                          onChange={(e) => setSearchFilters(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                          placeholder="e.g., status:active"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Hits per Page</label>
-                        <input
-                          type="number"
-                          value={searchHitsPerPage}
-                          onChange={(e) => setSearchHitsPerPage(parseInt(e.target.value) || 20)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                          min="1"
-                          max="100"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Page</label>
-                        <input
-                          type="number"
-                          value={searchPage}
-                          onChange={(e) => setSearchPage(parseInt(e.target.value) || 0)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
-                          min="0"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleSearchQuery}
-                      disabled={!searchQuery.trim() || loadingSearch}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                    >
-                      {loadingSearch ? 'Searching...' : 'Search'}
-                    </button>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             )}
           </>
@@ -2262,7 +2313,7 @@ Please select an indexing configuration above.`);
                       <svg className="w-5 h-5 text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                       </svg>
-                      <span className="text-blue-800 font-medium">Please select an account that has a table for this method to proceed with configuration.</span>
+                      <span className="text-blue-800 font-medium">No table was automatically detected for this account and method. Please create a table first before creating an indexing configuration.</span>
                     </div>
                   </div>
                 )}
@@ -2615,6 +2666,105 @@ Please select an indexing configuration above.`);
                 </button>
                 <button
                   onClick={handleUpdateCache}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Update Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Indexing Configuration Modal */}
+        {showEditIndexingModal && editingIndexingConfig && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">Edit Indexing Configuration</h3>
+                <button
+                  onClick={() => {
+                    setShowEditIndexingModal(false);
+                    setEditingIndexingConfig(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                  <input
+                    type="text"
+                    value={indexingFormData.project}
+                    onChange={(e) => setIndexingFormData(prev => ({ ...prev, project: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                    placeholder="Enter project name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
+                  <input
+                    type="text"
+                    value={indexingFormData.table}
+                    onChange={(e) => setIndexingFormData(prev => ({ ...prev, table: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                    placeholder="Enter table name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={indexingFormData.description}
+                    onChange={(e) => setIndexingFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                    placeholder="Enter description for this indexing configuration"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Custom Fields (comma separated)</label>
+                  <input
+                    type="text"
+                    value={indexingFormData.customFields.join(', ')}
+                    onChange={(e) => setIndexingFormData(prev => ({ 
+                      ...prev, 
+                      customFields: e.target.value.split(',').map(field => field.trim()).filter(Boolean)
+                    }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                    placeholder="e.g., id, name, order_number, email, phone, financial_status, fulfillment_status, tags, created_at, updated_at, total_price, currency, customer.first_name, customer.last_name, customer.email, customer.phone, customer.default_address.city, customer.default_address.province, customer.default_address.country, billing_address.name, billing_address.city, billing_address.province, billing_address.country, shipping_address.name, shipping_address.city, shipping_address.province, shipping_address.country, line_items.title, line_items.variant_title, line_items.sku, line_items.vendor, line_items.price, fulfillments.tracking_number, fulfillments.tracking_company, fulfillments.shipment_status"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={indexingFormData.status}
+                    onChange={(e) => setIndexingFormData(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowEditIndexingModal(false);
+                    setEditingIndexingConfig(null);
+                  }}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateIndexingConfig}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
                 >
                   Update Configuration
