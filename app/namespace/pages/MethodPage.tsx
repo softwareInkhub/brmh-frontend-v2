@@ -487,12 +487,12 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
 
   const handleToggleCacheStatus = async (cacheConfig: any) => {
     try {
-      const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
-      
+    const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
+    
       const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           item: { ...cacheConfig, status: newStatus },
           key: { id: cacheConfig.id }
         })
@@ -856,7 +856,7 @@ Please select an indexing configuration above.`);
                 table: activeConfig.table || prev.table
               }));
             }
-          } else {
+        } else {
             console.log('⚠️ No indexing configurations found for this method ID');
           }
         } else {
@@ -1208,86 +1208,86 @@ Please select an indexing configuration above.`);
           <div className="flex items-center space-x-3">
             <Settings className="text-blue-500" size={20} />
             <h2 className="text-lg font-semibold text-gray-800">Method Details</h2>
-          </div>
-          {/* Action Buttons */}
+              </div>
+              {/* Action Buttons */}
           <div className="flex gap-2 items-center">
-            <button
-              title="Test Method"
+                <button
+                  title="Test Method"
               className="w-8 h-8 flex items-center justify-center bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
-              onClick={() => {
-                if (onTest) onTest(editMethod, namespace);
-              }}
-            >
+                  onClick={() => {
+                    if (onTest) onTest(editMethod, namespace);
+                  }}
+                >
               <Play size={16} />
-            </button>
-            <button
-              title="Edit"
+                </button>
+                <button
+                  title="Edit"
               className="w-8 h-8 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-              onClick={() => setEditMode(true)}
-            >
+                  onClick={() => setEditMode(true)}
+                >
               <Edit size={16} />
-            </button>
-            <button
-              title="Delete"
+                </button>
+                <button
+                  title="Delete"
               className="w-8 h-8 flex items-center justify-center bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-              onClick={async () => {
-                if (window.confirm('Are you sure you want to delete this method?')) {
-                  try {
-                    const res = await fetch(`http://localhost:5001/unified/methods/${editMethod["namespace-method-id"]}`, {
-                      method: 'DELETE',
-                    });
-                    if (!res.ok && res.status !== 204) throw new Error('Failed to delete method');
-                    window.location.reload();
-                  } catch {
-                    alert('Failed to delete method');
-                  }
-                }
-              }}
-            >
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to delete this method?')) {
+                      try {
+                        const res = await fetch(`http://localhost:5001/unified/methods/${editMethod["namespace-method-id"]}`, {
+                          method: 'DELETE',
+                        });
+                        if (!res.ok && res.status !== 204) throw new Error('Failed to delete method');
+                        window.location.reload();
+                      } catch {
+                        alert('Failed to delete method');
+                      }
+                    }
+                  }}
+                >
               <Trash2 size={16} />
-            </button>
+                </button>
           </div>
-        </div>
-      </div>
+              </div>
+            </div>
 
-      {/* Tab Navigation */}
+            {/* Tab Navigation */}
       <div className="flex border-b border-gray-200 bg-white">
-        <button
-          onClick={() => setActiveTab('details')}
+              <button
+                onClick={() => setActiveTab('details')}
           className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-            activeTab === 'details'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          Details
-        </button>
-        <button
-          onClick={() => setActiveTab('caching')}
+                  activeTab === 'details'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setActiveTab('caching')}
           className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-            activeTab === 'caching'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          Caching
-        </button>
-        <button
-          onClick={() => setActiveTab('search')}
+                  activeTab === 'caching'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Caching
+              </button>
+              <button
+                onClick={() => setActiveTab('search')}
           className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-            activeTab === 'search'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-        >
-          Search Indexing
-        </button>
-      </div>
+                  activeTab === 'search'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Search Indexing
+              </button>
+            </div>
 
-      {/* Tab Content */}
+            {/* Tab Content */}
       {!editMode ? (
         <>
-                    {activeTab === 'details' && (
+            {activeTab === 'details' && (
             <div className="px-4 py-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                 <div>
@@ -1342,10 +1342,10 @@ Please select an indexing configuration above.`);
                     <span className={editMethod['save-data'] ? 'text-green-700 font-semibold text-xs' : 'text-gray-400 text-xs'}>Save Data</span>
                     <span className="text-xs text-gray-500">Table Name: {editMethod["namespace-method-tableName"] || editMethod["tableName"] || <span className="italic text-gray-400">null</span>}</span>
                   </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
             {activeTab === 'caching' && (
               <div className="px-4 py-3 space-y-4">
@@ -1485,13 +1485,13 @@ Please select an indexing configuration above.`);
                 <div className="bg-white border border-gray-200 rounded overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                     <h4 className="text-xs font-semibold text-gray-700">Search Indexing</h4>
-                    <button
-                      onClick={() => setShowCreateIndexingModal(true)}
+                  <button
+                    onClick={() => setShowCreateIndexingModal(true)}
                       className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
-                    >
-                      Create Indexing Config
-                    </button>
-                  </div>
+                  >
+                    Create Indexing Config
+                  </button>
+                </div>
                   <div className="p-3">
                     <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
                       <div className="text-xs text-yellow-800">
@@ -1508,24 +1508,24 @@ Please select an indexing configuration above.`);
                         <div className="mt-1">
                           • Click on the search interface header to expand/collapse it
                         </div>
-                      </div>
                     </div>
-                    
+                  </div>
+                  
                     {/* Indexing Configurations Table */}
-                    {loadingIndexingConfigs ? (
+                  {loadingIndexingConfigs ? (
                       <div className="p-3 text-center text-gray-500">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500 mx-auto mb-1"></div>
                         <div className="text-xs">Loading indexing configurations...</div>
-                      </div>
-                    ) : indexingConfigs.length === 0 ? (
+                    </div>
+                  ) : indexingConfigs.length === 0 ? (
                       <div className="p-3 text-center text-gray-500">
                         <div className="text-xs">No indexing configurations found for this method</div>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-50">
-                            <tr>
+                        <thead className="bg-gray-50">
+                          <tr>
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Search</th>
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project</th>
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Table</th>
@@ -1533,10 +1533,10 @@ Please select an indexing configuration above.`);
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                               <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {indexingConfigs.map((config, index) => (
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {indexingConfigs.map((config, index) => (
                               <tr key={config.id || `config-${index}`} className="hover:bg-gray-50">
                                 <td className="px-3 py-2 text-xs text-gray-900">
                                   <input
@@ -1548,26 +1548,26 @@ Please select an indexing configuration above.`);
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-xs text-gray-900 font-mono">
-                                  {config.project || 'N/A'}
-                                </td>
+                                {config.project || 'N/A'}
+                              </td>
                                 <td className="px-3 py-2 text-xs text-gray-900 font-mono">
-                                  {config.table || 'N/A'}
-                                </td>
+                                {config.table || 'N/A'}
+                              </td>
                                 <td className="px-3 py-2 text-xs text-gray-900">
-                                  {config.description || 'No description'}
-                                </td>
+                                {config.description || 'No description'}
+                              </td>
                                 <td className="px-3 py-2 text-xs">
                                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    config.status === 'active' 
-                                      ? 'bg-green-100 text-green-800' 
-                                      : 'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {config.status || 'unknown'}
-                                  </span>
-                                </td>
+                                  config.status === 'active' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {config.status || 'unknown'}
+                                </span>
+                              </td>
                                 <td className="px-3 py-2 text-xs text-gray-500">
-                                  {config.createdAt ? new Date(config.createdAt).toLocaleDateString() : 'N/A'}
-                                </td>
+                                {config.createdAt ? new Date(config.createdAt).toLocaleDateString() : 'N/A'}
+                              </td>
                                 <td className="px-3 py-2 text-xs text-gray-900">
                                   <div className="flex gap-1">
                                     <button
@@ -1577,37 +1577,37 @@ Please select an indexing configuration above.`);
                                     >
                                       Edit
                                     </button>
-                                    <button
-                                      onClick={() => handleExecuteIndexing(config)}
-                                      disabled={config.status !== 'active'}
+                                  <button
+                                    onClick={() => handleExecuteIndexing(config)}
+                                    disabled={config.status !== 'active'}
                                       className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded transition-colors disabled:opacity-50"
-                                    >
-                                      Execute
-                                    </button>
-                                    <button
-                                      onClick={() => handleToggleIndexingStatus(config)}
+                                  >
+                                    Execute
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleIndexingStatus(config)}
                                       className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
-                                        config.status === 'active'
-                                          ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
-                                          : 'bg-green-100 hover:bg-green-200 text-green-700'
-                                      }`}
-                                    >
-                                      {config.status === 'active' ? 'Deactivate' : 'Activate'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteIndexingConfig(config.id)}
+                                      config.status === 'active'
+                                        ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700'
+                                        : 'bg-green-100 hover:bg-green-200 text-green-700'
+                                    }`}
+                                  >
+                                    {config.status === 'active' ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteIndexingConfig(config.id)}
                                       className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-1.5 py-0.5 rounded transition-colors"
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   </div>
                 </div>
 
@@ -1618,7 +1618,7 @@ Please select an indexing configuration above.`);
 
                 {/* Search Interface - Collapsible */}
                 {selectedConfigForSearch && (
-                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                     <div 
                       className="px-4 py-3 bg-blue-50 border-b border-gray-200 cursor-pointer hover:bg-blue-100 transition-colors"
                       onClick={() => setShowSearchInterface(!showSearchInterface)}
@@ -1635,45 +1635,45 @@ Please select an indexing configuration above.`);
                         <span className="text-blue-600 text-sm">
                           {showSearchInterface ? '▼' : '▶'}
                         </span>
-                      </div>
+                  </div>
                     </div>
                     
                     {showSearchInterface && (
-                      <div className="p-4">
+                  <div className="p-4">
                         {/* Compact Search Form */}
                         <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
                           <div className="flex items-center gap-3">
                             <div className="flex-1">
                               <label className="block text-xs font-medium text-gray-700 mb-1">Search Query</label>
-                              <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
                                 placeholder="Enter search query..."
-                              />
-                            </div>
+                        />
+                      </div>
                             <div className="w-20">
                               <label className="block text-xs font-medium text-gray-700 mb-1">Hits</label>
-                              <input
-                                type="number"
-                                value={searchHitsPerPage}
-                                onChange={(e) => setSearchHitsPerPage(parseInt(e.target.value) || 20)}
+                        <input
+                          type="number"
+                          value={searchHitsPerPage}
+                          onChange={(e) => setSearchHitsPerPage(parseInt(e.target.value) || 20)}
                                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                                min="1"
-                                max="100"
-                              />
-                            </div>
+                          min="1"
+                          max="100"
+                        />
+                      </div>
                             <div className="w-16">
                               <label className="block text-xs font-medium text-gray-700 mb-1">Page</label>
-                              <input
-                                type="number"
-                                value={searchPage}
-                                onChange={(e) => setSearchPage(parseInt(e.target.value) || 0)}
+                        <input
+                          type="number"
+                          value={searchPage}
+                          onChange={(e) => setSearchPage(parseInt(e.target.value) || 0)}
                                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                                min="0"
-                              />
-                            </div>
+                          min="0"
+                        />
+                      </div>
                             <div className="w-40">
                               <label className="block text-xs font-medium text-gray-700 mb-1">Table</label>
                               <input
@@ -1683,11 +1683,11 @@ Please select an indexing configuration above.`);
                                 className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
                                 placeholder="Table name"
                               />
-                            </div>
+                    </div>
                             <div className="pt-5">
-                              <button
-                                onClick={handleSearchQuery}
-                                disabled={!searchQuery.trim() || loadingSearch}
+                    <button
+                      onClick={handleSearchQuery}
+                      disabled={!searchQuery.trim() || loadingSearch}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {loadingSearch ? (
@@ -1698,14 +1698,14 @@ Please select an indexing configuration above.`);
                                 ) : (
                                   'Search'
                                 )}
-                              </button>
+                    </button>
                             </div>
-                          </div>
-                        </div>
+                  </div>
+                </div>
 
-                        {/* Search Results */}
-                        {searchResults.length > 0 && (
-                          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                             <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
                               <div className="flex items-center justify-between">
                                 <h5 className="text-sm font-semibold text-gray-700">
@@ -1717,33 +1717,33 @@ Please select an indexing configuration above.`);
                                 >
                                   Clear
                                 </button>
-                              </div>
-                            </div>
+                    </div>
+                      </div>
                             <div className="max-h-96 overflow-y-auto">
-                              {searchResults.map((result, idx) => (
+                      {searchResults.map((result, idx) => (
                                 <div key={`result-${idx}`} className="border-b border-gray-100 last:border-b-0">
                                   <div className="p-3 hover:bg-gray-50">
                                     <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
-                                      {JSON.stringify(result, null, 2)}
-                                    </pre>
+                            {JSON.stringify(result, null, 2)}
+                          </pre>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                         {/* No Results Message */}
                         {searchResults.length === 0 && !loadingSearch && (
                           <div className="text-center py-8 text-gray-500">
                             <div className="text-sm">No search results yet</div>
                             <div className="text-xs mt-1">Enter a search query and click Search to find results</div>
-                          </div>
-                        )}
                       </div>
+                        )}
+                    </div>
                     )}
-                  </div>
-                )}
+                    </div>
+                  )}
               </div>
             )}
           </>
@@ -2574,7 +2574,7 @@ Please select an indexing configuration above.`);
                 >
                   ✕
                 </button>
-              </div>
+      </div>
 
               <div className="space-y-4">
                 <div>
@@ -2586,7 +2586,7 @@ Please select an indexing configuration above.`);
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
                     placeholder="Enter table name"
                   />
-                </div>
+    </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
@@ -2776,4 +2776,4 @@ Please select an indexing configuration above.`);
       </div>
    
   );
-}
+} 
