@@ -7,6 +7,7 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 import AccountPreviewModal from '../Modals/AccountPreviewModal';
 import CreateDataModal from '../Modals/CreateDataModal';
+import MockDataPanel from './MockDataPanel';
 import { useSidePanel } from "@/app/components/SidePanelContext";
 import { toast } from 'react-hot-toast';
 
@@ -400,6 +401,9 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [dataTableName, setDataTableName] = useState('');
   const [tableMetaStatusById, setTableMetaStatusById] = useState<{ [metaId: string]: string }>({});
 
+  // Mock data panel state
+  const [showMockDataPanel, setShowMockDataPanel] = useState(false);
+
   // Add state for schema modal namespace context
   const [schemaModalNamespace, setSchemaModalNamespace] = useState<any>(null);
 
@@ -790,6 +794,32 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
     if (onModalClose) onModalClose();
   };
 
+  // Handle mock data insertion
+  const handleInsertMockData = async (data: any[]) => {
+    try {
+      for (const item of data) {
+        const res = await fetch(`${API_BASE_URL}/unified/schema/table/${dataTableName}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            item: item
+          })
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to insert data');
+        }
+      }
+      
+      toast.success(`Successfully inserted ${data.length} record(s)`);
+      refreshData();
+    } catch (err) {
+      toast.error('Failed to insert data: ' + (err instanceof Error ? err.message : String(err)));
+      throw err;
+    }
+  };
+
   // --- UI ---
   useEffect(() => {
     if (showModal.type === 'namespace') {
@@ -1021,7 +1051,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         }}
         onDelete={schema => { handleDelete('schema', schema.id); setPreviewSchema(null); }}
       />
-      {/* Extra actions: Create Table & Create Data */}
+      {/* Extra actions: Create Table, Create Data & Insert Mock Data */}
       {previewSchema && (
         <div className="flex gap-2 mt-4 justify-end">
           <button
@@ -1035,6 +1065,16 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             onClick={() => { setDataFormSchema(previewSchema?.schema); setDataTableName(previewSchema?.tableName || previewSchema?.schemaName); setDataForm({}); setShowDataModal(true); }}
           >
             Create Data
+          </button>
+          <button
+            className="p-2 rounded-full bg-purple-50 hover:bg-purple-100 text-purple-600 transition"
+            onClick={() => { 
+              setDataFormSchema(previewSchema?.schema); 
+              setDataTableName(previewSchema?.tableName || previewSchema?.schemaName); 
+              setShowMockDataPanel(true); 
+            }}
+          >
+            Insert Mock Data
           </button>
         </div>
       )}
@@ -1724,6 +1764,19 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         schema={dataFormSchema}
         tableName={dataTableName}
         onSuccess={() => { setShowDataModal(false); }}
+      />
+
+      {/* Mock Data Panel */}
+      <MockDataPanel
+        isOpen={showMockDataPanel}
+        onClose={() => setShowMockDataPanel(false)}
+        tableName={dataTableName}
+        schema={dataFormSchema}
+        onInsertData={handleInsertMockData}
+        onFillForm={(data) => {
+          setDataForm(data);
+          setShowMockDataPanel(false);
+        }}
       />
     </div>
   );

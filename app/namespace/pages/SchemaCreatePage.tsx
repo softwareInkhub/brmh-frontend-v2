@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NestedFieldsEditor, schemaToFields } from '../components/SchemaService';
 import RecursiveDataForm from '../../components/common/RecursiveDataForm';
+import MockDataPanel from '../components/MockDataPanel';
 import Ajv from 'ajv';
 import { v4 as uuidv4 } from 'uuid';
 import { Edit, PlusCircle, RefreshCw, Eye, Trash2 } from "lucide-react";
@@ -98,8 +99,16 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [readKey, setReadKey] = useState('');
   const [readResult, setReadResult] = useState<string | null>(null);
   const [readAllResult, setReadAllResult] = useState<string | null>(null);
+
+  // Mock data panel state
+  const [showMockDataPanel, setShowMockDataPanel] = useState(false);
   const [deleteKey, setDeleteKey] = useState('');
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
+  
+  // Auto-fill mock data state
+  const [isGeneratingMockData, setIsGeneratingMockData] = useState(false);
+  const [mockDataContext, setMockDataContext] = useState('');
+  const [autoFillEnabled, setAutoFillEnabled] = useState(false);
 
   // 2. Fetch accounts for the namespace on mount or when schemaObj changes
   useEffect(() => {
@@ -110,6 +119,8 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       .then(setAccounts)
       .catch(() => setAccounts([]));
   }, [namespace, schemaObj]);
+
+
 
   // 3. Fetch method name if methodId is present, but prefer schemaObj.methodName
   useEffect(() => {
@@ -521,6 +532,40 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
 
   const getStringId = (id: any) => (typeof id === 'object' && id !== null && 'S' in id ? id.S : id);
 
+  // Handle mock data insertion
+  const handleInsertMockData = async (data: any[]) => {
+    try {
+      const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+      const tableNameMap = acc?.tableName || {};
+      const tableNameForMethod = tableNameMap[methodName];
+      
+      if (!tableNameForMethod) {
+        throw new Error('No table exists for this account and method. Please create a table first.');
+      }
+
+      for (const item of data) {
+        const res = await fetch(`${API_BASE_URL}/crud?tableName=${tableNameForMethod}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item }),
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to insert data');
+        }
+      }
+      
+      setCreateDataResult(`Successfully inserted ${data.length} record(s)`);
+      setFormData({});
+    } catch (err) {
+      setCreateDataResult('Error: ' + (err instanceof Error ? err.message : String(err)));
+      throw err;
+    }
+  };
+
+
+
   return (
     <div className="h-full w-full flex flex-col bg-white">
       {/* Tab Switcher */}
@@ -704,6 +749,9 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       {isEditing && activeTab === 'createData' && (
         <div className="px-8 pb-8">
           <h2 className="text-lg font-semibold mb-4">Create Data for Table</h2>
+          
+
+          
           <label className="block text-sm font-medium mb-2">Account</label>
           <select
             className="border border-gray-300 p-2 rounded-lg w-full mb-4"
@@ -794,12 +842,30 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 onChange={setFormData}
                 required={JSON.parse(jsonSchema).required}
               />
-              <button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-4"
-              >
-                Create
-              </button>
+              <div className="flex gap-2 mt-4">
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg"
+                  onClick={() => {
+                    const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+                    const tableNameMap = acc?.tableName || {};
+                    const tableNameForMethod = tableNameMap[methodName];
+                    if (tableNameForMethod) {
+                      setShowMockDataPanel(true);
+                    } else {
+                      setCreateDataResult('Error: No table exists for this account and method. Please create a table first.');
+                    }
+                  }}
+                >
+                  Insert Mock Data
+                </button>
+              </div>
               {formErrors && (
                 <div className="mt-2 text-sm text-red-600">{formErrors}</div>
               )}
@@ -1111,6 +1177,23 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
           </div>
         </div>
       )}
+
+      {/* Mock Data Panel */}
+      <MockDataPanel
+        isOpen={showMockDataPanel}
+        onClose={() => setShowMockDataPanel(false)}
+        tableName={(() => {
+          const acc = accounts.find(a => a['namespace-account-id'] === selectedAccountForData);
+          const tableNameMap = acc?.tableName || {};
+          return tableNameMap[methodName] || '';
+        })()}
+        schema={JSON.parse(jsonSchema)}
+        onInsertData={handleInsertMockData}
+        onFillForm={(data) => {
+          setFormData(data);
+          setShowMockDataPanel(false);
+        }}
+      />
     </div>
   );
 } 
