@@ -523,25 +523,57 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
 
   return (
     <div className="h-full w-full flex flex-col bg-white">
+      {/* Header Section - Method and Schema Name */}
+      <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="text-xs text-gray-600">
+              <span className="font-medium">Method:</span> {methodName || <span className="italic text-gray-400">None</span>}
+            </div>
+            {namespace && (
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">Namespace:</span> {namespace['namespace-name']}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <label className="text-xs font-medium text-gray-700" htmlFor="schema-name">
+              Schema Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="schema-name"
+              className="border border-gray-200 px-2 py-1 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition bg-white placeholder-gray-400 w-48"
+              placeholder="Schema Name (required)"
+              value={schemaName}
+              onChange={e => {
+                setSchemaName(e.target.value);
+                if (onSchemaNameChange) onSchemaNameChange(e.target.value);
+              }}
+              required
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Tab Switcher */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
-        <nav className="flex gap-1 px-8 py-2 overflow-x-auto" role="tablist">
+        <nav className="flex gap-1 px-4 py-2 overflow-x-auto" role="tablist">
           {[
-            { key: 'edit', label: 'Edit Schema', icon: <Edit size={16} /> },
-            { key: 'createData', label: 'Create Data', icon: <PlusCircle size={16} /> },
-            { key: 'updateData', label: 'Update Data', icon: <RefreshCw size={16} /> },
-            { key: 'readData', label: 'Read Data', icon: <Eye size={16} /> },
-            { key: 'deleteData', label: 'Delete Data', icon: <Trash2 size={16} /> },
+            { key: 'edit', label: 'Edit Schema', icon: <Edit size={14} /> },
+            { key: 'createData', label: 'Create Data', icon: <PlusCircle size={14} /> },
+            { key: 'updateData', label: 'Update Data', icon: <RefreshCw size={14} /> },
+            { key: 'readData', label: 'Read Data', icon: <Eye size={14} /> },
+            { key: 'deleteData', label: 'Delete Data', icon: <Trash2 size={14} /> },
           ].map(tab => (
             (tab.key === 'edit' || isEditing) && (
         <button
                 key={tab.key}
                 role="tab"
                 aria-selected={activeTab === tab.key}
-                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded transition
                   ${activeTab === tab.key
-                    ? 'bg-white border-x border-t border-b-2 border-b-blue-600 border-gray-200 text-blue-700 shadow-sm'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                   }`}
                 onClick={() => setActiveTab(tab.key as any)}
               >
@@ -556,108 +588,104 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       {/* Edit Schema Tab */}
       {activeTab === 'edit' && (
         <>
-      <div className="px-8 mb-6 mt-4">
-            {namespace && (
-              <div className="mb-2 text-sm text-gray-600">
-                <span className="font-semibold">Namespace:</span> {namespace['namespace-name']}
+      <div className="flex-1 grid grid-cols-2 gap-4 min-h-0 w-full px-4 pb-4">
+        {/* Form Editor */}
+        <div className="flex flex-col min-h-0 bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
+            <div className="font-semibold text-sm text-gray-800">Form Editor</div>
+            <div className="text-xs text-gray-500">
+              {fields.length} fields
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">
+            <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
+          </div>
+        </div>
+
+        {/* JSON Schema Editor */}
+        <div className="flex flex-col min-h-0 bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
+            <div className="font-semibold text-sm text-gray-800">JSON Schema Editor</div>
+            <div className="flex items-center space-x-2">
+              <button
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs border border-gray-200 font-medium transition"
+                onClick={() => {
+                  try {
+                    setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
+                  } catch {}
+                }}
+                title="Format JSON"
+              >
+                Format
+              </button>
+            </div>
+          </div>
+          
+          {/* Raw Fields Section */}
+          <div className="border-b border-gray-100">
+            <div
+              className="flex items-center justify-between p-2 cursor-pointer hover:bg-gray-50 transition"
+              onClick={() => setShowRawFields(v => !v)}
+            >
+              <span className="text-xs font-medium text-gray-700">TypeScript/Raw Fields</span>
+              <span className="text-blue-500 text-xs">{showRawFields ? '▲' : '▼'}</span>
+            </div>
+            {showRawFields && (
+              <div className="p-3 border-t border-gray-100 bg-gray-50">
+                <textarea
+                  className="w-full border border-gray-200 rounded p-2 font-mono text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition"
+                  placeholder={`Paste fields like:\nid: string;\nemail: string;\nrole: \"ADMIN\" | \"USER\";\ndepartmentId: string | null;`}
+                  value={rawFields}
+                  onChange={e => setRawFields(e.target.value)}
+                  rows={3}
+                  style={{ minHeight: 50 }}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <button
+                    className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium border border-blue-600 transition"
+                    onClick={handleConvertRawFields}
+                    type="button"
+                  >
+                    Convert to JSON Schema
+                  </button>
+                  {rawFieldsError && (
+                    <div className="text-xs text-red-600">{rawFieldsError}</div>
+                  )}
+                </div>
               </div>
             )}
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="schema-name">
-          Schema Name <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="schema-name"
-          className="border border-gray-300 p-2 rounded-lg text-base focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 max-w-xs w-full"
-          placeholder="Schema Name (required)"
-          value={schemaName}
-          onChange={e => {
-            setSchemaName(e.target.value);
-            if (onSchemaNameChange) onSchemaNameChange(e.target.value);
-          }}
-          required
-        />
-        <div className="mb-2 text-sm text-gray-600">
-          <span className="font-semibold">Method Name:</span> {methodName || <span className="italic text-gray-400">None</span>}
-        </div>
-      </div>
-      <div className="flex-1 flex flex-row min-h-0 min-w-0 w-full px-8 pb-8">
-        {/* Form Editor */}
-        <div className="flex-1 min-h-0 min-w-0 pr-6">
-          <div className="font-semibold mb-2 text-base text-gray-800">Form Editor</div>
-          <div className="border-b border-gray-200 mb-2" />
-          <NestedFieldsEditor fields={fields} onChange={setFields} collapsedNodes={collapsedNodes} setCollapsedNodes={setCollapsedNodes} nodePath="root" />
-        </div>
-        {/* JSON Tree (raw fields + JSON schema) */}
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-          <div className="mb-2">
-                <div
-                  className="font-semibold text-xs text-gray-700 mb-1 flex items-center cursor-pointer select-none"
-                  onClick={() => setShowRawFields(v => !v)}
-                  style={{ userSelect: 'none' }}
-                >
-                  <span>Paste TypeScript/Raw Fields</span>
-                  <span className="ml-2 text-blue-500">{showRawFields ? '▲' : '▼'}</span>
-                </div>
-                {showRawFields && (
-                  <>
+          </div>
+
+          {/* JSON Schema Content */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-2 border-b border-gray-100 bg-gray-50">
+              <div className="text-xs text-gray-500">
+                OpenAPI 3.0+ spec: Use type: <code>["string", "null"]</code> for nullable fields, and <code>required: ["field1", ...]</code> for required fields.
+              </div>
+            </div>
             <textarea
-              className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
-              placeholder={`Paste fields like:\nid: string;\nemail: string;\nrole: \"ADMIN\" | \"USER\";\ndepartmentId: string | null;`}
-              value={rawFields}
-              onChange={e => setRawFields(e.target.value)}
-              rows={4}
-              style={{ minHeight: 60 }}
+              className="flex-1 border-0 p-3 font-mono text-xs bg-white focus:outline-none focus:ring-0 resize-none overflow-y-auto"
+              value={jsonSchema}
+              onChange={handleJsonChange}
             />
-            <button
-              className="mt-1 px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold border border-blue-600 transition"
-              onClick={handleConvertRawFields}
-              type="button"
-            >
-              Convert to JSON Schema
-            </button>
-            {rawFieldsError && (
-              <div className="text-xs text-red-600 mt-1">{rawFieldsError}</div>
-                    )}
-                  </>
+            {jsonError && (
+              <div className="p-2 border-t border-gray-100 bg-red-50">
+                <div className="text-xs text-red-600">{jsonError}</div>
+              </div>
             )}
           </div>
-          <div className="flex items-center mb-2 gap-2">
-            <div className="font-semibold flex-1 text-base text-gray-800">JSON Schema Editor</div>
-            <button
-              className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs border border-gray-300 font-semibold transition"
-              onClick={() => {
-                try {
-                  setJsonSchema(JSON.stringify(JSON.parse(jsonSchema), null, 2));
-                } catch {}
-              }}
-              title="Format JSON"
-            >
-              Format
-            </button>
-          </div>
-          <div className="text-xs text-gray-500 mb-1">
-            <span>OpenAPI 3.0+ spec: Use type: <code>[\"string\", \"null\"]</code> for nullable fields, and <code>required: [\"field1\", ...]</code> for required fields.</span>
-          </div>
-          <textarea
-            className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition flex-1 min-h-0"
-            value={jsonSchema}
-            onChange={handleJsonChange}
-            rows={16}
-            style={{ minHeight: 180, maxHeight: '100%', overflow: 'auto' }}
-          />
-          {jsonError && <div className="text-xs text-red-600 mt-1">{jsonError}</div>}
         </div>
       </div>
       {/* Sticky action buttons */}
-      <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-4 bg-white pt-2 pb-1 border-t border-gray-100 px-8">
+      <div className="flex flex-col md:flex-row justify-end md:gap-2 gap-2 mt-3 bg-white pt-2 pb-1 border-t border-gray-100 px-4">
         <button
-          className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
+          className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded text-xs font-medium w-full md:w-auto transition"
           onClick={handleValidate}
         >
           Validate
         </button>
         <button
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
+          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-medium w-full md:w-auto transition"
           disabled={isSaving}
           onClick={handleSave}
         >
@@ -665,7 +693,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         </button>
         {isEditing && schemaObj && (schemaObj.id || schemaObj.schemaId) && (
           <button
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-base font-semibold w-full md:w-auto transition"
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-medium w-full md:w-auto transition"
             onClick={async () => {
               if (!window.confirm('Are you sure you want to delete this schema?')) return;
               const schemaId = schemaObj.id || schemaObj.schemaId;
@@ -687,26 +715,26 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         )}
       </div>
       {validationResult && (
-        <div className="mt-2 px-8">
-          <div className="font-semibold text-sm">Validation Result:</div>
+        <div className="mt-2 px-4">
+          <div className="font-semibold text-xs">Validation Result:</div>
           <pre className="bg-gray-100 p-2 rounded text-xs">
             {JSON.stringify(validationResult, null, 2)}
           </pre>
         </div>
       )}
       {saveMessage && (
-        <div className="mt-2 text-blue-700 font-semibold text-sm px-8">{saveMessage}</div>
+        <div className="mt-2 text-blue-700 font-semibold text-xs px-4">{saveMessage}</div>
           )}
         </>
       )}
 
       {/* Create Data Tab */}
       {isEditing && activeTab === 'createData' && (
-        <div className="px-8 pb-8">
-          <h2 className="text-lg font-semibold mb-4">Create Data for Table</h2>
-          <label className="block text-sm font-medium mb-2">Account</label>
+        <div className="px-4 pb-4">
+          <h2 className="text-base font-semibold mb-3">Create Data for Table</h2>
+          <label className="block text-xs font-medium mb-1">Account</label>
           <select
-            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            className="border border-gray-200 p-2 rounded text-xs w-full mb-3"
             value={selectedAccountForData}
             onChange={e => setSelectedAccountForData(e.target.value)}
           >
@@ -728,7 +756,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                     No table exists for this account and method. Please create a table first.
                   </div>
               <button
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs"
                 onClick={() => {
                   setShowTableModal(true);
                       setSelectedAccountId(selectedAccountForData); // pre-select account
@@ -796,15 +824,15 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               />
               <button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-4"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs mt-3"
               >
                 Create
               </button>
               {formErrors && (
-                <div className="mt-2 text-sm text-red-600">{formErrors}</div>
+                <div className="mt-2 text-xs text-red-600">{formErrors}</div>
               )}
               {createDataResult && (
-                <div className="mt-2 text-sm">{createDataResult}</div>
+                <div className="mt-2 text-xs">{createDataResult}</div>
               )}
             </form>
             );
@@ -813,11 +841,11 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       )}
       {/* Update Data Tab */}
       {isEditing && activeTab === 'updateData' && (
-        <div className="px-8 pb-8">
-          <h2 className="text-lg font-semibold mb-4">Update Data in Table</h2>
-          <label className="block text-sm font-medium mb-2">Account</label>
+        <div className="px-4 pb-4">
+          <h2 className="text-base font-semibold mb-3">Update Data in Table</h2>
+          <label className="block text-xs font-medium mb-1">Account</label>
           <select
-            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            className="border border-gray-200 p-2 rounded text-xs w-full mb-3"
             value={selectedAccountForData}
             onChange={e => setSelectedAccountForData(e.target.value)}
           >
@@ -856,24 +884,24 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 }}
                 className="max-w-xl"
               >
-                <label className="block text-sm font-medium mb-1">Key (JSON)</label>
+                <label className="block text-xs font-medium mb-1">Key (JSON)</label>
                 <input
-                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  className="border border-gray-200 p-2 rounded text-xs w-full mb-2 font-mono"
                   value={updateKey}
                   onChange={e => setUpdateKey(e.target.value)}
                   placeholder='{"id": "..."}'
                   required
                 />
-                <label className="block text-sm font-medium mb-1">Updates (JSON)</label>
+                <label className="block text-xs font-medium mb-1">Updates (JSON)</label>
                 <input
-                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  className="border border-gray-200 p-2 rounded text-xs w-full mb-2 font-mono"
                   value={updateFields}
                   onChange={e => setUpdateFields(e.target.value)}
                   placeholder='{"field1": "new value"}'
                   required
                 />
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-2">Update</button>
-                {updateResult ? <div className="mt-2 text-sm"><pre>{updateResult}</pre></div> : null}
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs mt-2">Update</button>
+                {updateResult ? <div className="mt-2 text-xs"><pre>{updateResult}</pre></div> : null}
               </form>
             );
           })()}
@@ -881,11 +909,11 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       )}
       {/* Read Data Tab */}
       {isEditing && activeTab === 'readData' && (
-        <div className="px-8 pb-8">
-          <h2 className="text-lg font-semibold mb-4">Read Data from Table</h2>
-          <label className="block text-sm font-medium mb-2">Account</label>
+        <div className="px-4 pb-4">
+          <h2 className="text-base font-semibold mb-3">Read Data from Table</h2>
+          <label className="block text-xs font-medium mb-1">Account</label>
           <select
-            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            className="border border-gray-200 p-2 rounded text-xs w-full mb-3"
             value={selectedAccountForData}
             onChange={e => setSelectedAccountForData(e.target.value)}
           >
@@ -921,19 +949,19 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                   }}
                   className="max-w-xl"
                 >
-                  <label className="block text-sm font-medium mb-1">Key (JSON, optional)</label>
-                  <input
-                    className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
-                    value={readKey}
-                    onChange={e => setReadKey(e.target.value)}
-                    placeholder='{"id": "..."}'
-                  />
-                  <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mt-2">Read</button>
-                  {readResult ? <div className="mt-2 text-sm"><pre>{readResult}</pre></div> : null}
-                </form>
-                <button
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg mt-4"
-                  onClick={async () => {
+                                  <label className="block text-xs font-medium mb-1">Key (JSON, optional)</label>
+                <input
+                  className="border border-gray-200 p-2 rounded text-xs w-full mb-2 font-mono"
+                  value={readKey}
+                  onChange={e => setReadKey(e.target.value)}
+                  placeholder='{"id": "..."}'
+                />
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs mt-2">Read</button>
+                {readResult ? <div className="mt-2 text-xs"><pre>{readResult}</pre></div> : null}
+              </form>
+              <button
+                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-xs mt-3"
+                onClick={async () => {
                     setReadAllResult(null);
                     try {
                       const params = new URLSearchParams({
@@ -950,7 +978,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                     }
                   }}
                 >Read All</button>
-                {readAllResult ? <div className="mt-2 text-sm"><pre>{readAllResult}</pre></div> : null}
+                {readAllResult ? <div className="mt-2 text-xs"><pre>{readAllResult}</pre></div> : null}
               </div>
             );
           })()}
@@ -958,11 +986,11 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       )}
       {/* Delete Data Tab */}
       {isEditing && activeTab === 'deleteData' && (
-        <div className="px-8 pb-8">
-          <h2 className="text-lg font-semibold mb-4">Delete Data from Table</h2>
-          <label className="block text-sm font-medium mb-2">Account</label>
+        <div className="px-4 pb-4">
+          <h2 className="text-base font-semibold mb-3">Delete Data from Table</h2>
+          <label className="block text-xs font-medium mb-1">Account</label>
           <select
-            className="border border-gray-300 p-2 rounded-lg w-full mb-4"
+            className="border border-gray-200 p-2 rounded text-xs w-full mb-3"
             value={selectedAccountForData}
             onChange={e => setSelectedAccountForData(e.target.value)}
           >
@@ -1000,16 +1028,16 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 }}
                 className="max-w-xl"
               >
-                <label className="block text-sm font-medium mb-1">Key (JSON)</label>
+                <label className="block text-xs font-medium mb-1">Key (JSON)</label>
                 <input
-                  className="border border-gray-300 p-2 rounded-lg w-full mb-2 font-mono"
+                  className="border border-gray-200 p-2 rounded text-xs w-full mb-2 font-mono"
                   value={deleteKey}
                   onChange={e => setDeleteKey(e.target.value)}
                   placeholder='{"id": "..."}'
                   required
                 />
-                <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg mt-2">Delete</button>
-                {deleteResult ? <div className="mt-2 text-sm"><pre>{deleteResult}</pre></div> : null}
+                <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs mt-2">Delete</button>
+                {deleteResult ? <div className="mt-2 text-xs"><pre>{deleteResult}</pre></div> : null}
               </form>
             );
           })()}
@@ -1019,15 +1047,15 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
       {showTableModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="absolute inset-0 bg-black bg-opacity-30 backdrop-blur-sm"></div>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md relative z-10 border border-gray-200">
+          <div className="bg-white rounded-lg shadow-xl p-4 w-full max-w-sm relative z-10 border border-gray-200">
             <button
               className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
               onClick={() => setShowTableModal(false)}
             >✕</button>
-            <h2 className="text-lg font-semibold mb-4">Create Table for Schema</h2>
-            <label className="block text-sm font-medium mb-2">Account</label>
+            <h2 className="text-base font-semibold mb-3">Create Table for Schema</h2>
+            <label className="block text-xs font-medium mb-1">Account</label>
             <select
-              className="border border-gray-300 p-2 rounded-lg w-full mb-2"
+              className="border border-gray-200 p-2 rounded text-xs w-full mb-2"
               value={selectedAccountId}
               onChange={e => setSelectedAccountId(e.target.value)}
               disabled={!!selectedAccountId}
@@ -1039,15 +1067,15 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 </option>
               ))}
             </select>
-            <label className="block text-sm font-medium mb-2">Method Name</label>
+            <label className="block text-xs font-medium mb-1">Method Name</label>
             <input
-              className="border border-gray-300 p-2 rounded-lg w-full mb-2 bg-gray-100"
+              className="border border-gray-200 p-2 rounded text-xs w-full mb-2 bg-gray-100"
               value={methodName}
               readOnly
             />
-            <label className="block text-sm font-medium mb-2">Table Name (auto-generated, can override)</label>
+            <label className="block text-xs font-medium mb-1">Table Name (auto-generated, can override)</label>
             <input
-              className="border border-gray-300 p-2 rounded-lg w-full mb-2"
+              className="border border-gray-200 p-2 rounded text-xs w-full mb-2"
               value={newTableName}
               onChange={e => setNewTableName(e.target.value)}
               placeholder="Enter table name"
@@ -1055,7 +1083,7 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
             />
             {tableCreateError && <div className="text-xs text-red-600 mb-2">{tableCreateError}</div>}
             <button
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs w-full"
               disabled={creatingTable || !selectedAccountId || !methodName}
               onClick={async () => {
                 if (!selectedAccountId || !methodName) {

@@ -795,7 +795,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         </div>
         {/* Main Content */}
         <div 
-          className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
+          className="flex-1 min-h-0  overflow-y-auto transition-all duration-200"
         >
                
                 

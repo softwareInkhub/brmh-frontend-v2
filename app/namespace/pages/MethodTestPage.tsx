@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Send, RefreshCw, Copy, Download, Check, ChevronDown, Save } from 'lucide-react';
+import { Send, RefreshCw, Copy, Download, Check, ChevronDown, Save, ChevronRight, Home, ChevronRight as ChevronRightIcon, Play, Edit, Trash2, Hash, Type, Link, Tag, Settings, CheckCircle, Database, Search, FileText, User, Calendar, Globe, Code, Zap, Shield, Activity, BarChart3 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { schemaToFields, NestedFieldsEditor } from '@/app/namespace/components/SchemaService';
+import GridLayout from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
 
 interface AccountHeader {
   key: string;
@@ -35,6 +37,129 @@ interface Response {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
+// Recursive component for collapsible JSON display
+const CollapsibleJson = ({ data, level = 0, collapsedPaths = new Set(), onToggle }: { 
+  data: any, 
+  level?: number, 
+  collapsedPaths?: Set<string>, 
+  onToggle?: (path: string) => void 
+}) => {
+  const indent = '  '.repeat(level);
+  
+  if (typeof data === 'object' && data !== null) {
+    const isArray = Array.isArray(data);
+    const items = isArray ? data : Object.entries(data);
+    const path = level === 0 ? 'root' : `level-${level}`;
+    const isCollapsed = collapsedPaths.has(path);
+    
+    return (
+      <div>
+        <div className="flex items-center">
+          <button
+            onClick={() => onToggle?.(path)}
+            className="mr-1 text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            {isCollapsed ? (
+              <ChevronRightIcon className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+          <span className="text-gray-300">
+            {isArray ? '[' : '{'}
+          </span>
+          {isCollapsed && (
+            <span className="text-gray-500 ml-1">
+              {isArray ? `${items.length} items` : `${items.length} properties`}
+            </span>
+          )}
+          {!isCollapsed && (
+            <span className="text-gray-300">
+              {isArray ? ']' : '}'}
+            </span>
+          )}
+        </div>
+        
+        {!isCollapsed && (
+          <div className="ml-4">
+            {isArray ? (
+              items.map((item: any, index: number) => (
+                <div key={index}>
+                  <span className="text-gray-500">{indent}</span>
+                  {typeof item === 'object' && item !== null ? (
+                    <CollapsibleJson 
+                      data={item} 
+                      level={level + 1} 
+                      collapsedPaths={collapsedPaths}
+                      onToggle={onToggle}
+                    />
+                  ) : (
+                    <span>
+                      {typeof item === 'string' ? (
+                        <span className="text-green-400">"{item}"</span>
+                      ) : typeof item === 'number' ? (
+                        <span className="text-yellow-400">{item}</span>
+                      ) : (
+                        <span className="text-purple-400">{String(item)}</span>
+                      )}
+                    </span>
+                  )}
+                  {index < items.length - 1 && <span className="text-gray-300">,</span>}
+                </div>
+              ))
+            ) : (
+              items.map(([key, value]: [string, any], index: number) => (
+                <div key={key}>
+                  <span className="text-gray-500">{indent}</span>
+                  <span className="text-blue-400">"{key}"</span>
+                  <span className="text-gray-300">: </span>
+                  {typeof value === 'object' && value !== null ? (
+                    <CollapsibleJson 
+                      data={value} 
+                      level={level + 1} 
+                      collapsedPaths={collapsedPaths}
+                      onToggle={onToggle}
+                    />
+                  ) : (
+                    <span>
+                      {typeof value === 'string' ? (
+                        <span className="text-green-400">"{value}"</span>
+                      ) : typeof value === 'number' ? (
+                        <span className="text-yellow-400">{value}</span>
+                      ) : (
+                        <span className="text-purple-400">{String(value)}</span>
+                      )}
+                    </span>
+                  )}
+                  {index < items.length - 1 && <span className="text-gray-300">,</span>}
+                </div>
+              ))
+            )}
+            <div>
+              <span className="text-gray-500">{indent}</span>
+              <span className="text-gray-300">
+                {isArray ? ']' : '}'}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  return (
+    <span>
+      {typeof data === 'string' ? (
+        <span className="text-green-400">"{data}"</span>
+      ) : typeof data === 'number' ? (
+        <span className="text-yellow-400">{data}</span>
+      ) : (
+        <span className="text-purple-400">{String(data)}</span>
+      )}
+    </span>
+  );
+};
+
 export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: { method: any, namespace: any, onOpenSchemaTab?: (schema: any, schemaName: string) => void }) {
   const namespaceId = namespace?.['namespace-id'] || '';
   const methodName = method?.['namespace-method-name'] || '';
@@ -55,7 +180,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
   const [headers, setHeaders] = useState<KeyValuePair[]>([{ key: '', value: '' }]);
   const [maxIterations, setMaxIterations] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body'>('params');
-  const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'schema'>('body');
+  const [responseTab, setResponseTab] = useState<'pretty' | 'raw' | 'preview' | 'visualize'>('pretty');
   const [requestBody, setRequestBody] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [activeButton, setActiveButton] = useState<'send' | 'loop' | 'sync' | null>(null);
@@ -85,6 +210,28 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     maxPages: 200,
     tokenParam: ''
   });
+  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
+  
+  // Grid layout state
+  const [layout, setLayout] = useState([
+    { i: 'request', x: 0, y: 0, w: 12, h: 8, minW: 6, minH: 4 },
+    { i: 'response', x: 0, y: 8, w: 6, h: 4, minW: 4, minH: 2 },
+    { i: 'validate', x: 6, y: 8, w: 6, h: 4, minW: 4, minH: 2 }
+  ]);
+  const [showResponse, setShowResponse] = useState(false);
+  const [showValidate, setShowValidate] = useState(false);
+  
+
+
+  const handleToggleCollapse = (path: string) => {
+    const newCollapsedPaths = new Set(collapsedPaths);
+    if (newCollapsedPaths.has(path)) {
+      newCollapsedPaths.delete(path);
+    } else {
+      newCollapsedPaths.add(path);
+    }
+    setCollapsedPaths(newCollapsedPaths);
+  };
 
   useEffect(() => {
     const fetchNamespaceDetails = async () => {
@@ -251,9 +398,13 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
         setResponse(responseObj);
         if (!response.ok) setError(data.error || `Request failed with status ${response.status}`);
         if (responseObj.executionId) localStorage.setItem('currentExecutionId', responseObj.executionId);
-        setResponseTab('body');
+        setResponseTab('pretty');
         setResponseData(response.body);
         setResponseSchema(generateResponseSchema(response.body));
+        
+        // Show response and validate panels after successful request
+        setShowResponse(true);
+        setShowValidate(true);
       }
     } catch (err) {
       if (!signal.aborted) {
@@ -298,9 +449,10 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     if (!response) return;
     let contentToCopy = '';
     switch (responseTab) {
-      case 'body': contentToCopy = JSON.stringify(response.body, null, 2); break;
-      case 'headers': contentToCopy = JSON.stringify(response.headers, null, 2); break;
-      case 'schema': contentToCopy = JSON.stringify(generateResponseSchema(response.body), null, 2); break;
+      case 'pretty': contentToCopy = JSON.stringify(response.body, null, 2); break;
+      case 'raw': contentToCopy = JSON.stringify(response.body); break;
+      case 'preview': contentToCopy = JSON.stringify(response.body, null, 2); break;
+      case 'visualize': contentToCopy = JSON.stringify(response.body, null, 2); break;
     }
     navigator.clipboard.writeText(contentToCopy);
     setCopied(true);
@@ -312,9 +464,10 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     let contentToDownload = '';
     let fileName = '';
     switch (responseTab) {
-      case 'body': contentToDownload = JSON.stringify(response.body, null, 2); fileName = 'response-body.json'; break;
-      case 'headers': contentToDownload = JSON.stringify(response.headers, null, 2); fileName = 'response-headers.json'; break;
-      case 'schema': contentToDownload = JSON.stringify(generateResponseSchema(response.body), null, 2); fileName = 'response-schema.json'; break;
+      case 'pretty': contentToDownload = JSON.stringify(response.body, null, 2); fileName = 'response-pretty.json'; break;
+      case 'raw': contentToDownload = JSON.stringify(response.body); fileName = 'response-raw.json'; break;
+      case 'preview': contentToDownload = JSON.stringify(response.body, null, 2); fileName = 'response-preview.json'; break;
+      case 'visualize': contentToDownload = JSON.stringify(response.body, null, 2); fileName = 'response-visualize.json'; break;
     }
     const blob = new Blob([contentToDownload], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -405,7 +558,7 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
 
       setResponse(responseObj);
       if (!response.ok) setError(data.error || `Request failed with status ${response.status}`);
-      setResponseTab('body');
+      setResponseTab('pretty');
       setResponseData(response.body);
       setShowSyncModal(false);
 
@@ -539,355 +692,763 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
     urlWithParams += (urlWithParams.includes('?') ? '&' : '?') + searchParams.toString();
   }
   return (
-    <div className="w-full h-full bg-white p-8 overflow-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">Test Method</h2>
-      <div className="max-w-4xl mx-auto">
-        {error && (
-          <div className="mb-3 py-2 px-3 bg-red-50 text-[#E11D48] text-[13px] rounded-md border border-red-100">
-            {error}
-          </div>
-        )}
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 p-3 rounded-md">
-              <div className="text-[13px] font-medium text-gray-700 mb-1">Method Name</div>
-              <div className="text-[13px] text-gray-900">{methodName}</div>
-            </div>
-            <div className="bg-gray-50 p-3 rounded-md">
-              <div className="text-[13px] font-medium text-gray-700 mb-1">Method Type</div>
-              <div className="text-[13px] text-gray-900">{methodType}</div>
-            </div>
-          </div>
-          <div className="bg-gray-50 p-3 rounded-md">
-            <div className="text-[13px] font-medium text-gray-700 mb-1">Account</div>
-            <div className="relative">
-              <select
-                value={selectedAccount?.['namespace-account-id'] || ''}
-                onChange={e => {
-                  const accountId = e.target.value;
-                  const account = accounts.find(a => a['namespace-account-id'] === accountId);
-                  setSelectedAccount(account || null);
-                  if (account) {
-                    const baseUrl = account['namespace-account-url-override'] || '';
-                    const methodUrl = namespaceMethodUrlOverride || '';
-                    const finalUrl = baseUrl && methodUrl 
-                      ? baseUrl.endsWith('/') && methodUrl.startsWith('/')
-                        ? baseUrl + methodUrl.slice(1)
-                        : !baseUrl.endsWith('/') && !methodUrl.startsWith('/')
-                        ? baseUrl + '/' + methodUrl
-                        : baseUrl + methodUrl
-                      : baseUrl + methodUrl;
-                    setUrl(finalUrl);
-                    if (account['namespace-account-header'] && account['namespace-account-header'].length > 0) {
-                      const accountHeaders = account['namespace-account-header'].map((header: AccountHeader) => ({
-                        key: header.key,
-                        value: header.value
-                      }));
-                      setHeaders([...accountHeaders, { key: '', value: '' }]);
-                    }
-                  }
-                }}
-                className="w-full px-3 py-[6px] text-[13px] bg-white border rounded-md shadow-sm appearance-none cursor-pointer pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select an account</option>
-                {accounts.map(account => (
-                  <option key={account['namespace-account-id']} value={account['namespace-account-id']}>
-                    {account['namespace-account-name']}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2">
-                <ChevronDown className="h-4 w-4 text-gray-400" />
+    <div className="w-full h-full bg-white">
+      {/* Breadcrumbs */}
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
+        <div className="flex items-center space-x-1 text-xs text-gray-600">
+          <Home className="h-3 w-3" />
+          <ChevronRight className="h-3 w-3" />
+          <span className="hover:text-blue-600 cursor-pointer">Namespaces</span>
+          <ChevronRight className="h-3 w-3" />
+          <span className="hover:text-blue-600 cursor-pointer">{namespaceName}</span>
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-gray-900 font-medium">{methodName}</span>
+        </div>
+      </div>
+
+      {/* Grid Layout Container */}
+      <div className="h-full" style={{ height: 'calc(100vh - 60px)' }}>
+        <GridLayout
+          className="layout"
+          layout={layout}
+          cols={12}
+          rowHeight={60}
+          width={window.innerWidth}
+          onLayoutChange={(newLayout) => setLayout(newLayout as any)}
+          isDraggable={true}
+          isResizable={true}
+          draggableHandle=".drag-handle"
+        >
+          {/* Request Panel */}
+          <div key="request" className="bg-white border border-gray-200 rounded-lg shadow-sm">
+            <div className="drag-handle bg-gray-50 px-4 py-2 border-b border-gray-200 rounded-t-lg cursor-move">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800">API Request</h3>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-500">GET Find pet by ID</span>
+                  <button className="text-xs text-gray-400 hover:text-gray-600">+</button>
+                  <button className="text-xs text-gray-400 hover:text-gray-600">...</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="grid grid-cols-[1fr,120px] gap-2">
-            <input
-              type="text"
-              value={urlWithParams}
-              onChange={e => setUrl(e.target.value)}
-              className="w-full p-2 border border-gray-200 rounded-md text-[13px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-              placeholder="Enter URL"
-            />
-            <input
-              type="number"
-              value={maxIterations}
-              onChange={e => setMaxIterations(e.target.value)}
-              className="w-full p-2 border border-gray-200 rounded-md text-[13px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-              placeholder="Max iterations"
-            />
-          </div>
-          <div className="border border-gray-200 rounded-lg shadow-sm">
-            <div className="flex flex-wrap border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('params')}
-                className={`px-4 py-2 text-[13px] font-medium ${activeTab === 'params' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-              >
-                Params
-              </button>
-              <button
-                onClick={() => setActiveTab('headers')}
-                className={`px-4 py-2 text-[13px] font-medium ${activeTab === 'headers' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-              >
-                Headers
-              </button>
-              <button
-                onClick={() => setActiveTab('body')}
-                className={`px-4 py-2 text-[13px] font-medium ${activeTab === 'body' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-              >
-                Body
-              </button>
-            </div>
+            
             <div className="p-4">
-              {activeTab === 'params' && (
-                <div className="space-y-2">
-                  {queryParams.map((param, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={param.key}
-                        onChange={e => handleKeyValueChange(index, 'key', e.target.value, 'queryParams')}
-                        className="flex-1 p-2 text-[13px] border border-gray-200 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Key"
-                      />
-                      <input
-                        type="text"
-                        value={param.value}
-                        onChange={e => handleKeyValueChange(index, 'value', e.target.value, 'queryParams')}
-                        className="flex-1 p-2 text-[13px] border border-gray-200 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Value"
-                      />
-                      <button
-                        onClick={() => handleRemoveKeyValuePair(index, 'queryParams')}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-md text-[13px] transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => handleAddKeyValuePair('queryParams')}
-                    className="text-[13px] text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    + Add Parameter
+              {/* API Method and URL Section */}
+              <div className="flex items-end space-x-1 mb-3">
+                <div className="relative">
+                  <button className="bg-green-500 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1">
+                    <span>{methodType}</span>
+                    <ChevronDown className="w-3 h-3" />
                   </button>
                 </div>
-              )}
-              {activeTab === 'headers' && (
-                <div className="space-y-2">
-                  {headers.map((header, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={header.key}
-                        onChange={e => handleKeyValueChange(index, 'key', e.target.value, 'headers')}
-                        className="flex-1 p-2 text-[13px] border border-gray-200 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Key"
-                      />
-                      <input
-                        type="text"
-                        value={header.value}
-                        onChange={e => handleKeyValueChange(index, 'value', e.target.value, 'headers')}
-                        className="flex-1 p-2 text-[13px] border border-gray-200 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Value"
-                      />
-                      <button
-                        onClick={() => handleRemoveKeyValuePair(index, 'headers')}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-md text-[13px] transition-colors"
-                      >
-                        Remove
-                      </button>
+                <input
+                  type="text"
+                  value={urlWithParams}
+                  onChange={e => setUrl(e.target.value)}
+                  className="flex-1 px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter URL"
+                />
+                <div className="w-28">
+                  <div className="relative">
+                    <select
+                      value={selectedAccount?.['namespace-account-id'] || ''}
+                      onChange={e => {
+                        const accountId = e.target.value;
+                        const account = accounts.find(a => a['namespace-account-id'] === accountId);
+                        setSelectedAccount(account || null);
+                        if (account) {
+                          const baseUrl = account['namespace-account-url-override'] || '';
+                          const methodUrl = namespaceMethodUrlOverride || '';
+                          const finalUrl = baseUrl && methodUrl 
+                            ? baseUrl.endsWith('/') && methodUrl.startsWith('/')
+                              ? baseUrl + methodUrl.slice(1)
+                              : !baseUrl.endsWith('/') && !methodUrl.startsWith('/')
+                              ? baseUrl + '/' + methodUrl
+                              : baseUrl + methodUrl
+                            : baseUrl + methodUrl;
+                          setUrl(finalUrl);
+                          if (account['namespace-account-header'] && account['namespace-account-header'].length > 0) {
+                            const accountHeaders = account['namespace-account-header'].map((header: AccountHeader) => ({
+                              key: header.key,
+                              value: header.value
+                            }));
+                            setHeaders([...accountHeaders, { key: '', value: '' }]);
+                          }
+                        }
+                      }}
+                      className="w-full px-2 py-1 text-xs bg-white border border-gray-200 rounded shadow-sm appearance-none cursor-pointer pr-6 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Account</option>
+                      {accounts.map(account => (
+                        <option key={account['namespace-account-id']} value={account['namespace-account-id']}>
+                          {account['namespace-account-name']}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1">
+                      <ChevronDown className="h-3 w-3 text-gray-400" />
                     </div>
-                  ))}
-                  <button
-                    onClick={() => handleAddKeyValuePair('headers')}
-                    className="text-[13px] text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    + Add Header
-                  </button>
+                  </div>
                 </div>
-              )}
-              {activeTab === 'body' && (
-                <div>
-                  <textarea
-                    value={requestBody}
-                    onChange={e => setRequestBody(e.target.value)}
-                    className="w-full h-48 p-2 font-mono text-[13px] border border-gray-200 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter request body (JSON)"
+                <div className="w-16">
+                  <input
+                    type="number"
+                    value={maxIterations}
+                    onChange={e => setMaxIterations(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Max iterations"
                   />
                 </div>
+              </div>
+
+              {error && (
+                <div className="mb-3 py-1 px-2 bg-red-50 text-[#E11D48] text-xs rounded border border-red-100">
+                  {error}
+                </div>
               )}
-            </div>
-          </div>
-          {response && (
-            <div className="border border-gray-200 rounded-lg shadow-sm">
-              <div className="flex flex-row justify-between items-center border-b border-gray-200 overflow-x-auto">
-                <div className="flex flex-nowrap min-w-0">
+
+              {/* Request Configuration Sub-Tabs */}
+              <div className="border-b border-gray-200 mb-3">
+                <div className="flex space-x-4">
                   <button
-                    onClick={() => setResponseTab('body')}
-                    className={`px-3 py-2 text-[12px] font-medium whitespace-nowrap ${responseTab === 'body' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    onClick={() => setActiveTab('params')}
+                    className={`px-1 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                      activeTab === 'params' 
+                        ? 'border-purple-500 text-purple-600' 
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Params {queryParams.filter(p => p.key && p.key.trim() !== '').length > 0 && (
+                      <span className="ml-1 bg-purple-100 text-purple-700 px-1 rounded text-xs">
+                        {queryParams.filter(p => p.key && p.key.trim() !== '').length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('body')}
+                    className={`px-1 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                      activeTab === 'body' 
+                        ? 'border-purple-500 text-purple-600' 
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
                   >
                     Body
                   </button>
                   <button
-                    onClick={() => setResponseTab('headers')}
-                    className={`px-3 py-2 text-[12px] font-medium whitespace-nowrap ${responseTab === 'headers' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    onClick={() => setActiveTab('headers')}
+                    className={`px-1 py-1.5 text-xs font-medium border-b-2 transition-colors relative ${
+                      activeTab === 'headers' 
+                        ? 'border-purple-500 text-purple-600' 
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
                   >
                     Headers
+                    {headers.filter(h => h.key && h.key.trim() !== '').length > 0 && (
+                      <span className="absolute -top-0.5 -right-1 bg-green-500 text-white text-xs rounded-full w-3 h-3 flex items-center justify-center">
+                        {headers.filter(h => h.key && h.key.trim() !== '').length}
+                      </span>
+                    )}
                   </button>
-                  <button
-                    onClick={() => setResponseTab('schema')}
-                    className={`px-3 py-2 text-[12px] font-medium whitespace-nowrap ${responseTab === 'schema' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    Schema
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 px-2 flex-shrink-0">
-                  <div className={`px-2 py-1 rounded-full text-[11px] font-medium ${response.status >= 200 && response.status < 300 ? 'bg-green-100 text-green-800' : response.status >= 400 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>Status: {response.status}</div>
-                  {response.executionId && (
-                    <div className="px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-[11px] font-medium">ID: {response.executionId}</div>
-                  )}
-                  <button
-                    onClick={handleCopyResponse}
-                    className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all duration-200"
-                    title={`Copy ${responseTab}`}
-                  >
-                    {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                  </button>
-                  <button
-                    onClick={handleDownloadResponse}
-                    className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all duration-200"
-                    title={`Download ${responseTab}`}
-                  >
-                    <Download className="h-3 w-3" />
-                  </button>
-                  {response.status >= 200 && response.status < 300 && (
-                    <button
-                      onClick={handleSaveSchema}
-                      className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all duration-200"
-                      title="Save Schema"
-                    >
-                      <Save className="h-3 w-3" />
-                    </button>
-                  )}
                 </div>
               </div>
-              <div className="p-3 max-h-[300px] overflow-auto">
-                <pre className="text-[12px] whitespace-pre-wrap bg-gray-50 p-3 rounded-md">
-                  {responseTab === 'body' && JSON.stringify(response.body, null, 2)}
-                  {responseTab === 'headers' && JSON.stringify(response.headers, null, 2)}
-                  {responseTab === 'schema' && JSON.stringify(generateResponseSchema(response.body), null, 2)}
-                </pre>
+
+              {/* Request Configuration Content */}
+              <div className="space-y-2">
+                {activeTab === 'params' && (
+                  <div>
+                    <div className="text-xs font-medium text-gray-700 mb-2">Query Params</div>
+                    <div className="border border-gray-200 rounded">
+                      <div className="grid grid-cols-4 gap-2 px-2 py-1 bg-gray-50 text-xs font-medium text-gray-700 border-b border-gray-200">
+                        <div>Name</div>
+                        <div>Value</div>
+                        <div>Type</div>
+                        <div>Description</div>
+                      </div>
+                      <div className="p-2">
+                        {queryParams.map((param, index) => (
+                          <div key={index} className="grid grid-cols-4 gap-2 mb-1">
+                            <input
+                              type="text"
+                              value={param.key}
+                              onChange={e => handleKeyValueChange(index, 'key', e.target.value, 'queryParams')}
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Add a new param"
+                            />
+                            <input
+                              type="text"
+                              value={param.value}
+                              onChange={e => handleKeyValueChange(index, 'value', e.target.value, 'queryParams')}
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Value"
+                            />
+                            <select className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                              <option value="string">String</option>
+                              <option value="number">Number</option>
+                              <option value="boolean">Boolean</option>
+                            </select>
+                            <input
+                              type="text"
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Description"
+                            />
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => handleAddKeyValuePair('queryParams')}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          + Add Parameter
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'headers' && (
+                  <div>
+                    <div className="text-xs font-medium text-gray-700 mb-2">Headers</div>
+                    <div className="border border-gray-200 rounded">
+                      <div className="grid grid-cols-4 gap-2 px-2 py-1 bg-gray-50 text-xs font-medium text-gray-700 border-b border-gray-200">
+                        <div>Name</div>
+                        <div>Value</div>
+                        <div>Type</div>
+                        <div>Description</div>
+                      </div>
+                      <div className="p-2">
+                        {headers.map((header, index) => (
+                          <div key={index} className="grid grid-cols-4 gap-2 mb-1">
+                            <input
+                              type="text"
+                              value={header.key}
+                              onChange={e => handleKeyValueChange(index, 'key', e.target.value, 'headers')}
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Header name"
+                            />
+                            <input
+                              type="text"
+                              value={header.value}
+                              onChange={e => handleKeyValueChange(index, 'value', e.target.value, 'headers')}
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Header value"
+                            />
+                            <select className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                              <option value="string">String</option>
+                              <option value="number">Number</option>
+                              <option value="boolean">Boolean</option>
+                            </select>
+                            <input
+                              type="text"
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Description"
+                            />
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => handleAddKeyValuePair('headers')}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          + Add Header
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'body' && (
+                  <div>
+                    <div className="text-xs font-medium text-gray-700 mb-2">Request Body</div>
+                    <textarea
+                      value={requestBody}
+                      onChange={e => setRequestBody(e.target.value)}
+                      className="w-full h-32 p-2 text-xs font-mono border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter request body (JSON)"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-2 mt-4">
+                <button
+                  className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    setUrl('');
+                    setRequestBody('');
+                    setQueryParams([{ key: '', value: '' }]);
+                    setHeaders([{ key: '', value: '' }]);
+                    setResponse(null);
+                    setError(null);
+                  }}
+                  disabled={loading || isSubmitting}
+                  type="button"
+                >
+                  Reset
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-1 shadow-sm ${activeButton === 'send' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    if (!isSubmitting && !loading) executeTest(false);
+                  }}
+                  disabled={loading || !selectedAccount || isSubmitting}
+                  type="button"
+                >
+                  <div className="flex items-center gap-1 min-w-[40px] justify-center">
+                    {(loading || isSubmitting) && activeButton === 'send' ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Testing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-3 w-3" />
+                        <span>Send</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-1 shadow-sm ${activeButton === 'loop' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    if (!isSubmitting && !loading) executeTest(true);
+                  }}
+                  disabled={loading || !selectedAccount || isSubmitting}
+                  type="button"
+                >
+                  <div className="flex items-center gap-1 min-w-[50px] justify-center">
+                    {(loading || isSubmitting) && activeButton === 'loop' ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Testing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" />
+                        <span>Loop</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-1 shadow-sm ${activeButton === 'sync' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+                  onClick={e => {
+                    e.preventDefault();
+                    if (!isSubmitting && !loading) {
+                      setSyncFormData({
+                        tableName: selectedAccount?.tableName?.[methodName] || '',
+                        url: url,
+                        headers: Object.fromEntries(
+                          headers.filter(h => h.key && h.key.trim() !== '').map(h => [h.key.trim(), h.value])
+                        ),
+                        idField: 'id',
+                        stopOnExisting: false,
+                        nextPageIn: 'header',
+                        nextPageField: 'link',
+                        isAbsoluteUrl: true,
+                        maxPages: 200,
+                        tokenParam: ''
+                      });
+                      setShowSyncModal(true);
+                    }
+                  }}
+                  disabled={loading || !selectedAccount || isSubmitting}
+                  type="button"
+                >
+                  <div className="flex items-center gap-1 min-w-[50px] justify-center">
+                    {(loading || isSubmitting) && activeButton === 'sync' ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Syncing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3" />
+                        <span>Sync</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Response Panel */}
+          {showResponse && (
+            <div key="response" className="bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="drag-handle bg-gray-50 px-4 py-2 border-b border-gray-200 rounded-t-lg cursor-move">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">Response</h3>
+                  <div className="flex items-center space-x-2">
+                    {response && (
+                      <div className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        response.status >= 200 && response.status < 300 
+                          ? 'bg-green-100 text-green-800' 
+                          : response.status >= 400 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {response.status}
+                      </div>
+                    )}
+                    <select className="px-1 py-0.5 text-xs border border-gray-200 rounded bg-white">
+                      <option value="json">JSON</option>
+                      <option value="xml">XML</option>
+                      <option value="text">Text</option>
+                    </select>
+                    <select className="px-1 py-0.5 text-xs border border-gray-200 rounded bg-white">
+                      <option value="utf8">utf8</option>
+                      <option value="ascii">ascii</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4">
+                {!response && (
+                  <div className="flex items-center justify-center h-32 text-gray-500">
+                    <div className="text-center">
+                      <Send className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs">No response yet. Click "Send" to test the API.</p>
+                    </div>
+                  </div>
+                )}
+                
+                {response && (
+                  <div className="space-y-3">
+                    {/* Response Tabs */}
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => setResponseTab('pretty')}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                          responseTab === 'pretty' 
+                            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        Pretty
+                      </button>
+                      <button
+                        onClick={() => setResponseTab('raw')}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                          responseTab === 'raw' 
+                            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        Raw
+                      </button>
+                      <button
+                        onClick={() => setResponseTab('preview')}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                          responseTab === 'preview' 
+                            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => setResponseTab('visualize')}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                          responseTab === 'visualize' 
+                            ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                            : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        Visualize
+                      </button>
+                    </div>
+
+                    {/* Response Content */}
+                    <div className="max-h-48 overflow-auto">
+                      {responseTab === 'pretty' && (
+                        <div className="bg-gray-900 text-gray-100 font-mono text-xs rounded">
+                          <div className="p-3">
+                            <CollapsibleJson 
+                              data={response.body} 
+                              collapsedPaths={collapsedPaths}
+                              onToggle={handleToggleCollapse}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {responseTab === 'raw' && (
+                        <div className="bg-gray-900 text-gray-100 font-mono text-xs rounded">
+                          <div className="p-3">
+                            <pre className="whitespace-pre-wrap">
+                              {JSON.stringify(response.body)
+                                .split('\n')
+                                .map((line, index) => (
+                                  <div key={index} className="flex">
+                                    <span className="text-gray-500 mr-3 select-none w-6 text-right">
+                                      {index + 1}
+                                    </span>
+                                    <span className="flex-1">{line}</span>
+                                  </div>
+                                ))}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {responseTab === 'preview' && (
+                        <div className="bg-white border border-gray-200 rounded p-3 max-h-48 overflow-auto">
+                          <div className="space-y-2">
+                            {response.body && typeof response.body === 'object' && response.body !== null ? (
+                              <div className="space-y-2">
+                                {Object.entries(response.body as Record<string, unknown>).map(([key, value]) => (
+                                  <div key={key} className="border border-gray-200 rounded p-2 bg-gray-50">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="font-semibold text-gray-900 text-xs">{key}</span>
+                                      <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                        {Array.isArray(value) ? `${value.length} items` : typeof value}
+                                      </span>
+                                    </div>
+                                    {Array.isArray(value) && value.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {value.slice(0, 3).map((item, index) => (
+                                          <div key={index} className="bg-white p-2 rounded border border-gray-100">
+                                            {typeof item === 'object' && item !== null ? (
+                                              <div className="space-y-1">
+                                                {Object.entries(item as Record<string, unknown>).slice(0, 2).map(([subKey, subValue]) => (
+                                                  <div key={subKey} className="flex justify-between text-xs">
+                                                    <span className="font-medium text-gray-700">{subKey}:</span>
+                                                    <span className="text-gray-600 truncate max-w-[150px]">
+                                                      {String(subValue || '').length > 30 
+                                                        ? String(subValue || '').substring(0, 30) + '...' 
+                                                        : String(subValue || '')}
+                                                    </span>
+                                                  </div>
+                                                ))}
+                                                {Object.keys(item).length > 2 && (
+                                                  <div className="text-xs text-gray-500 italic">
+                                                    ... and {Object.keys(item).length - 2} more fields
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <div className="text-xs text-gray-600">
+                                                {String(item || '')}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                        {value.length > 3 && (
+                                          <div className="text-xs text-gray-500 italic text-center py-1 bg-white rounded border">
+                                            ... and {value.length - 3} more items
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-600">
+                                        {typeof value === 'object' && value !== null ? (
+                                          <div className="space-y-1">
+                                            {Object.entries(value as Record<string, unknown>).slice(0, 3).map(([subKey, subValue]) => (
+                                              <div key={subKey} className="flex justify-between bg-white p-1 rounded">
+                                                <span className="font-medium text-gray-700 text-xs">{subKey}:</span>
+                                                <span className="text-gray-600 text-xs truncate max-w-[150px]">
+                                                  {String(subValue || '')}
+                                                </span>
+                                              </div>
+                                            ))}
+                                            {Object.keys(value).length > 3 && (
+                                              <div className="text-xs text-gray-500 italic text-center py-1">
+                                                ... and {Object.keys(value).length - 3} more fields
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          String(value || '')
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {responseTab === 'visualize' && (
+                        <div className="bg-white border border-gray-200 rounded p-3 max-h-48 overflow-auto">
+                          <div className="space-y-3">
+                            {response.body && typeof response.body === 'object' && response.body !== null ? (
+                              <div className="space-y-3">
+                                {Object.entries(response.body as Record<string, unknown>).map(([key, value]) => (
+                                  <div key={key} className="border border-gray-200 rounded p-3">
+                                    <h4 className="font-semibold text-gray-900 mb-2 text-sm">{key}</h4>
+                                    {Array.isArray(value) ? (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs text-gray-600">Array with {value.length} items</span>
+                                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                            {value.length} items
+                                          </span>
+                                        </div>
+                                        {value.length > 0 && (
+                                          <div className="grid grid-cols-1 gap-2">
+                                            {value.slice(0, 3).map((item, index) => (
+                                              <div key={index} className="bg-gray-50 p-2 rounded text-xs">
+                                                <div className="font-medium text-gray-700">Item {index + 1}</div>
+                                                <div className="text-gray-600 truncate">
+                                                  {typeof item === 'object' ? JSON.stringify(item).substring(0, 40) + '...' : String(item || '')}
+                                                </div>
+                                              </div>
+                                            ))}
+                                            {value.length > 3 && (
+                                              <div className="col-span-full text-center text-xs text-gray-500 py-1">
+                                                ... and {value.length - 3} more items
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-600">
+                                        {typeof value === 'object' && value !== null ? (
+                                          <div className="space-y-1">
+                                            {Object.entries(value as Record<string, unknown>).slice(0, 3).map(([subKey, subValue]) => (
+                                              <div key={subKey} className="flex justify-between">
+                                                <span className="font-medium text-xs">{subKey}:</span>
+                                                <span className="text-gray-600 text-xs">{String(subValue || '')}</span>
+                                              </div>
+                                            ))}
+                                            {Object.keys(value).length > 3 && (
+                                              <div className="text-xs text-gray-500 italic text-center py-1">
+                                                ... and {Object.keys(value).length - 3} more fields
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          String(value || '')
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Response Actions */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                      <div className="flex items-center space-x-2">
+                        <div className="text-xs text-gray-500">
+                          {response.body && typeof response.body === 'object' 
+                            ? `${Object.keys(response.body).length} keys`
+                            : '1 item'
+                          }
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={handleCopyResponse}
+                          className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-all duration-200"
+                          title={`Copy ${responseTab}`}
+                        >
+                          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                        <button
+                          onClick={handleDownloadResponse}
+                          className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-all duration-200"
+                          title={`Download ${responseTab}`}
+                        >
+                          <Download className="h-3 w-3" />
+                        </button>
+                        {response.status >= 200 && response.status < 300 && (
+                          <button
+                            onClick={handleSaveSchema}
+                            className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-all duration-200"
+                            title="Save Schema"
+                          >
+                            <Save className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
-          <div className="flex flex-row justify-end gap-2 mt-4">
-            <button
-              className="px-4 py-2 text-[13px] text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
-              onClick={() => {
-                setUrl('');
-                setRequestBody('');
-                setQueryParams([{ key: '', value: '' }]);
-                setHeaders([{ key: '', value: '' }]);
-                setResponse(null);
-                setError(null);
-              }}
-              disabled={loading || isSubmitting}
-              type="button"
-            >
-              Reset
-            </button>
-            <button
-              className={`px-4 py-2 text-[13px] text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm ${activeButton === 'send' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
-              onClick={e => {
-                e.preventDefault();
-                if (!isSubmitting && !loading) executeTest(false);
-              }}
-              disabled={loading || !selectedAccount || isSubmitting}
-              type="button"
-            >
-              <div className="flex items-center gap-2 min-w-[50px] justify-center">
-                {(loading || isSubmitting) && activeButton === 'send' ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Testing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span>Send</span>
-                  </>
-                )}
-              </div>
-            </button>
-            <button
-              className={`px-4 py-2 text-[13px] text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm ${activeButton === 'loop' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
-              onClick={e => {
-                e.preventDefault();
-                if (!isSubmitting && !loading) executeTest(true);
-              }}
-              disabled={loading || !selectedAccount || isSubmitting}
-              type="button"
-            >
-              <div className="flex items-center gap-2 min-w-[70px] justify-center">
-                {(loading || isSubmitting) && activeButton === 'loop' ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Testing...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    <span>Loop</span>
-                  </>
-                )}
-              </div>
-            </button>
 
-            <button
-              className={`px-4 py-2 text-[13px] text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm ${activeButton === 'sync' ? 'bg-blue-700' : 'bg-[#2563EB] hover:bg-blue-700'}`}
-              onClick={e => {
-                e.preventDefault();
-                if (!isSubmitting && !loading) {
-                  // Pre-fill form with current data
-                  setSyncFormData({
-                    tableName: selectedAccount?.tableName?.[methodName] || '',
-                    url: url,
-                    headers: Object.fromEntries(
-                      headers.filter(h => h.key && h.key.trim() !== '').map(h => [h.key.trim(), h.value])
-                    ),
-                    idField: 'id',
-                    stopOnExisting: false,
-                    nextPageIn: 'header',
-                    nextPageField: 'link',
-                    isAbsoluteUrl: true,
-                    maxPages: 200,
-                    tokenParam: ''
-                  });
-                  setShowSyncModal(true);
-                }
-              }}
-              disabled={loading || !selectedAccount || isSubmitting}
-              type="button"
-            >
-              <div className="flex items-center gap-2 min-w-[70px] justify-center">
-                {(loading || isSubmitting) && activeButton === 'sync' ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Syncing...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    <span>Sync</span>
-                  </>
+          {/* Validate Panel */}
+          {showValidate && (
+            <div key="validate" className="bg-white border border-gray-200 rounded-lg shadow-sm">
+              <div className="drag-handle bg-gray-50 px-4 py-2 border-b border-gray-200 rounded-t-lg cursor-move">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">Validate</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <span className="text-xs text-gray-600">Validate</span>
+                      <div className="relative inline-block w-8 h-4 bg-gray-200 rounded-full">
+                        <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform"></div>
+                      </div>
+                    </div>
+                    {response && (
+                      <div className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        response.status >= 200 && response.status < 300 
+                          ? 'bg-green-100 text-green-800' 
+                          : response.status >= 400 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        OK ({response.status})
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4">
+                {!response && (
+                  <div className="flex items-center justify-center h-32 text-gray-500">
+                    <div className="text-center">
+                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs">No validation results yet. Send a request to see validation.</p>
+                    </div>
+                  </div>
+                )}
+                
+                {response && (
+                  <div className="space-y-3">
+                    {/* Validation Results */}
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2 p-2 bg-red-50 border border-red-200 rounded">
+                        <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs">✕</span>
+                        </div>
+                        <div className="text-xs text-red-800">
+                          <div className="font-medium">Response data differs from endpoint spec</div>
+                          <div className="text-red-600">1. $.data.id should be integer</div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 p-2 bg-green-50 border border-green-200 rounded">
+                        <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs">✓</span>
+                        </div>
+                        <div className="text-xs text-green-800">
+                          <div className="font-medium">1. Status is available</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-            </button>
-          </div>
-        </div>
+            </div>
+          )}
+        </GridLayout>
       </div>
 
+          
       {/* Sync Modal */}
       {showSyncModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1046,4 +1607,4 @@ export default function MethodTestPage({ method, namespace, onOpenSchemaTab }: {
       )}
     </div>
   );
-} 
+}

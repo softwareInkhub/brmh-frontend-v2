@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import NamespaceLibrarySidebar from '../components/NamespaceLibrarySidebar';
-import NamespaceLibraryPanel from '../components/NamespaceLibraryPanel';
 import Navbar from '../components/Navbar';
 import { LayoutGrid, List, Upload, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -78,7 +77,6 @@ export default function HomePage() {
               </div>
             </>
           )}
-          {activePanel === 'apiHub' && <NamespaceLibraryPanel />}
         </main>
       </div>
     </div>

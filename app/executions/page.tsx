@@ -74,7 +74,7 @@ const ExecutionsContent = () => {
   const fetchAllExecutions = async () => {
     try {
       console.log('Fetching all executions...');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/dynamodb/tables/executions/items`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dynamodb/tables/executions/items`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -137,7 +137,7 @@ const ExecutionsContent = () => {
     if (!currentExecutionId) return;
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/dynamodb/tables/executions/query`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dynamodb/tables/executions/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

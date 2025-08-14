@@ -304,6 +304,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedNamespace, setSelectedNamespace] = useState<UnifiedNamespace | null>(null);
+  const [selectedNamespaceId, setSelectedNamespaceId] = useState<string | null>(null);
   const [showUnifiedSchemaModal, setShowUnifiedSchemaModal] = useState(false);
   const [expandedNamespaceId, setExpandedNamespaceId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState<string | null>(null);
@@ -561,6 +562,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   };
 
   const handleNamespaceClick = async (ns: UnifiedNamespace) => {
+    // Set selected namespace
+    setSelectedNamespaceId(ns["namespace-id"]);
+    setSelectedNamespace(ns);
+    
     if (expandedNamespaceId === ns["namespace-id"]) {
       setExpandedNamespaceId(null);
       return;
@@ -810,7 +815,16 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   }, [showModal]);
 
   return (
-    <div className={`p-0 transition-all duration-200 ${isCollapsed ? 'ml-10' : 'ml-10'}`}>
+    <div 
+      className={`p-0 transition-all duration-200 ${isCollapsed ? 'ml-10' : 'ml-10'}`}
+      onClick={(e) => {
+        // Clear selection when clicking on the background
+        if (e.target === e.currentTarget) {
+          setSelectedNamespaceId(null);
+          setSelectedNamespace(null);
+        }
+      }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Namesapce</h2>
@@ -872,7 +886,13 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             {filteredNamespaces.map((ns, idx) => (
               <React.Fragment key={ns["namespace-id"]}>
                 <div
-                  className={`bg-white rounded-lg shadow border border-gray-100 p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full ${expandedNamespaceId === ns["namespace-id"] ? 'border-2 border-blue-500 shadow-lg' : ''}`}
+                  className={`rounded-lg shadow border p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full ${
+                    selectedNamespaceId === ns["namespace-id"] 
+                      ? 'bg-blue-50 border-2 border-blue-500 shadow-lg ring-2 ring-blue-200' 
+                      : expandedNamespaceId === ns["namespace-id"] 
+                        ? 'bg-green-50 border-2 border-green-500 shadow-lg' 
+                        : 'bg-white border border-gray-100'
+                  }`}
                   onClick={() => handleNamespaceClick(ns)}
                   style={{ minWidth: 0 }}
                 >
@@ -880,6 +900,9 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     <div className="flex items-center gap-2 min-w-0">
                       <Database size={16} className="text-blue-500" />
                       <h4 className="text-sm font-semibold text-gray-900 truncate">{ns["namespace-name"]}</h4>
+                      {selectedNamespaceId === ns["namespace-id"] && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 ml-2">
                       <button
@@ -926,12 +949,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No accounts found.</div>
                       ) : (
                         <div className="flex flex-wrap gap-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map(account => (
-                            <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
+                    {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map((account, accountIndex) => (
+                            <div key={account["namespace-account-id"] || `account-${accountIndex}`} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
                               {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
-                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string) => (
-                                <span key={`${account["namespace-account-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string, tagIndex: number) => (
+                                <span key={`${account["namespace-account-id"] || accountIndex}-${tag}-${tagIndex}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
@@ -953,12 +976,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
                       ) : (
                         <div className="space-y-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map(method => (
-                            <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
+                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map((method, methodIndex) => (
+                            <div key={method["namespace-method-id"] || `method-${methodIndex}`} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
-                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
-                                <span key={`${method["namespace-method-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
+                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string, tagIndex: number) => (
+                                <span key={`${method["namespace-method-id"] || methodIndex}-${tag}-${tagIndex}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
                               ))}
                         <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
                               <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
@@ -994,8 +1017,8 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     }
               return (
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {nsSchemas.map(schema => (
-                          <div key={schema.id} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
+                        {nsSchemas.map((schema, schemaIndex) => (
+                          <div key={schema.id || `schema-${schemaIndex}`} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
                             <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
                             <span className="text-xs text-gray-500">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
                   </div>
