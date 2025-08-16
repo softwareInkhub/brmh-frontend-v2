@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Eye, Pencil, Trash2, Zap, Send, Database, Plus, X } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:5001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
 export default function AllMethodPage({ namespace, onViewMethod }: { namespace?: any, onViewMethod?: (method: any, ns?: any) => void }) {
   const [methods, setMethods] = useState<any[]>([]);

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 type Method = { id: string; name: string };
 type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void };
-const API_BASE_URL = 'http://localhost:5001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 const methods = [
   { id: 'm1', name: 'GET /users' },
   { id: 'm2', name: 'POST /login' },
@@ -44,7 +44,27 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
     status: 'active',
     itemsPerKey: 100
   });
+  const [cacheTTLType, setCacheTTLType] = useState<'infinite' | 'finite'>('finite');
+  const [cacheTTLUnit, setCacheTTLUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
+  const [cacheTTLValue, setCacheTTLValue] = useState(1);
   const [resolvedNamespaceName, setResolvedNamespaceName] = useState('');
+
+  // Helper functions for TTL conversion
+  const convertToSeconds = (value: number, unit: 'minutes' | 'hours' | 'days'): number => {
+    switch (unit) {
+      case 'minutes': return value * 60;
+      case 'hours': return value * 3600;
+      case 'days': return value * 86400;
+      default: return value;
+    }
+  };
+
+  const convertFromSeconds = (seconds: number): { value: number; unit: 'minutes' | 'hours' | 'days' } => {
+    if (seconds === 0) return { value: 0, unit: 'hours' };
+    if (seconds % 86400 === 0) return { value: seconds / 86400, unit: 'days' };
+    if (seconds % 3600 === 0) return { value: seconds / 3600, unit: 'hours' };
+    return { value: seconds / 60, unit: 'minutes' };
+  };
   const [methodName, setMethodName] = useState('');
   const [cacheData, setCacheData] = useState<any[]>([]);
   const [loadingCache, setLoadingCache] = useState(false);
@@ -94,6 +114,9 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
     status: 'active',
     itemsPerKey: 100
   });
+  const [editCacheTTLType, setEditCacheTTLType] = useState<'infinite' | 'finite'>('finite');
+  const [editCacheTTLUnit, setEditCacheTTLUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
+  const [editCacheTTLValue, setEditCacheTTLValue] = useState(1);
   const [showSearchInterface, setShowSearchInterface] = useState(false);
 
   useEffect(() => {
@@ -487,26 +510,41 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
 
   const handleToggleCacheStatus = async (cacheConfig: any) => {
     try {
-    const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
-    
+      const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
+      
+      console.log('🔄 Toggling cache status:', { 
+        id: cacheConfig.id, 
+        currentStatus: cacheConfig.status, 
+        newStatus: newStatus 
+      });
+      
       const response = await fetch(`${API_BASE_URL}/crud?tableName=brmh-cache`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          item: { ...cacheConfig, status: newStatus },
+          updates: { 
+            status: newStatus,
+            updatedAt: new Date().toISOString()
+          },
           key: { id: cacheConfig.id }
         })
       });
 
+      console.log('📥 Response status:', response.status);
+
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Status update successful:', result);
         alert(`Cache configuration ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
         fetchCacheData(); // Refresh the cache data
       } else {
-        alert('Failed to update cache configuration');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ Status update failed:', errorData);
+        alert(`Failed to update cache configuration: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Error updating cache status:', error);
-      alert('Failed to update cache configuration');
+      console.error('❌ Error updating cache status:', error);
+      alert(`Failed to update cache configuration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -559,13 +597,32 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
 
   const handleEditCache = (cacheConfig: any) => {
     setEditingCacheConfig(cacheConfig);
+    
+    // Initialize TTL fields based on existing config
+    const ttlSeconds = cacheConfig.timeToLive || 0;
+    const ttlType = ttlSeconds === 0 ? 'infinite' : 'finite';
+    
     setEditCacheFormData({
       tableName: cacheConfig.tableName || '',
       project: cacheConfig.project || 'my-project',
-      timeToLive: cacheConfig.timeToLive || 3600,
+      timeToLive: ttlSeconds,
       status: cacheConfig.status || 'active',
       itemsPerKey: cacheConfig.itemsPerKey || 100
     });
+    
+    setEditCacheTTLType(ttlType);
+    
+    // Only set finite values if TTL is not 0
+    if (ttlSeconds > 0) {
+      const ttlConverted = convertFromSeconds(ttlSeconds);
+      setEditCacheTTLUnit(ttlConverted.unit);
+      setEditCacheTTLValue(ttlConverted.value);
+    } else {
+      // Set default values for infinite case
+      setEditCacheTTLUnit('hours');
+      setEditCacheTTLValue(1);
+    }
+    
     setShowEditCacheModal(true);
   };
 
@@ -1233,7 +1290,7 @@ Please select an indexing configuration above.`);
                   onClick={async () => {
                     if (window.confirm('Are you sure you want to delete this method?')) {
                       try {
-                        const res = await fetch(`http://localhost:5001/unified/methods/${editMethod["namespace-method-id"]}`, {
+                        const res = await fetch(`${API_BASE_URL}/unified/methods/${editMethod["namespace-method-id"]}`, {
                           method: 'DELETE',
                         });
                         if (!res.ok && res.status !== 204) throw new Error('Failed to delete method');
@@ -1415,7 +1472,42 @@ Please select an indexing configuration above.`);
                                 {cacheConfig.tableName || 'N/A'}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-900">
-                                {cacheConfig.timeToLive ? `${cacheConfig.timeToLive}s` : 'N/A'}
+                                {cacheConfig.timeToLive === 0 ? (
+                                  <span className="text-purple-600 font-medium">Infinite</span>
+                                ) : cacheConfig.timeToLive ? (
+                                  (() => {
+                                    const seconds = cacheConfig.timeToLive;
+                                    if (seconds >= 86400) {
+                                      const days = Math.floor(seconds / 86400);
+                                      const remainingHours = Math.floor((seconds % 86400) / 3600);
+                                      return (
+                                        <span>
+                                          {days}d {remainingHours > 0 ? `${remainingHours}h` : ''}
+                                        </span>
+                                      );
+                                    } else if (seconds >= 3600) {
+                                      const hours = Math.floor(seconds / 3600);
+                                      const remainingMinutes = Math.floor((seconds % 3600) / 60);
+                                      return (
+                                        <span>
+                                          {hours}h {remainingMinutes > 0 ? `${remainingMinutes}m` : ''}
+                                        </span>
+                                      );
+                                    } else if (seconds >= 60) {
+                                      const minutes = Math.floor(seconds / 60);
+                                      const remainingSeconds = seconds % 60;
+                                      return (
+                                        <span>
+                                          {minutes}m {remainingSeconds > 0 ? `${remainingSeconds}s` : ''}
+                                        </span>
+                                      );
+                                    } else {
+                                      return <span>{seconds}s</span>;
+                                    }
+                                  })()
+                                ) : (
+                                  'N/A'
+                                )}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-900">
                                 {cacheConfig.itemsPerKey || 'N/A'}
@@ -1947,14 +2039,86 @@ Please select an indexing configuration above.`);
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Time to Live (seconds)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Time to Live</label>
+                      <div className="space-y-3">
+                        {/* TTL Type Selection */}
+                        <div className="flex flex-wrap gap-4">
+                          <label className="flex items-center bg-gray-50 px-3 py-2 rounded-lg border cursor-pointer hover:bg-gray-100 transition-colors">
+                            <input
+                              type="radio"
+                              name="createTTLType"
+                              value="finite"
+                              checked={cacheTTLType === 'finite'}
+                              onChange={(e) => {
+                                setCacheTTLType('finite');
+                                const newTTL = convertToSeconds(cacheTTLValue, cacheTTLUnit);
+                                setCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                              }}
+                              className="mr-2 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium">Finite Time</span>
+                          </label>
+                          <label className="flex items-center bg-gray-50 px-3 py-2 rounded-lg border cursor-pointer hover:bg-gray-100 transition-colors">
+                            <input
+                              type="radio"
+                              name="createTTLType"
+                              value="infinite"
+                              checked={cacheTTLType === 'infinite'}
+                              onChange={(e) => {
+                                setCacheTTLType('infinite');
+                                setCacheFormData(prev => ({ ...prev, timeToLive: 0 }));
+                              }}
+                              className="mr-2 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium">Infinite (No Expiration)</span>
+                          </label>
+                        </div>
+                        
+                        {/* Finite TTL Controls */}
+                        {cacheTTLType === 'finite' && (
+                          <div className="flex gap-3 items-center">
+                            <div className="flex-1">
                       <input
                         type="number"
-                        value={cacheFormData.timeToLive}
-                        onChange={(e) => setCacheFormData(prev => ({ ...prev, timeToLive: parseInt(e.target.value) || 3600 }))}
+                                value={cacheTTLValue}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value) || 1;
+                                  setCacheTTLValue(value);
+                                  const newTTL = convertToSeconds(value, cacheTTLUnit);
+                                  setCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                                }}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
-                        min="60"
-                      />
+                                min="1"
+                                placeholder="Enter value"
+                              />
+                            </div>
+                            <div className="w-32">
+                              <select
+                                value={cacheTTLUnit}
+                                onChange={(e) => {
+                                  const unit = e.target.value as 'minutes' | 'hours' | 'days';
+                                  setCacheTTLUnit(unit);
+                                  const newTTL = convertToSeconds(cacheTTLValue, unit);
+                                  setCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                                }}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                              >
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days">Days</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Display current TTL in seconds */}
+                        <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded border">
+                          <span className="font-medium">Current TTL:</span> {cacheTTLType === 'infinite' 
+                            ? 'No expiration (0 seconds)' 
+                            : `${cacheFormData.timeToLive.toLocaleString()} seconds`
+                          }
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -2577,6 +2741,7 @@ Please select an indexing configuration above.`);
       </div>
 
               <div className="space-y-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Table Name</label>
                   <input
@@ -2598,17 +2763,90 @@ Please select an indexing configuration above.`);
                     placeholder="Enter project name"
                   />
                 </div>
+               </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time to Live (seconds)</label>
-                    <input
-                      type="number"
-                      value={editCacheFormData.timeToLive}
-                      onChange={(e) => setEditCacheFormData(prev => ({ ...prev, timeToLive: parseInt(e.target.value) || 3600 }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
-                      min="1"
-                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Time to Live</label>
+                    <div className="space-y-3">
+                      {/* TTL Type Selection */}
+                      <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center bg-gray-50 px-3 py-2 rounded-lg border cursor-pointer hover:bg-gray-100 transition-colors">
+                          <input
+                            type="radio"
+                            name="editTTLType"
+                            value="finite"
+                            checked={editCacheTTLType === 'finite'}
+                            onChange={(e) => {
+                              setEditCacheTTLType('finite');
+                              const newTTL = convertToSeconds(editCacheTTLValue, editCacheTTLUnit);
+                              setEditCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                            }}
+                            className="mr-2 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm font-medium">Finite Time</span>
+                        </label>
+                        <label className="flex items-center bg-gray-50 px-3 py-2 rounded-lg border cursor-pointer hover:bg-gray-100 transition-colors">
+                          <input
+                            type="radio"
+                            name="editTTLType"
+                            value="infinite"
+                            checked={editCacheTTLType === 'infinite'}
+                            onChange={(e) => {
+                              setEditCacheTTLType('infinite');
+                              setEditCacheFormData(prev => ({ ...prev, timeToLive: 0 }));
+                            }}
+                            className="mr-2 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm font-medium">Infinite (No Expiration)</span>
+                        </label>
+                      </div>
+                      
+                      {/* Finite TTL Controls */}
+                      {editCacheTTLType === 'finite' && (
+                        <div className="flex gap-3 items-center">
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              value={editCacheTTLValue}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 1;
+                                setEditCacheTTLValue(value);
+                                const newTTL = convertToSeconds(value, editCacheTTLUnit);
+                                setEditCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                              }}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                              min="1"
+                              placeholder="Enter value"
+                            />
+                          </div>
+                          <div className="w-32">
+                            <select
+                              value={editCacheTTLUnit}
+                              onChange={(e) => {
+                                const unit = e.target.value as 'minutes' | 'hours' | 'days';
+                                setEditCacheTTLUnit(unit);
+                                const newTTL = convertToSeconds(editCacheTTLValue, unit);
+                                setEditCacheFormData(prev => ({ ...prev, timeToLive: newTTL }));
+                              }}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                            >
+                              <option value="minutes">Minutes</option>
+                              <option value="hours">Hours</option>
+                              <option value="days">Days</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Display current TTL in seconds */}
+                      <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded border">
+                        <span className="font-medium">Current TTL:</span> {editCacheTTLType === 'infinite' 
+                          ? 'No expiration (0 seconds)' 
+                          : `${editCacheFormData.timeToLive.toLocaleString()} seconds`
+                        }
+                      </div>
+                    </div>
                   </div>
 
                   <div>
@@ -2621,9 +2859,7 @@ Please select an indexing configuration above.`);
                       min="1"
                     />
                   </div>
-                </div>
-
-                <div>
+                  <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={editCacheFormData.status}
@@ -2634,6 +2870,9 @@ Please select an indexing configuration above.`);
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
+                </div>
+
+                
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start">

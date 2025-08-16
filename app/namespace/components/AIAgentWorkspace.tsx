@@ -1242,7 +1242,7 @@ What would you like to work on today?`,
         namespaceName: projectName
       };
       
-      console.log('🌐 Making request to:', 'http://localhost:5001/code-generation/generate-backend');
+      console.log('🌐 Making request to:', `${API_BASE_URL}/code-generation/generate-backend`);
       console.log('📤 Request body:', requestBody);
       
       const response = await fetch(`${API_BASE_URL}/code-generation/generate-backend`, {
