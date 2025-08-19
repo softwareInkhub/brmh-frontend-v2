@@ -26,9 +26,19 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
     } else if (field.type === 'array') {
       if (field.itemType === 'object') {
         property.items = fieldsToSchema(field.itemFields || []);
+      } else if (field.itemType === 'schema') {
+        property.items = { 
+          $ref: `#/components/schemas/${field.schemaId}`,
+          type: field.allowNull ? ['object', 'null'] : 'object'
+        };
       } else {
         property.items = { type: field.allowNull ? [field.itemType, 'null'] : field.itemType };
       }
+    } else if (field.type === 'schema') {
+      property = {
+        $ref: `#/components/schemas/${field.schemaId}`,
+        type: field.allowNull ? ['object', 'null'] : 'object'
+      };
     }
     properties[field.name] = property;
     if (field.required) {
@@ -72,6 +82,11 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  // Resolved schema state
+  const [resolvedView, setResolvedView] = useState(false);
+  const [resolvedSchema, setResolvedSchema] = useState<any | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'createData' | 'updateData' | 'readData' | 'deleteData'>('edit');
   const [createDataResult, setCreateDataResult] = useState<string | null>(null);
   const [formData, setFormData] = useState<any>({});
@@ -160,14 +175,21 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
           if (found) {
             setSchemaObj(found);
             setTableName(found.tableName || null);
+            // Invalidate previously resolved schema when switching
+            setResolvedSchema(null);
+            setResolveError(null);
           } else {
             setSchemaObj(null);
             setTableName(null);
+            setResolvedSchema(null);
+            setResolveError(null);
           }
         }
       } catch {
         setSchemaObj(null);
         setTableName(null);
+        setResolvedSchema(null);
+        setResolveError('');
       }
     };
     fetchSchemaObj();
@@ -251,6 +273,32 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
     } catch (error) {
       setJsonError('Invalid JSON or validation failed');
       setValidationResult({ valid: false, message: 'Validation failed. Please check your schema.' });
+    }
+  };
+
+  // Load resolved schema from backend using schema id
+  const loadResolvedSchema = async () => {
+    if (!schemaObj || !(schemaObj.id || schemaObj.schemaId)) {
+      setResolveError('Save the schema first to view resolved references.');
+      return;
+    }
+    setIsResolving(true);
+    setResolveError(null);
+    try {
+      const id = schemaObj.id || schemaObj.schemaId;
+      const res = await fetch(`${API_BASE_URL}/unified/schema/${id}/resolved?resolveReferences=true`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to resolve schema');
+      }
+      const data = await res.json();
+      // Prefer data.schema if present, else the whole response
+      const resolved = data.schema ? data.schema : data;
+      setResolvedSchema(resolved);
+    } catch (err: any) {
+      setResolveError(err.message || 'Failed to resolve schema');
+    } finally {
+      setIsResolving(false);
     }
   };
 
@@ -377,6 +425,12 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
         setFields([]);
         setRawFields('');
         setCollapsedNodes(new Set());
+      }
+      // Refresh resolved schema view after successful save if in edit mode
+      if (isEditing) {
+        try {
+          await loadResolvedSchema();
+        } catch {}
       }
       if (onSuccess) onSuccess();
     } catch (error: any) {
@@ -663,6 +717,19 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
               >
                 Format
               </button>
+              <button
+                className={`px-2 py-1 rounded text-xs border font-medium transition ${resolvedView ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'}`}
+                onClick={async () => {
+                  const next = !resolvedView;
+                  setResolvedView(next);
+                  if (next && !resolvedSchema) {
+                    await loadResolvedSchema();
+                  }
+                }}
+                title="Toggle resolved view"
+              >
+                {isResolving ? 'Resolving...' : (resolvedView ? 'Resolved ✓' : 'Resolved')}
+              </button>
             </div>
           </div>
           
@@ -708,11 +775,19 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
                 OpenAPI 3.0+ spec: Use type: <code>["string", "null"]</code> for nullable fields, and <code>required: ["field1", ...]</code> for required fields.
               </div>
             </div>
-            <textarea
-              className="flex-1 border-0 p-3 font-mono text-xs bg-white focus:outline-none focus:ring-0 resize-none overflow-y-auto"
-              value={jsonSchema}
-              onChange={handleJsonChange}
-            />
+            {resolvedView ? (
+              <textarea
+                className="flex-1 border-0 p-3 font-mono text-xs bg-white focus:outline-none focus:ring-0 resize-none overflow-y-auto"
+                value={resolvedSchema ? JSON.stringify(resolvedSchema, null, 2) : (resolveError ? `// ${resolveError}` : (isResolving ? '// Resolving...' : '// No resolved schema yet'))}
+                readOnly
+              />
+            ) : (
+              <textarea
+                className="flex-1 border-0 p-3 font-mono text-xs bg-white focus:outline-none focus:ring-0 resize-none overflow-y-auto"
+                value={jsonSchema}
+                onChange={handleJsonChange}
+              />
+            )}
             {jsonError && (
               <div className="p-2 border-t border-gray-100 bg-red-50">
                 <div className="text-xs text-red-600">{jsonError}</div>

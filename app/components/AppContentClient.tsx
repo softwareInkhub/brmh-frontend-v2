@@ -9,7 +9,7 @@ import { usePathname } from 'next/navigation';
 export default function AppContentClient({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
-  const hideSidebar = pathname === '/Home';
+  const hideSidebar = pathname === '/Home' || pathname === '/authPage';
 
   return (
     <>
