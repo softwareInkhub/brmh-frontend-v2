@@ -3,62 +3,32 @@
 import React from 'react';
 import { Bell, User } from 'react-feather';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 interface NavbarProps {
   onMenuClick: () => void;
 }
 
 const Navbar = ({ onMenuClick }: NavbarProps) => {
-  const router = useRouter();
-
-  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
-
   const handleLogout = async () => {
+    const api = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
     try {
-      // Get refresh token for backend logout
-      const refreshToken = localStorage.getItem('refresh_token');
-      
-      // Call backend logout endpoint to revoke tokens
-      if (refreshToken) {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
-      }
-
-      // Also get Hosted UI logout URL to clear Cognito cookies and redirect
-      const resp = await fetch(`${API_BASE_URL}/auth/logout-url`);
-      if (resp.ok) {
-        const { logoutUrl } = await resp.json();
-        // Clear tokens locally before redirecting to Hosted UI logout
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('id_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('token_expires');
-        sessionStorage.removeItem('oauth_state');
-        window.location.href = logoutUrl;
-        return;
-      }
-    } catch (error) {
-      console.warn('Backend logout failed, continuing with local logout:', error);
-    }
-    
-    // Clear all tokens from localStorage
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('id_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('token_expires');
-    
-    // Clear any other auth-related data
-    sessionStorage.removeItem('oauth_state');
-    
-    // Redirect to auth page
-    router.push('/authPage');
+      await fetch(`${api}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+    } catch {}
+    try {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('id_token');
+      localStorage.removeItem('refresh_token');
+      sessionStorage.removeItem('oauth_state');
+      sessionStorage.removeItem('phone_signup_username');
+    } catch {}
+    window.location.href = `${api}/auth/logout-redirect`;
   };
+
   return (
     <nav className="sticky top-0 z-30 w-full bg-white border-b border-gray-100">
       <div className="px-4 md:px-6">
@@ -113,14 +83,13 @@ const Navbar = ({ onMenuClick }: NavbarProps) => {
                 </Link>
                 <div className="h-px bg-gray-200 my-2"></div>
                 <button 
-                  onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  onClick={handleLogout}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                     <polyline points="16 17 21 12 16 7" />
-                    <polyline points="13 8 17 8 17 4" />
-                    <line x1="9" y1="12" x2="21" y2="12" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
                   </svg>
                   Sign out
                 </button>
