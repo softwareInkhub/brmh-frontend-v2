@@ -41,7 +41,7 @@ const sidebarItems = [
   },
   {
     name: 'Docs',
-    path: '/docs',
+    path: '/docsPage',
     icon: <BookOpen size={24} />, // Documentation icon
   },
   {

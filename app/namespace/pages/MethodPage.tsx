@@ -510,8 +510,8 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
 
   const handleToggleCacheStatus = async (cacheConfig: any) => {
     try {
-      const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
-      
+    const newStatus = cacheConfig.status === 'active' ? 'inactive' : 'active';
+    
       console.log('🔄 Toggling cache status:', { 
         id: cacheConfig.id, 
         currentStatus: cacheConfig.status, 

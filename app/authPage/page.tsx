@@ -401,13 +401,13 @@ export default function AuthPage() {
                 <label htmlFor="username" className="sr-only">
                   Username
                 </label>
-                <input
+          <input
                   id="username"
                   name="username"
-                  type="text"
+            type="text"
                   required
                   className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="Username"
+            placeholder="Username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -420,7 +420,7 @@ export default function AuthPage() {
                   id="password"
                   name="password"
                   type="password"
-                  required
+            required
                   className={`appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${isLogin ? 'rounded-b-md' : ''}`}
                   placeholder="Password"
                   value={password}
@@ -432,13 +432,13 @@ export default function AuthPage() {
                   <label htmlFor="email" className="sr-only">
                     Email
                   </label>
-                  <input
+            <input
                     id="email"
                     name="email"
-                    type="email"
+              type="email"
                     required
                     className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                    placeholder="Email"
+              placeholder="Email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
@@ -491,7 +491,7 @@ export default function AuthPage() {
                       id="phoneNumber"
                       name="phoneNumber"
                       type="tel"
-                      required
+              required
                       className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                       placeholder="Phone Number (e.g., +1234567890)"
                       value={phoneNumber}
@@ -502,13 +502,13 @@ export default function AuthPage() {
                     <label htmlFor="password" className="sr-only">
                       Password
                     </label>
-                    <input
+          <input
                       id="password"
                       name="password"
-                      type="password"
+            type="password"
                       required
                       className={`appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${isLogin ? 'rounded-b-md' : ''}`}
-                      placeholder="Password"
+            placeholder="Password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
@@ -571,7 +571,7 @@ export default function AuthPage() {
                       id="otp"
                       name="otp"
                       type="text"
-                      required
+            required
                       className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                       placeholder="Enter OTP Code"
                       value={otp}
@@ -588,8 +588,8 @@ export default function AuthPage() {
                 )}
 
                 <div className="mt-6 space-y-3">
-                  <button
-                    type="submit"
+          <button
+            type="submit"
                     disabled={loading}
                     className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -599,7 +599,7 @@ export default function AuthPage() {
                   <button
                     type="button"
                     onClick={handleResendOtp}
-                    disabled={loading}
+            disabled={loading}
                     className="w-full text-sm text-blue-600 hover:text-blue-500 disabled:opacity-50"
                   >
                     Resend OTP
@@ -611,9 +611,9 @@ export default function AuthPage() {
                     className="w-full text-sm text-gray-600 hover:text-gray-500"
                   >
                     Back to Signup
-                  </button>
+          </button>
                 </div>
-              </form>
+        </form>
             )}
           </div>
         )}
