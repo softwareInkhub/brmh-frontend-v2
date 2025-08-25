@@ -134,6 +134,12 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   const [isRunningProject, setIsRunningProject] = useState(false);
   const [lambdaPrompt, setLambdaPrompt] = useState('');
   const [generatedLambdaCode, setGeneratedLambdaCode] = useState('');
+  
+  // Debug: Track generatedLambdaCode changes
+  useEffect(() => {
+    console.log('[Lambda Debug] generatedLambdaCode updated:', generatedLambdaCode);
+    console.log('[Lambda Debug] generatedLambdaCode length:', generatedLambdaCode.length);
+  }, [generatedLambdaCode]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -394,15 +400,28 @@ What would you like to work on today?`,
 
     // Check if this is a Lambda generation request
     const lowerMessage = userMessage.toLowerCase();
-    const lambdaKeywords = ['lambda', 'function', 'handler', 'aws lambda', 'serverless'];
+    const lambdaKeywords = [
+      'lambda', 'function', 'handler', 'aws lambda', 'serverless', 
+      'generate lambda', 'create lambda', 'build lambda', 'write lambda',
+      'lambda function', 'aws function', 'serverless function'
+    ];
     const isLambdaRequest = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
     
-    // If this is a Lambda request and we're in the Lambda tab, handle Lambda generation
-    if (isLambdaRequest && activeTab === 'lambda') {
+    console.log('[Lambda Debug] Message:', userMessage);
+    console.log('[Lambda Debug] Lower message:', lowerMessage);
+    console.log('[Lambda Debug] Lambda keywords:', lambdaKeywords);
+    console.log('[Lambda Debug] Is Lambda request:', isLambdaRequest);
+    console.log('[Lambda Debug] Active tab:', activeTab);
+    
+    // If this is a Lambda request, handle Lambda generation (regardless of current tab)
+    if (isLambdaRequest) {
       console.log('[Frontend] Detected Lambda generation request');
       setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation from chat request`]);
       
-      // Check if we have a selected schema
+      // Automatically switch to Lambda tab
+      setActiveTab('lambda');
+      
+            // Check if we have a selected schema
       if (!selectedSchema) {
         addMessage({
           role: 'assistant',
@@ -416,21 +435,29 @@ What would you like to work on today?`,
         setConsoleOutput(prev => [...prev, `📝 Processing Lambda request: ${userMessage}`]);
         setConsoleOutput(prev => [...prev, `📋 Using schema: ${selectedSchema.schemaName || selectedSchema.name || 'Selected Schema'}`]);
         
+        const requestBody = {
+          message: userMessage,
+          selectedSchema,
+          functionName: lambdaForm.functionName || 'handler',
+          runtime: lambdaForm.runtime || 'nodejs18.x',
+          handler: lambdaForm.handler || 'index.handler',
+          memory: lambdaForm.memory || 128,
+          timeout: lambdaForm.timeout || 3,
+          environment: lambdaForm.environment || ''
+        };
+        
+        console.log('[Lambda Debug] Making backend request to:', `${API_BASE_URL}/ai-agent/lambda-codegen`);
+        console.log('[Lambda Debug] Request body:', requestBody);
+        
         const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: userMessage,
-            selectedSchema,
-            functionName: lambdaForm.functionName || 'handler',
-            runtime: lambdaForm.runtime || 'nodejs18.x',
-            handler: lambdaForm.handler || 'index.handler',
-            memory: lambdaForm.memory || 128,
-            timeout: lambdaForm.timeout || 3,
-            environment: lambdaForm.environment || ''
-          })
+          body: JSON.stringify(requestBody)
         });
 
+        console.log('[Lambda Debug] Response status:', response.status);
+        console.log('[Lambda Debug] Response ok:', response.ok);
+        
         if (response.ok) {
           setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting Lambda generation...`]);
           const reader = response.body?.getReader();
@@ -448,8 +475,10 @@ What would you like to work on today?`,
               const lines = chunk.split('\n');
               
               for (const line of lines) {
+                console.log('[Lambda Debug] Processing line:', line);
                 if (line.startsWith('data: ')) {
                   const data = line.slice(6);
+                  console.log('[Lambda Debug] Data:', data);
                   if (data === '[DONE]') {
                     // Generation complete
                     setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
@@ -462,44 +491,37 @@ What would you like to work on today?`,
                       setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
                     }
                     
-                    // Add chat message (excluding the code)
-                    if (chatMessage.trim()) {
-                      addMessage({
-                        role: 'assistant',
-                        content: chatMessage.trim()
-                      });
-                    }
-                    
                     // Add success message about code generation
                     addMessage({
                       role: 'assistant',
-                      content: `✅ Lambda function code generated successfully! The code has been placed in the Lambda tab and saved to the Files tab. You can now configure deployment settings in the Deployment tab.`
+                      content: `✅ Lambda function code generated successfully! 
+
+📝 **Code Location:** The generated code is now available in the "Generated Lambda Code" box in the Lambda tab.
+
+📁 **Files:** The code has also been saved to the Files tab.
+
+🚀 **Next Steps:** You can now configure deployment settings in the Deployment tab to deploy your function.`
                     });
                     break;
                   } else if (data !== '') {
                     try {
                       const parsed = JSON.parse(data);
+                      console.log('[Lambda Debug] Parsed JSON:', parsed);
                       if (parsed.content) {
                         chunkCount++;
                         
-                        // Check if this is code content (starts with ``` or contains function/const/let/class)
+                        // For Lambda generation, ALL content from the backend is code
+                        // The backend is instructed to output ONLY code, no explanations
                         const content = parsed.content;
-                        if (content.includes('```') || 
-                            content.includes('function') || 
-                            content.includes('const ') || 
-                            content.includes('let ') || 
-                            content.includes('class ') ||
-                            content.includes('module.exports') ||
-                            content.includes('exports.') ||
-                            content.includes('return ') ||
-                            content.includes('console.log')) {
-                          // This is code content
-                          generatedCode += content;
-                          setGeneratedLambdaCode(generatedCode);
-                        } else {
-                          // This is chat content
-                          chatMessage += content;
-                        }
+                        
+                        // Debug: Log the content to see what we're receiving
+                        console.log('[Lambda Debug] Received content:', content);
+                        console.log('[Lambda Debug] Content length:', content.length);
+                        
+                        // Since this is Lambda generation, all content is code
+                        console.log('[Lambda Debug] Adding to generatedCode (Lambda generation)');
+                        generatedCode += content;
+                        setGeneratedLambdaCode(generatedCode);
                         
                         // Update console every 10 chunks
                         if (chunkCount % 10 === 0) {
