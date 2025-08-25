@@ -8,7 +8,7 @@ import Tables from './components/Tables';
 
 import dynamic from 'next/dynamic';
 import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
-import { User, X, Plus, MoreHorizontal,  Zap, Box, FileText, GitBranch, Database, Sparkles, Bot, View, LayoutGrid, LayoutPanelLeft, Pin, PinOff } from 'lucide-react';
+import { User, X, Plus, MoreHorizontal,  Zap, Box, FileText, GitBranch, Database, Sparkles, View, LayoutGrid, LayoutPanelLeft, Pin, PinOff } from 'lucide-react';
 import AccountModal from './Modals/AccountModal';
 import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
@@ -18,6 +18,7 @@ import MethodTestModal from '../components/MethodTestModal';
 import UnifiedSchemaModal from './Modals/UnifiedSchemaModal';
 import SchemaPreviewModal from './Modals/SchemaPreviewModal';
 import { useSidePanel } from "../components/SidePanelContext";
+import { useNamespaceContext } from "../components/NamespaceContext";
 import SchemaCreatePage from './pages/SchemaCreatePage';
 import AllAccountPage from './pages/AllAccountPage';
 import AllMethodPage from './pages/AllMethodPage';
@@ -31,20 +32,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import AllWebhookPage from './pages/AllWebhookPage';
 import WebhookPage from './pages/WebhookPage';
 
-// Dynamically import AIAgentWorkspace to prevent SSR issues
-const AIAgentWorkspace = dynamic(() => import('./components/AIAgentWorkspace'), {
-  ssr: false,
-  loading: () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8">
-        <div className="flex items-center gap-3">
-          <Bot className="text-blue-500 animate-pulse" size={24} />
-          <span>Loading AI Agent Workspace...</span>
-        </div>
-      </div>
-    </div>
-  )
-});
+
 
 
 const SIDEBAR_WIDTH = 80; // px, w-20
@@ -96,6 +84,7 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
 
 function NamespacePage(props: React.PropsWithChildren<{}>) {
   const { isCollapsed } = useSidePanel();
+  const { setCurrentNamespace } = useNamespaceContext();
   const [activeTab, setActiveTab] = useState('overview');
   const [tabs, setTabs] = useState(initialTabs);
 
@@ -157,7 +146,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
 
   // Add state for AI Agent Workspace
-  const [aiAgentTab, setAIAgentTab] = useState<{ namespace?: any } | null>(null);
+
 
   // Add state for tab layout
   const [tabLayout, setTabLayout] = useState<'horizontal' | 'vertical'>('horizontal');
@@ -385,6 +374,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
       });
       return;
     } else if (type === 'singleNamespace') {
+      console.log('Opening single namespace:', parentData);
       const key = `singleNamespace-${parentData['namespace-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
         setTabs([...tabs, { key, label: parentData['namespace-name'], pinned: false }]);
@@ -394,6 +384,9 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, namespace: parentData }];
       });
+      // Set current namespace context
+      console.log('Setting current namespace context:', parentData);
+      setCurrentNamespace(parentData);
       return;
     } else if (type === 'allWebhooks') {
       const key = parentData ? `allWebhooks-${parentData['namespace-id']}` : 'allWebhooks';
@@ -693,7 +686,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 setTabs([...tabs, { key, label: 'AI Agent', pinned: false }]);
               }
               setActiveTab(key);
-              setAIAgentTab({});
+      
             }}
           >
     
@@ -782,14 +775,6 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 }
               }}
                             onDeleteNamespace={handleDeleteNamespace}
-              onOpenAIAgent={(namespace) => {
-                const key = 'ai-agent';
-                if (!tabs.find(tab => tab.key === key)) {
-                  setTabs([...tabs, { key, label: 'AI Agent', pinned: false }]);
-                }
-                setActiveTab(key);
-                setAIAgentTab({ namespace });
-              }}
           />
           )}
         </div>
@@ -823,6 +808,10 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                     `}
                                 onClick={() => {
                                   setActiveTab(tab.key);
+                                  // Clear namespace context if switching to overview or non-namespace tabs
+                                  if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                    setCurrentNamespace(null);
+                                  }
                                 }}
                   >
                                 {tab.label}
@@ -840,6 +829,10 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                                 `}
                                 onClick={() => {
                                   setActiveTab(tab.key);
+                                  // Clear namespace context if switching to overview or non-namespace tabs
+                                  if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                    setCurrentNamespace(null);
+                                  }
                                 }}
                               >
                                 {tab.label}
@@ -865,6 +858,10 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                               `}
                               onClick={() => {
                                 setActiveTab(tab.key);
+                                // Clear namespace context if switching to overview or non-namespace tabs
+                                if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                  setCurrentNamespace(null);
+                                }
                               }}
                             >
                               {tab.label}
@@ -1096,30 +1093,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           <WebhookPage webhook={webhook} namespace={namespace} />
                         </div>
                       ))}
-                      {/* {activeTab !== 'overview' &&
-                        activeTab !== 'namespace' &&
-                        activeTab !== 'schemaService' &&
-                        activeTab !== 'tables' &&
-                        activeTab !== 'unifiedNamespace' &&
-                        activeTab !== 'new' &&
-                        !activeTab.startsWith('tab-') && (
-                      )} */}
-                      {tabs.map(tab => {
-                        if (tab.key === 'ai-agent') {
-                          return (
-                            <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              <AIAgentWorkspace
-                                namespace={aiAgentTab?.namespace}
-                                onClose={() => {
-                                  setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
-                                  setAIAgentTab(null);
-                                  setActiveTab('overview');
-                                }}
-                              />
-                            </div>
-                          );
-                        }
-                      })}
+
                     </div>
                   </>
                 ) : (
@@ -1393,22 +1367,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               !activeTab.startsWith('tab-') && (
                 <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
             )}
-                      {tabs.map(tab => {
-                        if (tab.key === 'ai-agent') {
-                          return (
-                            <div key={tab.key} style={{ display: activeTab === tab.key ? 'block' : 'none', width: '100%', height: '100%' }}>
-                              <AIAgentWorkspace
-                                namespace={aiAgentTab?.namespace}
-                                onClose={() => {
-                                  setTabs(tabs => tabs.filter(t => t.key !== 'ai-agent'));
-                                  setAIAgentTab(null);
-                                  setActiveTab('overview');
-                                }}
-                              />
-          </div>
-                          );
-                        }
-                      })}
+
                     </div>
                   </div>
                 )}

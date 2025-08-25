@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw, LayoutDashboard, Bot } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ChevronDown, ChevronRight, Plus, Search, Filter, Database, Users, Terminal, FileCode, Folder, Layers, List, Box, FileText, Globe, Settings, User, Edit2, Trash2, Download, Upload, RefreshCw, LayoutDashboard } from 'lucide-react';
 import NamespacePreviewModal from '../Modals/NamespacePreviewModal';
 import { useDrag } from 'react-dnd';
 
@@ -16,7 +16,6 @@ interface SidePanelProps {
   onEditSchema?: (schema: any) => void;
   onDeleteSchema?: (schema: any) => void;
   onDeleteNamespace?: (namespace: any) => void;
-  onOpenAIAgent?: (namespace?: any) => void;
 }
 
 const methodColor = (type: string) => {
@@ -41,21 +40,35 @@ const methodIcon = (type: string) => {
   }
 };
 
-// Create separate draggable components to avoid hooks in loops
-const DraggableNamespace: React.FC<{ namespace: any; children: React.ReactNode; onClick: () => void }> = ({ namespace, children, onClick }) => {
+// Draggable Namespace Component
+const DraggableNamespace: React.FC<{ namespace: any; children: React.ReactNode }> = ({ namespace, children }) => {
+  const dragRef = useRef<HTMLDivElement>(null);
+  
+  // Debug: Log namespace structure
+  console.log('DraggableNamespace rendered with namespace:', namespace);
+  
   const [{ isDragging }, drag] = useDrag({
-    type: 'NAMESPACE',
-    item: { type: 'NAMESPACE', data: namespace },
+    type: 'namespace',
+    item: () => {
+      console.log('Drag started for namespace:', namespace);
+      console.log('Namespace keys:', Object.keys(namespace || {}));
+      return { namespace };
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
 
+  // Connect the drag ref
+  drag(dragRef);
+
   return (
-    <div ref={node => { if (node) drag(node); }} draggable style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}>
-      <div onClick={onClick}>
-        {children}
-      </div>
+    <div
+      ref={dragRef}
+      className={`cursor-move ${isDragging ? 'opacity-50' : 'opacity-100'}`}
+      title="Drag to AI Agent for context"
+    >
+      {children}
     </div>
   );
 };
@@ -96,7 +109,7 @@ const DraggableSchema: React.FC<{ schema: any; children: React.ReactNode; onClic
   );
 };
 
-const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, webhooks, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace, onOpenAIAgent }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, webhooks, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
   // Debug logs
   console.log('SidePanel namespaces:', namespaces);
   console.log('SidePanel schemas:', schemas);
@@ -196,7 +209,6 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
               <DraggableNamespace
                 key={ns['namespace-id'] || nsIdx}
                 namespace={ns}
-                onClick={() => onAdd('singleNamespace', ns)}
               >
                 <div className="mb-1">
                   <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
@@ -224,19 +236,6 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         {ns['namespace-name']}
                       </span>
                     </button>
-                    {onOpenAIAgent && (
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          onOpenAIAgent(ns);
-                        }}
-                        className="p-1 rounded hover:bg-purple-50"
-                        title="Open AI Agent for this namespace"
-                        type="button"
-                      >
-                        <Bot size={14} className="text-purple-500" />
-                      </button>
-                    )}
                   </div>
                   {expandedNs[ns['namespace-id']] && (
                     <div className="ml-6 mt-1 space-y-1">

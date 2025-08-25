@@ -33,6 +33,11 @@ interface WorkspaceState {
 
 const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose }) => {
   console.log('AIAgentWorkspace rendered with props:', { namespace, onClose });
+  
+  // Add useEffect to log namespace changes
+  useEffect(() => {
+    console.log('Namespace changed:', namespace);
+  }, [namespace]);
   // 1. Change activeTab state to use 'lambda' instead of 'api'
   const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'lambda' | 'schema' | 'api' | 'files'>('chat');
   const [messages, setMessages] = useState<Message[]>([
@@ -1845,591 +1850,597 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
   }
 
   return (
-    <div className="h-screen w-full flex bg-white">
-      {/* Left: Chat Panel */}
-      <div className="flex flex-col w-[650px] min-w-[500px] max-w-[900px] border-r border-gray-200 bg-white h-full">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100">
-              <Bot className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900">AI Assistant</h2>
-              <p className="text-sm text-gray-500">
-                {namespace ? `Working with: ${namespace['namespace-name']}` : 'General Development'}
-                {sessionId && (
-                  <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                    Memory Active
+    <div className="fixed top-0 right-0 h-full w-[800px] flex flex-col bg-white shadow-2xl border-l border-gray-200 z-50 transform transition-transform duration-300 ease-in-out">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-blue-100">
+            <Bot className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-gray-900">AI Assistant</h2>
+            <p className="text-sm text-gray-500">
+              {namespace ? (
+                <span className="flex items-center gap-2">
+                  <span className="text-blue-600 font-medium">Working with: {namespace['namespace-name']}</span>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    Context Active
                   </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                  message.role === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{message.content}</div>
-                <div className="text-xs opacity-70 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-        {/* Chat Input */}
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex gap-2">
-            <textarea
-              ref={inputRef}
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message..."
-              className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows={1}
-              disabled={isLoading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || !inputMessage.trim()}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+                </span>
+              ) : (
+                'General Development'
+              )}
+              {sessionId && (
+                <span className="ml-2 text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                  Memory Active
+                </span>
+              )}
+            </p>
           </div>
         </div>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <X className="w-5 h-5 text-gray-500" />
+        </button>
       </div>
 
-      {/* Right: Tabbed Content Panel */}
-      <div className="flex-1 flex flex-col bg-[#f8f9fb]">
-        {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200 bg-white px-4 pt-2">
-          <button
-            onClick={() => setActiveTab('lambda')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
-              activeTab === 'lambda'
-                ? 'border-blue-500 text-blue-600 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Code size={16} /> Lambda
-          </button>
-          <button
-            onClick={() => setActiveTab('files')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
-              activeTab === 'files'
-                ? 'border-blue-500 text-blue-600 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Folder size={16} /> Files
-          </button>
-          <button
-            onClick={() => setActiveTab('schema')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
-              activeTab === 'schema'
-                ? 'border-blue-500 text-blue-600 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Database size={16} /> Schema
-          </button>
-          <button
-            onClick={() => setActiveTab('console')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
-              activeTab === 'console'
-                ? 'border-blue-500 text-blue-600 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Play size={16} /> Console
-          </button>
-        </div>
-        {/* Tab Content */}
-        <div className="flex-1 overflow-auto p-6">
-          {activeTab === 'lambda' && (
-            <div className="p-4">
-              <label className="block font-semibold mb-1">Select Schema</label>
-              <select
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.schemaId}
-                onChange={e => {
-                  const schemaId = e.target.value;
-                  const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
-                  setLambdaForm(f => ({ ...f, schemaId }));
-                  setSelectedSchema(schema);
-                }}
-                required
-              >
-                <option value="">Select a schema</option>
-                {filteredSavedSchemas.map((s: any) => (
-                  <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
-                ))}
-              </select>
-              <label className="block font-semibold mt-4 mb-1">Function Name</label>
-              <input
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.functionName}
-                onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
-                placeholder="handler.js"
-                required
-              />
-              <label className="block font-semibold mt-4 mb-1">Runtime</label>
-              <select
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.runtime}
-                onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
-              >
-                <option value="nodejs18.x">Node.js 18.x</option>
-                <option value="nodejs20.x">Node.js 20.x</option>
-                <option value="python3.12">Python 3.12</option>
-                <option value="python3.11">Python 3.11</option>
-                <option value="python3.10">Python 3.10</option>
-                <option value="java21">Java 21</option>
-                <option value="java17">Java 17</option>
-                <option value="java11">Java 11</option>
-                <option value="dotnet8">.NET 8</option>
-                <option value="dotnet6">.NET 6</option>
-              </select>
-              <label className="block font-semibold mt-4 mb-1">Handler</label>
-              <input
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.handler}
-                onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
-                placeholder="index.handler"
-                required
-              />
-              <label className="block font-semibold mt-4 mb-1">Memory (MB)</label>
-              <input
-                type="number"
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.memory}
-                min={128}
-                max={10240}
-                onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
-                required
-              />
-              <label className="block font-semibold mt-4 mb-1">Timeout (seconds)</label>
-              <input
-                type="number"
-                className="w-full border rounded px-2 py-1 mb-2"
-                value={lambdaForm.timeout}
-                min={1}
-                max={900}
-                onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
-                required
-              />
-              <label className="block font-semibold mt-4 mb-1">Environment Variables (JSON)</label>
-              <textarea
-                className="w-full border rounded px-2 py-1 mb-2 font-mono"
-                value={lambdaForm.environment}
-                onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
-                placeholder='{"KEY":"VALUE"}'
-                rows={2}
-              />
-              <label className="block font-semibold mt-4 mb-1">Describe the Lambda Handler</label>
-              <textarea
-                value={lambdaPrompt}
-                onChange={e => setLambdaPrompt(e.target.value)}
-                placeholder="Describe what Lambda handler you want to generate for the selected schema..."
-                className="w-full border rounded px-2 py-1 mb-2"
-                rows={3}
-              />
-              <button
-                onClick={async () => {
-                  console.log('selectedSchema:', selectedSchema);
-                  if (!selectedSchema) {
-                    alert('Please select a schema before generating a Lambda handler.');
-                    return;
-                  }
-                  if (!lambdaPrompt.trim()) {
-                    alert('Please enter a prompt describing the Lambda handler you want to generate.');
-                    return;
-                  }
-                  setGeneratedLambdaCode('');
-                  console.log('DEBUG: Submitting Lambda prompt:', lambdaPrompt, 'for schema:', selectedSchema);
-                  
-                  try {
-                    setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation for: ${lambdaForm.functionName}`]);
-                    setConsoleOutput(prev => [...prev, `📝 Prompt: ${lambdaPrompt}`]);
-                    setConsoleOutput(prev => [...prev, `⚙️ Runtime: ${lambdaForm.runtime}`]);
-                    setConsoleOutput(prev => [...prev, `💾 Memory: ${lambdaForm.memory} MB`]);
-                    setConsoleOutput(prev => [...prev, `⏱️ Timeout: ${lambdaForm.timeout} seconds`]);
-                    
-                    const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        message: lambdaPrompt,
-                        selectedSchema,
-                        functionName: lambdaForm.functionName,
-                        runtime: lambdaForm.runtime,
-                        handler: lambdaForm.handler,
-                        memory: lambdaForm.memory,
-                        timeout: lambdaForm.timeout,
-                        environment: lambdaForm.environment || ''
-                      })
-                    });
+      {/* Tab Navigation */}
+      <div className="flex border-b border-gray-200 bg-white px-4 pt-2">
+        <button
+          onClick={() => setActiveTab('lambda')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'lambda'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Code size={16} /> Lambda
+        </button>
+        <button
+          onClick={() => setActiveTab('files')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'files'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Folder size={16} /> Files
+        </button>
+        <button
+          onClick={() => setActiveTab('schema')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'schema'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Database size={16} /> Schema
+        </button>
+        <button
+          onClick={() => setActiveTab('console')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'console'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Play size={16} /> Console
+        </button>
+      </div>
 
-                    if (response.ok) {
-                      setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting generation...`]);
-                      const reader = response.body?.getReader();
-                      if (reader) {
-                        let generatedCode = '';
-                        let chunkCount = 0;
+      {/* Tab Content */}
+      <div className="flex-1 overflow-auto p-4 bg-[#f8f9fb]">
+        {activeTab === 'lambda' && (
+          <div className="h-full overflow-y-auto">
+            <label className="block font-semibold mb-1">Select Schema</label>
+            <select
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.schemaId}
+              onChange={e => {
+                const schemaId = e.target.value;
+                const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
+                setLambdaForm(f => ({ ...f, schemaId }));
+                setSelectedSchema(schema);
+              }}
+              required
+            >
+              <option value="">Select a schema</option>
+              {filteredSavedSchemas.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
+              ))}
+            </select>
+            <label className="block font-semibold mt-4 mb-1">Function Name</label>
+            <input
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.functionName}
+              onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
+              placeholder="handler.js"
+              required
+            />
+            <label className="block font-semibold mt-4 mb-1">Runtime</label>
+            <select
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.runtime}
+              onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
+            >
+              <option value="nodejs18.x">Node.js 18.x</option>
+              <option value="nodejs20.x">Node.js 20.x</option>
+              <option value="python3.12">Python 3.12</option>
+              <option value="python3.11">Python 3.11</option>
+              <option value="python3.10">Python 3.10</option>
+              <option value="java21">Java 21</option>
+              <option value="java17">Java 17</option>
+              <option value="java11">Java 11</option>
+              <option value="dotnet8">.NET 8</option>
+              <option value="dotnet6">.NET 6</option>
+            </select>
+            <label className="block font-semibold mt-4 mb-1">Handler</label>
+            <input
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.handler}
+              onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
+              placeholder="index.handler"
+              required
+            />
+            <label className="block font-semibold mt-4 mb-1">Memory (MB)</label>
+            <input
+              type="number"
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.memory}
+              min={128}
+              max={10240}
+              onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
+              required
+            />
+            <label className="block font-semibold mt-4 mb-1">Timeout (seconds)</label>
+            <input
+              type="number"
+              className="w-full border rounded px-2 py-1 mb-2"
+              value={lambdaForm.timeout}
+              min={1}
+              max={900}
+              onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
+              required
+            />
+            <label className="block font-semibold mt-4 mb-1">Environment Variables (JSON)</label>
+            <textarea
+              className="w-full border rounded px-2 py-1 mb-2 font-mono"
+              value={lambdaForm.environment}
+              onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
+              placeholder='{"KEY":"VALUE"}'
+              rows={2}
+            />
+            <label className="block font-semibold mt-4 mb-1">Describe the Lambda Handler</label>
+            <textarea
+              value={lambdaPrompt}
+              onChange={e => setLambdaPrompt(e.target.value)}
+              placeholder="Describe what Lambda handler you want to generate for the selected schema..."
+              className="w-full border rounded px-2 py-1 mb-2"
+              rows={3}
+            />
+            <button
+              onClick={async () => {
+                console.log('selectedSchema:', selectedSchema);
+                if (!selectedSchema) {
+                  alert('Please select a schema before generating a Lambda handler.');
+                  return;
+                }
+                if (!lambdaPrompt.trim()) {
+                  alert('Please enter a prompt describing the Lambda handler you want to generate.');
+                  return;
+                }
+                setGeneratedLambdaCode('');
+                console.log('DEBUG: Submitting Lambda prompt:', lambdaPrompt, 'for schema:', selectedSchema);
+                
+                try {
+                  setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation for: ${lambdaForm.functionName}`]);
+                  setConsoleOutput(prev => [...prev, `📝 Prompt: ${lambdaPrompt}`]);
+                  setConsoleOutput(prev => [...prev, `⚙️ Runtime: ${lambdaForm.runtime}`]);
+                  setConsoleOutput(prev => [...prev, `💾 Memory: ${lambdaForm.memory} MB`]);
+                  setConsoleOutput(prev => [...prev, `⏱️ Timeout: ${lambdaForm.timeout} seconds`]);
+                  
+                  const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      message: lambdaPrompt,
+                      selectedSchema,
+                      functionName: lambdaForm.functionName,
+                      runtime: lambdaForm.runtime,
+                      handler: lambdaForm.handler,
+                      memory: lambdaForm.memory,
+                      timeout: lambdaForm.timeout,
+                      environment: lambdaForm.environment || ''
+                    })
+                  });
+
+                  if (response.ok) {
+                    setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting generation...`]);
+                    const reader = response.body?.getReader();
+                    if (reader) {
+                      let generatedCode = '';
+                      let chunkCount = 0;
+                      
+                      while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
                         
-                        while (true) {
-                          const { done, value } = await reader.read();
-                          if (done) break;
-                          
-                          const chunk = new TextDecoder().decode(value);
-                          const lines = chunk.split('\n');
-                          
-                          for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                              const data = line.slice(6);
-                              if (data === '[DONE]') {
-                                // Generation complete
-                                setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
-                                setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
-                                setConsoleOutput(prev => [...prev, `📏 Code length: ${generatedCode.length} characters`]);
-                                
-                                if (generatedCode.trim()) {
-                                  setConsoleOutput(prev => [...prev, `📁 Creating file structure...`]);
-                                  generateLambdaFileStructure(generatedCode, lambdaForm.functionName, lambdaForm.runtime);
-                                  setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
-                                }
-                                break;
-                              } else if (data !== '') {
-                                try {
-                                  const parsed = JSON.parse(data);
-                                  if (parsed.content) {
-                                    generatedCode += parsed.content;
-                                    setGeneratedLambdaCode(generatedCode);
-                                    chunkCount++;
-                                    
-                                    // Update console every 10 chunks
-                                    if (chunkCount % 10 === 0) {
-                                      setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars`]);
-                                    }
-                                  } else if (parsed.error) {
-                                    console.error('Lambda generation error:', parsed.error);
-                                    setGeneratedLambdaCode('Error: ' + parsed.error);
-                                    setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
+                        const chunk = new TextDecoder().decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                          if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') {
+                              // Generation complete
+                              setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
+                              setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
+                              setConsoleOutput(prev => [...prev, `📏 Code length: ${generatedCode.length} characters`]);
+                              
+                              if (generatedCode.trim()) {
+                                setConsoleOutput(prev => [...prev, `📁 Creating file structure...`]);
+                                generateLambdaFileStructure(generatedCode, lambdaForm.functionName, lambdaForm.runtime);
+                                setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
+                              }
+                              break;
+                            } else if (data !== '') {
+                              try {
+                                const parsed = JSON.parse(data);
+                                if (parsed.content) {
+                                  generatedCode += parsed.content;
+                                  setGeneratedLambdaCode(generatedCode);
+                                  chunkCount++;
+                                  
+                                  // Update console every 10 chunks
+                                  if (chunkCount % 10 === 0) {
+                                    setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars`]);
                                   }
-                                } catch (e) {
-                                  // Ignore parsing errors
+                                } else if (parsed.error) {
+                                  console.error('Lambda generation error:', parsed.error);
+                                  setGeneratedLambdaCode('Error: ' + parsed.error);
+                                  setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
                                 }
+                              } catch (e) {
+                                // Ignore parsing errors
                               }
                             }
                           }
                         }
                       }
-                    } else {
-                      console.error('Failed to generate Lambda code:', response.status);
-                      setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
                     }
-                  } catch (error) {
-                    console.error('Error generating Lambda code:', error);
-                    setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+                  } else {
+                    console.error('Failed to generate Lambda code:', response.status);
+                    setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
                   }
-                }}
-                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
-              >
-                Generate Lambda Handler
-              </button>
-              <label className="block font-semibold mt-4 mb-1">Generated Lambda Code</label>
-              <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
-                {generatedLambdaCode || '// Lambda code will appear here'}
-              </pre>
-            </div>
-          )}
-          {activeTab === 'schema' && (
-            <div className="h-full overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">Generated Schemas</h3>
-                  {isStreamingSchema && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-blue-600">Live</span>
-                    </div>
-                  )}
-                  {Object.values(savingSchema).some(Boolean) && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-green-600">Saving</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-sm text-gray-600">
-                    {schemas.length > 0 ? 'Schema generated' : 'No schema generated yet'}
-                  </span>
-                </div>
-              </div>
-              
-              {/* Live Streaming Preview */}
-              {isStreamingSchema && (
-                <div className="mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
-                  <div className="flex items-center gap-2 mb-2">
+                } catch (error) {
+                  console.error('Error generating Lambda code:', error);
+                  setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+                }
+              }}
+              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
+            >
+              Generate Lambda Handler
+            </button>
+            <label className="block font-semibold mt-4 mb-1">Generated Lambda Code</label>
+            <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
+              {generatedLambdaCode || '// Lambda code will appear here'}
+            </pre>
+          </div>
+        )}
+        {activeTab === 'schema' && (
+          <div className="h-full overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium">Generated Schemas</h3>
+                {isStreamingSchema && (
+                  <div className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium text-blue-700">Live Schema Generation</span>
+                    <span className="text-xs text-blue-600">Live</span>
                   </div>
-                  <pre className="text-sm overflow-x-auto bg-white p-3 rounded border">
-                    {liveSchema || 'Starting schema generation...'}
-                  </pre>
-                </div>
-              )}
-              
-              {schemas.length === 0 ? (
-                <div className="text-gray-500">No schemas generated yet...</div>
-              ) : (
-                <div className="space-y-4">
-                  {schemas.map((schema: any, index: number) => (
-                    <div key={schema.id} className={`border border-gray-200 rounded-lg p-4 ${isEditingSchema && index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-medium">{schema.schemaName || schema.name || 'Unnamed Schema'}</h4>
-                          {schema.edited && (
-                            <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">Edited</span>
-                          )}
-                          {!schema.saved && (
-                            <>
-                              <input
-                                type="text"
-                                className="border rounded px-2 py-1 text-xs mr-2"
-                                placeholder="Schema Name"
-                                value={schemaNames[schema.id] || ''}
-                                onChange={e => setSchemaNames(prev => ({ ...prev, [schema.id]: e.target.value }))}
-                                style={{ minWidth: 120 }}
-                              />
-                              <button
-                                onClick={async () => {
-                                  setSavingSchema((prev) => ({ ...prev, [schema.id]: true }));
-                                  try {
-                                    setConsoleOutput(prev => [...prev, `💾 Saving schema "${schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema'}" to namespace...`]);
-                                    
-                                    const payload = {
-                                      namespaceId: namespace?.['namespace-id'],
-                                      schemaName: schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema',
-                                      schemaType: schema.schemaType || (schema.schema && schema.schema.type) || 'object',
-                                      schema: schema.schema,
-                                      isArray: schema.isArray || false,
-                                      originalType: schema.originalType || (schema.schema && schema.schema.type) || 'object',
-                                      url: schema.url || '',
-                                    };
-                                    
-                                    const response = await fetch(`${API_BASE_URL}/save-schema-to-namespace`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify(payload)
-                                    });
-                                    
-                                    if (response.ok) {
-                                      const result = await response.json();
-                                      setConsoleOutput(prev => [...prev, `✅ Schema saved successfully! Schema ID: ${result.schemaId}`]);
-                                      
-                                      // Update the schemas list to mark as saved
-                                      setSchemas(prev => prev.map(s => s.id === schema.id ? { 
-                                        ...s, 
-                                        saved: true, 
-                                        schemaName: payload.schemaName,
-                                        schemaId: result.schemaId 
-                                      } : s));
-                                      
-                                      // Refresh the saved schemas list for the Lambda dropdown
-                                      try {
-                                        const schemasResponse = await fetch(`/unified/schema?namespaceId=${namespace?.['namespace-id']}`);
-                                        if (schemasResponse.ok) {
-                                          const updatedSchemas = await schemasResponse.json();
-                                          setSavedSchemas(updatedSchemas);
-                                          setConsoleOutput(prev => [...prev, `🔄 Updated saved schemas list (${updatedSchemas.length} schemas available)`]);
-                                        }
-                                      } catch (refreshError) {
-                                        console.error('Error refreshing schemas:', refreshError);
-                                        setConsoleOutput(prev => [...prev, `⚠️ Warning: Could not refresh schemas list automatically`]);
-                                      }
-                                      
-                                      // Dispatch event to refresh other components
-                                      if (typeof window !== 'undefined' && window.dispatchEvent) {
-                                        window.dispatchEvent(new CustomEvent('refresh-unified-namespace'));
-                                      }
-                                      
-                                      setConsoleOutput(prev => [...prev, `📋 Schema "${payload.schemaName}" is now available in your namespace!`]);
-                                    } else {
-                                      const errorData = await response.json();
-                                      setConsoleOutput(prev => [...prev, `❌ Failed to save schema: ${errorData.error || 'Unknown error'}`]);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error saving schema:', error);
-                                    setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error instanceof Error ? error.message : 'Unknown error'}`]);
-                                  } finally {
-                                    setSavingSchema((prev) => ({ ...prev, [schema.id]: false }));
-                                  }
-                                }}
-                                disabled={savingSchema[schema.id] || !(schemaNames[schema.id] && schemaNames[schema.id].trim())}
-                                className="px-2 py-1 text-xs rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
-                              >
-                                {savingSchema[schema.id] ? 'Saving...' : 'Save to Namespace'}
-                              </button>
-                            </>
-                          )}
-                          {schema.saved && (
-                            <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800">Saved</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => setShowRawSchema(prev => ({ ...prev, [index]: !prev[index] }))}
-                          className="text-xs text-blue-500 hover:underline"
-                        >
-                          {showRawSchema[index] ? 'Hide Raw' : 'Show Raw'}
-                        </button>
-                      </div>
-                      {showRawSchema[index] ? (
-                        <pre className="text-sm overflow-x-auto">
-                          {(rawSchemas.find(r => r.id === schema.id)?.content) || JSON.stringify(schema.schema, null, 2)}
-                        </pre>
-                      ) : (
-                        <pre className="text-sm overflow-x-auto">
-                          {JSON.stringify(schema.schema, null, 2)}
-                        </pre>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {activeTab === 'files' && (
-            <div className="h-full flex">
-              {/* File Tree Panel */}
-              <div className="w-1/3 border-r border-gray-200 bg-white p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium">Project Files</h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={downloadProjectFiles}
-                      disabled={projectFiles.length === 0 || isDownloading}
-                      className={`px-2 py-1 text-xs rounded ${
-                        projectFiles.length === 0 || isDownloading
-                          ? 'bg-gray-300 cursor-not-allowed'
-                          : 'bg-green-500 hover:bg-green-600 text-white'
-                      }`}
-                      title="Download all project files as ZIP"
-                    >
-                      {isDownloading ? 'Downloading...' : 'Download ZIP'}
-                    </button>
-                    <button
-                      onClick={refreshFileTree}
-                      className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
-                  {projectFiles.length === 0 ? (
-                    <div className="text-gray-500 text-sm">No files found...</div>
-                  ) : (
-                    renderFileTree(projectFiles)
-                  )}
-                </div>
-              </div>
-              
-              {/* File Content Panel */}
-              <div className="flex-1 p-4">
-                {selectedFile ? (
-                  <div className="h-full flex flex-col">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-medium">{selectedFile.name}</h3>
-                      <span className="text-sm text-gray-500">{selectedFile.path}</span>
-                    </div>
-                    <div className="flex-1 overflow-auto bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4">
-                      {selectedFile.content || fileContent ? (
-                        <pre className="whitespace-pre-wrap">{selectedFile.content || fileContent}</pre>
-                      ) : (
-                        <div className="text-gray-500">Select a file to view its content...</div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <Folder size={48} className="mx-auto mb-4 text-gray-300" />
-                      <p>Select a file from the tree to view its content</p>
-                    </div>
+                )}
+                {Object.values(savingSchema).some(Boolean) && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-green-600">Saving</span>
                   </div>
                 )}
               </div>
+              <div className="flex gap-2">
+                <span className="text-sm text-gray-600">
+                  {schemas.length > 0 ? 'Schema generated' : 'No schema generated yet'}
+                </span>
+              </div>
             </div>
-          )}
-          {activeTab === 'console' && (
-            <div className="h-full flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">Console Output</h3>
-                  {isDeploying && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-green-600">Deploying</span>
-                    </div>
-                  )}
+            
+            {/* Live Streaming Preview */}
+            {isStreamingSchema && (
+              <div className="mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-blue-700">Live Schema Generation</span>
                 </div>
+                <pre className="text-sm overflow-x-auto bg-white p-3 rounded border">
+                  {liveSchema || 'Starting schema generation...'}
+                </pre>
+              </div>
+            )}
+            
+            {schemas.length === 0 ? (
+              <div className="text-gray-500">No schemas generated yet...</div>
+            ) : (
+              <div className="space-y-4">
+                {schemas.map((schema: any, index: number) => (
+                  <div key={schema.id} className={`border border-gray-200 rounded-lg p-4 ${isEditingSchema && index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium">{schema.schemaName || schema.name || 'Unnamed Schema'}</h4>
+                        {schema.edited && (
+                          <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">Edited</span>
+                        )}
+                        {!schema.saved && (
+                          <>
+                            <input
+                              type="text"
+                              className="border rounded px-2 py-1 text-xs mr-2"
+                              placeholder="Schema Name"
+                              value={schemaNames[schema.id] || ''}
+                              onChange={e => setSchemaNames(prev => ({ ...prev, [schema.id]: e.target.value }))}
+                              style={{ minWidth: 120 }}
+                            />
+                            <button
+                              onClick={async () => {
+                                setSavingSchema((prev) => ({ ...prev, [schema.id]: true }));
+                                try {
+                                  setConsoleOutput(prev => [...prev, `💾 Saving schema "${schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema'}" to namespace...`]);
+                                  
+                                  const payload = {
+                                    namespaceId: namespace?.['namespace-id'],
+                                    schemaName: schemaNames[schema.id] || schema.schemaName || schema.name || 'Unnamed Schema',
+                                    schemaType: schema.schemaType || (schema.schema && schema.schema.type) || 'object',
+                                    schema: schema.schema,
+                                    isArray: schema.isArray || false,
+                                    originalType: schema.originalType || (schema.schema && schema.schema.type) || 'object',
+                                    url: schema.url || '',
+                                  };
+                                  
+                                  const response = await fetch(`${API_BASE_URL}/save-schema-to-namespace`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(payload)
+                                  });
+                                  
+                                  if (response.ok) {
+                                    const result = await response.json();
+                                    setConsoleOutput(prev => [...prev, `✅ Schema saved successfully! Schema ID: ${result.schemaId}`]);
+                                    
+                                    // Update the schemas list to mark as saved
+                                    setSchemas(prev => prev.map(s => s.id === schema.id ? { 
+                                      ...s, 
+                                      saved: true, 
+                                      schemaName: payload.schemaName,
+                                      schemaId: result.schemaId 
+                                    } : s));
+                                    
+                                    // Refresh the saved schemas list for the Lambda dropdown
+                                    try {
+                                      const schemasResponse = await fetch(`/unified/schema?namespaceId=${namespace?.['namespace-id']}`);
+                                      if (schemasResponse.ok) {
+                                        const updatedSchemas = await schemasResponse.json();
+                                        setSavedSchemas(updatedSchemas);
+                                        setConsoleOutput(prev => [...prev, `🔄 Updated saved schemas list (${updatedSchemas.length} schemas available)`]);
+                                      }
+                                    } catch (refreshError) {
+                                      console.error('Error refreshing schemas:', refreshError);
+                                      setConsoleOutput(prev => [...prev, `⚠️ Warning: Could not refresh schemas list automatically`]);
+                                    }
+                                    
+                                    // Dispatch event to refresh other components
+                                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                                      window.dispatchEvent(new CustomEvent('refresh-unified-namespace'));
+                                    }
+                                    
+                                    setConsoleOutput(prev => [...prev, `📋 Schema "${payload.schemaName}" is now available in your namespace!`]);
+                                  } else {
+                                    const errorData = await response.json();
+                                    setConsoleOutput(prev => [...prev, `❌ Failed to save schema: ${errorData.error || 'Unknown error'}`]);
+                                  }
+                                } catch (error) {
+                                  console.error('Error saving schema:', error);
+                                  setConsoleOutput(prev => [...prev, `❌ Error saving schema: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+                                } finally {
+                                  setSavingSchema((prev) => ({ ...prev, [schema.id]: false }));
+                                }
+                              }}
+                              disabled={savingSchema[schema.id] || !(schemaNames[schema.id] && schemaNames[schema.id].trim())}
+                              className="px-2 py-1 text-xs rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                            >
+                              {savingSchema[schema.id] ? 'Saving...' : 'Save to Namespace'}
+                            </button>
+                          </>
+                        )}
+                        {schema.saved && (
+                          <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800">Saved</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setShowRawSchema(prev => ({ ...prev, [index]: !prev[index] }))}
+                        className="text-xs text-blue-500 hover:underline"
+                      >
+                        {showRawSchema[index] ? 'Hide Raw' : 'Show Raw'}
+                      </button>
+                    </div>
+                    {showRawSchema[index] ? (
+                      <pre className="text-sm overflow-x-auto">
+                        {(rawSchemas.find(r => r.id === schema.id)?.content) || JSON.stringify(schema.schema, null, 2)}
+                      </pre>
+                    ) : (
+                      <pre className="text-sm overflow-x-auto">
+                        {JSON.stringify(schema.schema, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === 'files' && (
+          <div className="h-full flex">
+            {/* File Tree Panel */}
+            <div className="w-1/3 border-r border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium">Project Files</h3>
                 <div className="flex gap-2">
                   <button
-                    onClick={runProject}
-                    disabled={isRunningProject}
-                    className={`px-3 py-1 text-sm rounded ${
-                      isRunningProject 
-                        ? 'bg-gray-400 cursor-not-allowed' 
-                        : 'bg-green-500 hover:bg-green-600'
-                    } text-white`}
+                    onClick={downloadProjectFiles}
+                    disabled={projectFiles.length === 0 || isDownloading}
+                    className={`px-2 py-1 text-xs rounded ${
+                      projectFiles.length === 0 || isDownloading
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : 'bg-green-500 hover:bg-green-600 text-white'
+                    }`}
+                    title="Download all project files as ZIP"
                   >
-                    {isRunningProject ? 'Deploying...' : 'Run Project'}
+                    {isDownloading ? 'Downloading...' : 'Download ZIP'}
                   </button>
                   <button
-                    onClick={() => setConsoleOutput([])}
-                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                    onClick={refreshFileTree}
+                    className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
                   >
-                    Clear
+                    Refresh
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 bg-gray-900 text-green-400 font-mono text-sm rounded-b-lg">
-                {consoleOutput.length === 0 ? (
-                  <div className="text-gray-500">No console output yet...</div>
+              <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
+                {projectFiles.length === 0 ? (
+                  <div className="text-gray-500 text-sm">No files found...</div>
                 ) : (
-                  consoleOutput.map((output: string, index: number) => (
-                    <div key={index} className="mb-1">
-                      <span className="text-gray-400">$ </span>
-                      {output}
-                    </div>
-                  ))
+                  renderFileTree(projectFiles)
                 )}
               </div>
             </div>
-          )}
+            
+            {/* File Content Panel */}
+            <div className="flex-1 p-4">
+              {selectedFile ? (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-medium">{selectedFile.name}</h3>
+                    <span className="text-sm text-gray-500">{selectedFile.path}</span>
+                  </div>
+                  <div className="flex-1 overflow-auto bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4">
+                    {selectedFile.content || fileContent ? (
+                      <pre className="whitespace-pre-wrap">{selectedFile.content || fileContent}</pre>
+                    ) : (
+                      <div className="text-gray-500">Select a file to view its content...</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  <div className="text-center">
+                    <Folder size={48} className="mx-auto mb-4 text-gray-300" />
+                    <p>Select a file from the tree to view its content</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {activeTab === 'console' && (
+          <div className="h-full flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium">Console Output</h3>
+                {isDeploying && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-green-600">Deploying</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={runProject}
+                  disabled={isRunningProject}
+                  className={`px-3 py-1 text-sm rounded ${
+                    isRunningProject 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-green-500 hover:bg-green-600'
+                  } text-white`}
+                >
+                  {isRunningProject ? 'Deploying...' : 'Run Project'}
+                </button>
+                <button
+                  onClick={() => setConsoleOutput([])}
+                  className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 bg-gray-900 text-green-400 font-mono text-sm rounded-b-lg">
+              {consoleOutput.length === 0 ? (
+                <div className="text-gray-500">No console output yet...</div>
+              ) : (
+                consoleOutput.map((output: string, index: number) => (
+                  <div key={index} className="mb-1">
+                    <span className="text-gray-400">$ </span>
+                    {output}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                message.role === 'user'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-900'
+              }`}
+            >
+              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div className="text-xs opacity-70 mt-1">
+                {message.timestamp.toLocaleTimeString()}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Chat Input */}
+      <div className="border-t border-gray-200 p-4 bg-white">
+        <div className="flex gap-2">
+          <textarea
+            ref={inputRef}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Type your message..."
+            className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            rows={1}
+            disabled={isLoading}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={isLoading || !inputMessage.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>

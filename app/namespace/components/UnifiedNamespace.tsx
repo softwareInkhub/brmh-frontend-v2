@@ -976,8 +976,8 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                         <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
                       ) : (
                         <div className="space-y-2">
-                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map(method => (
-                            <div key={method["namespace-method-id"]} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
+                    {namespaceDetailsMap[expandedNamespaceId]?.methods?.map((method, index) => (
+                            <div key={method["namespace-method-id"] || `method-${expandedNamespaceId}-${index}`} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
                               <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
                               {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
