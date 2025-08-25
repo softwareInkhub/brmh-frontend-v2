@@ -18,24 +18,40 @@ import {
   Share2,
   Palette,
   Layers,
-  Grid
+  Grid,
+  Layout,
+  Lock,
+  Hand,
+  Diamond,
+  ArrowRight,
+  Minus,
+  Pencil,
+  Eraser,
+  Shapes
 } from 'lucide-react'
 
 interface WireframeElement {
   id: string
-  type: 'rectangle' | 'circle' | 'text' | 'image' | 'button' | 'input'
+  type: 'rectangle' | 'circle' | 'text' | 'image' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser'
   x: number
   y: number
   width: number
   height: number
+  rotation?: number
   content?: string
+  sx?: number
+  sy?: number
+  ex?: number
+  ey?: number
   style: {
     backgroundColor: string
     borderColor: string
     borderWidth: number
+    borderStyle?: 'solid' | 'dashed' | 'dotted'
     borderRadius: number
     fontSize: number
     color: string
+    opacity?: number
   }
 }
 
@@ -59,32 +75,393 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   const [wireframeName, setWireframeName] = useState(wireframe?.name || '')
   const [elements, setElements] = useState<WireframeElement[]>(wireframe?.elements || [])
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input'>('select')
+  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser'>('select')
   const [canvas, setCanvas] = useState({
     width: wireframe?.canvas?.width || 800,
     height: wireframe?.canvas?.height || 600,
     backgroundColor: wireframe?.canvas?.backgroundColor || '#ffffff'
   })
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
+  const [drawEnd, setDrawEnd] = useState({ x: 0, y: 0 })
+  const [tempElement, setTempElement] = useState<WireframeElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragElement, setDragElement] = useState<string | null>(null)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [isResizing, setIsResizing] = useState(false)
+  const [resizeElement, setResizeElement] = useState<string | null>(null)
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null)
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  const [isRotating, setIsRotating] = useState(false)
+  const [rotateElementId, setRotateElementId] = useState<string | null>(null)
+  const [rotateData, setRotateData] = useState({ cx: 0, cy: 0, startAngle: 0, initialRotation: 0 })
 
-  const addElement = (type: WireframeElement['type'], x: number, y: number) => {
+  const addElement = (type: WireframeElement['type'], x: number, y: number, width?: number, height?: number) => {
     const newElement: WireframeElement = {
       id: `element-${Date.now()}`,
       type,
       x,
       y,
-      width: type === 'text' ? 100 : type === 'input' ? 200 : 80,
-      height: type === 'text' ? 30 : type === 'input' ? 40 : 80,
-      content: type === 'text' ? 'Text' : type === 'button' ? 'Button' : type === 'input' ? 'Input' : '',
+      width: width || (type === 'text' ? 100 : type === 'input' ? 200 : type === 'line' ? 100 : type === 'arrow' ? 80 : 80),
+      height: height || (type === 'text' ? 30 : type === 'input' ? 40 : type === 'line' ? 2 : type === 'arrow' ? 2 : 80),
+      content: type === 'text' ? 'Text' : type === 'button' ? 'Button' : type === 'input' ? 'Input' : type === 'arrow' ? '→' : '',
       style: {
-        backgroundColor: type === 'button' ? '#3B82F6' : type === 'input' ? '#F9FAFB' : '#E5E7EB',
-        borderColor: '#D1D5DB',
-        borderWidth: 1,
-        borderRadius: type === 'circle' ? 50 : type === 'button' ? 6 : 0,
+        backgroundColor: type === 'button' ? '#3B82F6' : type === 'input' ? '#F9FAFB' : type === 'line' || type === 'arrow' ? 'transparent' : '#E5E7EB',
+        borderColor: type === 'line' || type === 'arrow' ? '#374151' : '#D1D5DB',
+        borderWidth: type === 'line' || type === 'arrow' ? 2 : 1,
+        borderStyle: 'solid',
+        borderRadius: type === 'circle' ? 50 : type === 'diamond' ? 0 : type === 'button' ? 6 : 0,
         fontSize: 14,
-        color: type === 'button' ? '#FFFFFF' : '#374151'
+        color: type === 'button' ? '#FFFFFF' : '#374151',
+        opacity: 1
       }
     }
     setElements([...elements, newElement])
+  }
+
+  const renderArrow = (element: WireframeElement) => {
+    const { width, height } = element
+    const sx = element.sx ?? 0
+    const sy = element.sy ?? height / 2
+    const ex = element.ex ?? width
+    const ey = element.ey ?? height / 2
+    const stroke = element.style.borderColor || '#374151'
+    const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+
+    return (
+      <svg
+        style={{
+          width: width,
+          height: height,
+          pointerEvents: 'none'
+        }}
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <defs>
+          <marker 
+            id={`arrowhead-${element.id}`} 
+            markerWidth={strokeWidth * 4} 
+            markerHeight={strokeWidth * 3.5} 
+            refX={strokeWidth * 4} 
+            refY={(strokeWidth * 3.5) / 2} 
+            orient="auto" 
+            markerUnits="strokeWidth"
+          >
+            <polygon 
+              points={`0 0, ${strokeWidth * 4} ${(strokeWidth * 3.5) / 2}, 0 ${strokeWidth * 3.5}`} 
+              fill={stroke} 
+            />
+          </marker>
+        </defs>
+        <line 
+          x1={sx} 
+          y1={sy} 
+          x2={ex} 
+          y2={ey} 
+          stroke={stroke} 
+          strokeWidth={strokeWidth} 
+          strokeLinecap="round" 
+          markerEnd={`url(#arrowhead-${element.id})`}
+        />
+      </svg>
+    )
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    // Check if clicking on resize or rotate handle
+    if (selectedElement && selectedTool === 'select') {
+      const element = elements.find(el => el.id === selectedElement)
+      if (element) {
+        const handleSize = 8
+        const handles = {
+          'nw': { x: element.x - handleSize/2, y: element.y - handleSize/2 },
+          'n': { x: element.x + element.width/2 - handleSize/2, y: element.y - handleSize/2 },
+          'ne': { x: element.x + element.width - handleSize/2, y: element.y - handleSize/2 },
+          'w': { x: element.x - handleSize/2, y: element.y + element.height/2 - handleSize/2 },
+          'e': { x: element.x + element.width - handleSize/2, y: element.y + element.height/2 - handleSize/2 },
+          'sw': { x: element.x - handleSize/2, y: element.y + element.height - handleSize/2 },
+          's': { x: element.x + element.width/2 - handleSize/2, y: element.y + element.height - handleSize/2 },
+          'se': { x: element.x + element.width - handleSize/2, y: element.y + element.height - handleSize/2 }
+        }
+        
+        for (const [handle, pos] of Object.entries(handles)) {
+          if (x >= pos.x && x <= pos.x + handleSize && y >= pos.y && y <= pos.y + handleSize) {
+            setIsResizing(true)
+            setResizeElement(selectedElement)
+            setResizeHandle(handle)
+            setResizeStart({ x: element.x, y: element.y, width: element.width, height: element.height })
+            return
+          }
+        }
+
+        // Rotate handle hit test (top-left, offset 16px outside)
+        const rotateSize = 16
+        const rx = element.x - rotateSize
+        const ry = element.y - rotateSize
+        if (x >= rx && x <= rx + rotateSize && y >= ry && y <= ry + rotateSize) {
+          const cx = element.x + element.width / 2
+          const cy = element.y + element.height / 2
+          const startAngle = Math.atan2(y - cy, x - cx)
+          setIsRotating(true)
+          setRotateElementId(selectedElement)
+          setRotateData({ cx, cy, startAngle, initialRotation: element.rotation || 0 })
+          return
+        }
+      }
+    }
+    
+    // Check if clicking on an existing element
+    const clickedElement = elements.find(element => {
+      return x >= element.x && x <= element.x + element.width &&
+             y >= element.y && y <= element.y + element.height
+    })
+    
+    if (clickedElement && selectedTool === 'select') {
+      // Start dragging existing element
+      setIsDragging(true)
+      setDragElement(clickedElement.id)
+      setSelectedElement(clickedElement.id)
+      setDragOffset({
+        x: x - clickedElement.x,
+        y: y - clickedElement.y
+      })
+      return
+    }
+    
+    // Deselect if clicking outside any element
+    if (selectedTool === 'select' && !clickedElement) {
+      setSelectedElement(null)
+      return
+    }
+    
+    if (selectedTool === 'select') return
+    
+    setIsDrawing(true)
+    setDrawStart({ x, y })
+    setDrawEnd({ x, y })
+    
+    // Create temporary element for preview
+    const tempEl = {
+      id: 'temp',
+      type: selectedTool,
+      x,
+      y,
+      width: 0,
+      height: 0,
+      sx: 0,
+      sy: 0,
+      ex: 0,
+      ey: 0,
+      content: selectedTool === 'text' ? 'Text' : selectedTool === 'button' ? 'Button' : selectedTool === 'input' ? 'Input' : selectedTool === 'arrow' ? '→' : '',
+      style: {
+        backgroundColor: selectedTool === 'button' ? '#3B82F6' : selectedTool === 'input' ? '#F9FAFB' : selectedTool === 'line' || selectedTool === 'arrow' ? 'transparent' : '#E5E7EB',
+        borderColor: selectedTool === 'line' || selectedTool === 'arrow' ? '#374151' : '#D1D5DB',
+        borderWidth: selectedTool === 'line' || selectedTool === 'arrow' ? 2 : 1,
+        borderRadius: selectedTool === 'circle' ? 50 : selectedTool === 'diamond' ? 0 : selectedTool === 'button' ? 6 : 0,
+        fontSize: 14,
+        color: selectedTool === 'button' ? '#FFFFFF' : '#374151'
+      }
+    }
+    setTempElement(tempEl)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    // Handle rotating
+    if (isRotating && rotateElementId) {
+      const el = elements.find(el => el.id === rotateElementId)
+      if (el) {
+        const angle = Math.atan2(y - rotateData.cy, x - rotateData.cx)
+        const degrees = (angle - rotateData.startAngle) * (180 / Math.PI) + rotateData.initialRotation
+        updateElement(rotateElementId, { rotation: degrees })
+      }
+      return
+    }
+
+    // Handle resizing
+    if (isResizing && resizeElement && resizeHandle) {
+      const element = elements.find(el => el.id === resizeElement)
+      if (element) {
+        const deltaX = x - resizeStart.x
+        const deltaY = y - resizeStart.y
+        
+        let newX = resizeStart.x
+        let newY = resizeStart.y
+        let newWidth = resizeStart.width
+        let newHeight = resizeStart.height
+        
+        switch (resizeHandle) {
+          case 'nw':
+            newX = resizeStart.x + deltaX
+            newY = resizeStart.y + deltaY
+            newWidth = resizeStart.width - deltaX
+            newHeight = resizeStart.height - deltaY
+            break
+          case 'n':
+            newY = resizeStart.y + deltaY
+            newHeight = resizeStart.height - deltaY
+            break
+          case 'ne':
+            newY = resizeStart.y + deltaY
+            newWidth = resizeStart.width + deltaX
+            newHeight = resizeStart.height - deltaY
+            break
+          case 'w':
+            newX = resizeStart.x + deltaX
+            newWidth = resizeStart.width - deltaX
+            break
+          case 'e':
+            newWidth = resizeStart.width + deltaX
+            break
+          case 'sw':
+            newX = resizeStart.x + deltaX
+            newWidth = resizeStart.width - deltaX
+            newHeight = resizeStart.height + deltaY
+            break
+          case 's':
+            newHeight = resizeStart.height + deltaY
+            break
+          case 'se':
+            newWidth = resizeStart.width + deltaX
+            newHeight = resizeStart.height + deltaY
+            break
+        }
+        
+        // Ensure minimum size
+        newWidth = Math.max(newWidth, 10)
+        newHeight = Math.max(newHeight, 10)
+        newX = Math.max(newX, 0)
+        newY = Math.max(newY, 0)
+        
+        updateElement(resizeElement, {
+          x: newX,
+          y: newY,
+          width: newWidth,
+          height: newHeight
+        })
+      }
+      return
+    }
+    
+    // Handle dragging existing elements
+    if (isDragging && dragElement) {
+      const element = elements.find(el => el.id === dragElement)
+      if (element) {
+        const newX = x - dragOffset.x
+        const newY = y - dragOffset.y
+        
+        updateElement(dragElement, {
+          x: Math.max(0, newX),
+          y: Math.max(0, newY)
+        })
+      }
+      return
+    }
+    
+    if (!isDrawing || selectedTool === 'select') return
+    
+    setDrawEnd({ x, y })
+    
+    if (tempElement) {
+      const startX = drawStart.x
+      const startY = drawStart.y
+      const endX = x
+      const endY = y
+      
+      let left = Math.min(startX, endX)
+      let top = Math.min(startY, endY)
+      const width = Math.max(Math.abs(endX - startX), 2)
+      let height = Math.max(Math.abs(endY - startY), 2)
+      
+      // compute relative positions inside the element box
+      let sx = startX - left
+      let sy = startY - top
+      let ex = endX - left
+      let ey = endY - top
+
+      // Ensure arrows have some visual height and center the line
+      if (tempElement.type === 'arrow') {
+        const minH = Math.max(24, (tempElement.style.borderWidth || 2) * 4)
+        if (height < minH) {
+          const pad = (minH - height) / 2
+          top = top - pad
+          height = minH
+          sy += pad
+          ey += pad
+        }
+      }
+
+      setTempElement({
+        ...tempElement,
+        x: left,
+        y: top,
+        width,
+        height,
+        sx,
+        sy,
+        ex,
+        ey
+      })
+    }
+  }
+
+  const handleMouseUp = () => {
+    // Handle rotating end
+    if (isRotating) {
+      setIsRotating(false)
+      setRotateElementId(null)
+      return
+    }
+
+    // Handle resizing end
+    if (isResizing) {
+      setIsResizing(false)
+      setResizeElement(null)
+      setResizeHandle(null)
+      return
+    }
+    
+    // Handle dragging end
+    if (isDragging) {
+      setIsDragging(false)
+      setDragElement(null)
+      return
+    }
+    
+    if (!isDrawing || selectedTool === 'select') return
+    
+    setIsDrawing(false)
+    
+    if (tempElement) {
+      // Add the final element with preserved start/end points
+      const { type, x, y, width, height, sx, sy, ex, ey } = tempElement
+      const newElement: WireframeElement = {
+        id: `element-${Date.now()}`,
+        type,
+        x,
+        y,
+        width,
+        height,
+        sx,
+        sy,
+        ex,
+        ey,
+        content: tempElement.content,
+        style: tempElement.style
+      }
+      setElements([...elements, newElement])
+      setTempElement(null)
+    }
+    
+    // Reset to select tool after drawing
+    setSelectedTool('select')
   }
 
   const removeElement = (elementId: string) => {
@@ -173,251 +550,568 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Toolbar */}
-          <div className="w-64 bg-gray-50 border-r border-gray-200 p-4">
-            <h3 className="font-medium text-gray-900 mb-4">Tools</h3>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Horizontal Toolbar */}
+          <div className="h-16 bg-white border-b border-gray-200 flex items-center px-4 space-x-2">
+            {/* Lock Tool */}
+            <button className="p-2 rounded hover:bg-gray-100 transition-colors" title="Lock">
+              <Lock className="w-5 h-5 text-gray-600" />
+            </button>
             
-            {/* Tool Selection */}
-            <div className="space-y-2 mb-6">
-              {[
-                { id: 'select', label: 'Select', icon: Move },
-                { id: 'rectangle', label: 'Rectangle', icon: Square },
-                { id: 'circle', label: 'Circle', icon: Circle },
-                { id: 'text', label: 'Text', icon: Type },
-                { id: 'button', label: 'Button', icon: Square },
-                { id: 'input', label: 'Input', icon: Square }
-              ].map((tool) => (
-                <button
-                  key={tool.id}
-                  onClick={() => setSelectedTool(tool.id as any)}
-                  className={`w-full flex items-center space-x-2 p-2 rounded-lg transition-colors ${
-                    selectedTool === tool.id
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'hover:bg-gray-100'
-                  }`}
-                >
-                  <tool.icon className="w-4 h-4" />
-                  <span className="text-sm">{tool.label}</span>
-                </button>
-              ))}
-            </div>
-
+            {/* Hand Tool */}
+            <button className="p-2 rounded hover:bg-gray-100 transition-colors" title="Hand Tool">
+              <Hand className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            {/* Select Tool */}
+            <button 
+              onClick={() => setSelectedTool('select')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'select' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Select (1)"
+            >
+              <Move className="w-5 h-5" />
+            </button>
+            
+            {/* Rectangle Tool */}
+            <button 
+              onClick={() => setSelectedTool('rectangle')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'rectangle' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Rectangle (2)"
+            >
+              <Square className="w-5 h-5" />
+            </button>
+            
+            {/* Diamond Tool */}
+            <button 
+              onClick={() => setSelectedTool('diamond')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'diamond' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Diamond (3)"
+            >
+              <Diamond className="w-5 h-5" />
+            </button>
+            
+            {/* Circle Tool */}
+            <button 
+              onClick={() => setSelectedTool('circle')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'circle' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Circle (4)"
+            >
+              <Circle className="w-5 h-5" />
+            </button>
+            
+            {/* Arrow Tool */}
+            <button 
+              onClick={() => setSelectedTool('arrow')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'arrow' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Arrow (5)"
+            >
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            
+            {/* Line Tool */}
+            <button 
+              onClick={() => setSelectedTool('line')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'line' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Line (6)"
+            >
+              <Minus className="w-5 h-5" />
+            </button>
+            
+            {/* Pencil Tool */}
+            <button 
+              onClick={() => setSelectedTool('pencil')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'pencil' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Pencil"
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+            
+            {/* Text Tool */}
+            <button 
+              onClick={() => setSelectedTool('text')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'text' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Text"
+            >
+              <Type className="w-5 h-5" />
+            </button>
+            
+            {/* Image Tool */}
+            <button 
+              onClick={() => setSelectedTool('image')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'image' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Image"
+            >
+              <Image className="w-5 h-5" />
+            </button>
+            
+            {/* Eraser Tool */}
+            <button 
+              onClick={() => setSelectedTool('eraser')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'eraser' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Eraser"
+            >
+              <Eraser className="w-5 h-5" />
+            </button>
+            
+            {/* More Shapes */}
+            <button className="p-2 rounded hover:bg-gray-100 transition-colors" title="More Shapes">
+              <Shapes className="w-5 h-5 text-gray-600" />
+            </button>
+            
+            {/* Separator */}
+            <div className="w-px h-8 bg-gray-300 mx-2"></div>
+            
             {/* Canvas Settings */}
-            <div className="space-y-4 mb-6">
-              <h4 className="text-sm font-medium text-gray-700">Canvas</h4>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Width</label>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600">W:</label>
                 <input
                   type="number"
                   value={canvas.width}
                   onChange={(e) => setCanvas({ ...canvas, width: parseInt(e.target.value) })}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
                 />
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Height</label>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600">H:</label>
                 <input
                   type="number"
                   value={canvas.height}
                   onChange={(e) => setCanvas({ ...canvas, height: parseInt(e.target.value) })}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded"
                 />
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Background</label>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600">BG:</label>
                 <input
                   type="color"
                   value={canvas.backgroundColor}
                   onChange={(e) => setCanvas({ ...canvas, backgroundColor: e.target.value })}
-                  className="w-full h-8 border border-gray-300 rounded"
+                  className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Canvas and Properties Container */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* Canvas */}
+            <div className="flex-1 relative bg-gray-100 overflow-auto">
+              <div 
+                id="wireframe-canvas-layer"
+                className="relative w-full h-full"
+                style={{ 
+                  backgroundColor: canvas.backgroundColor 
+                }}
+              >
+                {/* Grid Overlay */}
+                <div className="absolute inset-0 opacity-10">
+                  <svg width="100%" height="100%">
+                    <defs>
+                      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="gray" strokeWidth="1"/>
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                  </svg>
+                </div>
+
+                {/* Elements */}
+                {elements.map((element) => (
+                  <div key={element.id}>
+                    {element.type === 'arrow' ? (
+                      <div
+                        className={`absolute cursor-pointer ${
+                          selectedElement === element.id ? 'ring-2 ring-primary-500' : ''
+                        } ${isDragging && dragElement === element.id ? 'z-10' : ''}`}
+                        style={{
+                          left: element.x,
+                          top: element.y,
+                          width: element.width,
+                          height: element.height,
+                          transform: `rotate(${element.rotation || 0}deg)`,
+                          transformOrigin: 'center',
+                          pointerEvents: 'auto'
+                        }}
+                        onClick={() => setSelectedElement(element.id)}
+                      >
+                        {renderArrow(element)}
+                        {selectedElement === element.id && (
+                          <>
+                            <button
+                              onClick={() => removeElement(element.id)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 z-20"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            {/* Rotate Handle (top-left) */}
+                            <div
+                              className="absolute -top-4 -left-4 w-4 h-4 bg-purple-500 border-2 border-white rounded-full cursor-grab z-20"
+                              onMouseDown={(ev) => {
+                                ev.stopPropagation()
+                                const cx = element.x + element.width / 2
+                                const cy = element.y + element.height / 2
+                                const doc = (ev.currentTarget as HTMLDivElement).ownerDocument
+                                const canvasEl = doc.getElementById('wireframe-canvas-layer') as HTMLDivElement | null
+                                const rect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 } as DOMRect
+                                const mx = ev.clientX - rect.left
+                                const my = ev.clientY - rect.top
+                                const startAngle = Math.atan2(my - cy, mx - cx)
+                                setIsRotating(true)
+                                setRotateElementId(element.id)
+                                setRotateData({ cx, cy, startAngle, initialRotation: element.rotation || 0 })
+                              }}
+                            />
+                            {/* Resize Handles */}
+                            <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-nw-resize" />
+                            <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-n-resize" />
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-ne-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-w-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-e-resize" />
+                            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-sw-resize" />
+                            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-s-resize" />
+                            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-se-resize" />
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className={`absolute cursor-pointer ${
+                          selectedElement === element.id ? 'ring-2 ring-primary-500' : ''
+                        } ${isDragging && dragElement === element.id ? 'z-10' : ''}`}
+                        style={{
+                          left: element.x,
+                          top: element.y,
+                          width: element.width,
+                          height: element.height,
+                          transform: `rotate(${element.rotation || 0}deg)`,
+                          transformOrigin: 'center',
+                          backgroundColor: element.style.backgroundColor,
+                          border: `${element.style.borderWidth}px ${element.style.borderStyle || 'solid'} ${element.style.borderColor}`,
+                          borderRadius: element.style.borderRadius,
+                          fontSize: element.style.fontSize,
+                          color: element.style.color,
+                          opacity: element.style.opacity ?? 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onClick={() => setSelectedElement(element.id)}
+                      >
+                        {element.content}
+                        {selectedElement === element.id && (
+                          <>
+                            <button
+                              onClick={() => removeElement(element.id)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 z-20"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            {/* Rotate Handle (top-left) */}
+                            <div
+                              className="absolute -top-4 -left-4 w-4 h-4 bg-purple-500 border-2 border-white rounded-full cursor-grab z-20"
+                              onMouseDown={(ev) => {
+                                ev.stopPropagation()
+                                const cx = element.x + element.width / 2
+                                const cy = element.y + element.height / 2
+                                const doc = (ev.currentTarget as HTMLDivElement).ownerDocument
+                                const canvasEl = doc.getElementById('wireframe-canvas-layer') as HTMLDivElement | null
+                                const rect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 } as DOMRect
+                                const mx = ev.clientX - rect.left
+                                const my = ev.clientY - rect.top
+                                const startAngle = Math.atan2(my - cy, mx - cx)
+                                setIsRotating(true)
+                                setRotateElementId(element.id)
+                                setRotateData({ cx, cy, startAngle, initialRotation: element.rotation || 0 })
+                              }}
+                            />
+                            {/* Resize Handles */}
+                            <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-nw-resize" />
+                            <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-n-resize" />
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-ne-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-w-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-e-resize" />
+                            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-sw-resize" />
+                            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-s-resize" />
+                            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-se-resize" />
+                          </>
+                        )}
+                      </motion.div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Temporary Element (Drawing Preview) */}
+                {tempElement && (
+                  <div
+                    className="absolute border-2 border-dashed border-blue-500 bg-blue-50 bg-opacity-30"
+                    style={{
+                      left: tempElement.x,
+                      top: tempElement.y,
+                      width: tempElement.width,
+                      height: tempElement.height,
+                      backgroundColor: tempElement.style.backgroundColor,
+                      border: `${tempElement.style.borderWidth}px solid ${tempElement.style.borderColor}`,
+                      borderRadius: tempElement.style.borderRadius,
+                      fontSize: tempElement.style.fontSize,
+                      color: tempElement.style.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none'
+                    }}
+                  >
+                    {tempElement.type === 'arrow' ? (
+                      <svg
+                        style={{
+                          width: tempElement.width,
+                          height: tempElement.height,
+                          pointerEvents: 'none'
+                        }}
+                        viewBox={`0 0 ${tempElement.width} ${tempElement.height}`}
+                      >
+                        {/* Arrow line */}
+                        <line
+                          x1={tempElement.sx}
+                          y1={tempElement.sy}
+                          x2={tempElement.ex}
+                          y2={tempElement.ey}
+                          stroke={tempElement.style.borderColor || '#3B82F6'}
+                          strokeWidth={Math.max(1, tempElement.style.borderWidth || 2)}
+                          strokeLinecap="round"
+                          strokeDasharray="5,5"
+                        />
+                        {/* Arrowhead */}
+                        <polygon
+                          points={`${tempElement.ex - 10},${tempElement.ey - 5} ${tempElement.ex},${tempElement.ey} ${tempElement.ex - 10},${tempElement.ey + 5}`}
+                          fill={tempElement.style.borderColor || '#3B82F6'}
+                          opacity="0.7"
+                        />
+                      </svg>
+                    ) : (
+                      tempElement.content
+                    )}
+                  </div>
+                )}
+
+                {/* Canvas Mouse Event Handlers */}
+                <div 
+                  className={`absolute inset-0 ${selectedTool !== 'select' ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-default'}`}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
                 />
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium text-gray-700">Quick Actions</h4>
-              <button className="w-full flex items-center space-x-2 p-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                <Grid className="w-4 h-4" />
-                <span>Show Grid</span>
-              </button>
-              <button className="w-full flex items-center space-x-2 p-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                <Layers className="w-4 h-4" />
-                <span>Layer Panel</span>
-              </button>
-            </div>
-          </div>
+            {/* Properties Panel */}
+            {selectedElement && (
+              <div className="w-64 bg-gray-50 border-l border-gray-200 p-4">
+                <h3 className="font-medium text-gray-900 mb-4">Properties</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Content
+                    </label>
+                    <input
+                      type="text"
+                      value={elements.find(e => e.id === selectedElement)?.content || ''}
+                      onChange={(e) => updateElement(selectedElement, { content: e.target.value })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">X</label>
+                      <input
+                        type="number"
+                        value={elements.find(e => e.id === selectedElement)?.x || 0}
+                        onChange={(e) => updateElement(selectedElement, { x: parseInt(e.target.value) })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Y</label>
+                      <input
+                        type="number"
+                        value={elements.find(e => e.id === selectedElement)?.y || 0}
+                        onChange={(e) => updateElement(selectedElement, { y: parseInt(e.target.value) })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </div>
+                  </div>
 
-          {/* Canvas */}
-          <div className="flex-1 relative bg-gray-100 overflow-auto flex items-center justify-center">
-            <div 
-              className="relative shadow-lg"
-              style={{ 
-                width: canvas.width, 
-                height: canvas.height, 
-                backgroundColor: canvas.backgroundColor 
-              }}
-            >
-              {/* Grid Overlay */}
-              <div className="absolute inset-0 opacity-10">
-                <svg width="100%" height="100%">
-                  <defs>
-                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="gray" strokeWidth="1"/>
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#grid)" />
-                </svg>
-              </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Width</label>
+                      <input
+                        type="number"
+                        value={elements.find(e => e.id === selectedElement)?.width || 0}
+                        onChange={(e) => updateElement(selectedElement, { width: parseInt(e.target.value) })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Height</label>
+                      <input
+                        type="number"
+                        value={elements.find(e => e.id === selectedElement)?.height || 0}
+                        onChange={(e) => updateElement(selectedElement, { height: parseInt(e.target.value) })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </div>
+                  </div>
 
-              {/* Elements */}
-              {elements.map((element) => (
-                <motion.div
-                  key={element.id}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className={`absolute cursor-pointer ${
-                    selectedElement === element.id ? 'ring-2 ring-primary-500' : ''
-                  }`}
-                  style={{
-                    left: element.x,
-                    top: element.y,
-                    width: element.width,
-                    height: element.height,
-                    backgroundColor: element.style.backgroundColor,
-                    border: `${element.style.borderWidth}px solid ${element.style.borderColor}`,
-                    borderRadius: element.style.borderRadius,
-                    fontSize: element.style.fontSize,
-                    color: element.style.color,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  onClick={() => setSelectedElement(element.id)}
-                >
-                  {element.content}
-                  {selectedElement === element.id && (
-                    <button
-                      onClick={() => removeElement(element.id)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
+                    <input
+                      type="color"
+                      value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
+                      onChange={(e) => updateElement(selectedElement, { 
+                        style: { 
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          backgroundColor: e.target.value 
+                        }
+                      })}
+                      className="w-full h-8 border border-gray-300 rounded"
+                    />
+                  </div>
+
+                  {/* Stroke Color */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Color</label>
+                    <input
+                      type="color"
+                      value={elements.find(e => e.id === selectedElement)?.style.borderColor || '#374151'}
+                      onChange={(e) => updateElement(selectedElement, {
+                        style: {
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          borderColor: e.target.value
+                        }
+                      })}
+                      className="w-full h-8 border border-gray-300 rounded"
+                    />
+                  </div>
+
+                  {/* Stroke Width */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Width</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="16"
+                      value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 1}
+                      onChange={(e) => updateElement(selectedElement, {
+                        style: {
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          borderWidth: parseInt(e.target.value)
+                        }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Stroke Style */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Style</label>
+                    <select
+                      value={elements.find(e => e.id === selectedElement)?.style.borderStyle || 'solid'}
+                      onChange={(e) => updateElement(selectedElement, {
+                        style: {
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          borderStyle: e.target.value as 'solid' | 'dashed' | 'dotted'
+                        }
+                      })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </motion.div>
-              ))}
-
-              {/* Add Element Button */}
-              {selectedTool !== 'select' && (
-                <div className="absolute bottom-4 right-4">
-                  <div className="bg-white rounded-lg shadow-lg p-2">
-                    <p className="text-xs text-gray-600 mb-2">Click canvas to add {selectedTool}</p>
-                    <button
-                      onClick={() => addElement(selectedTool, 100, 100)}
-                      className="w-full p-2 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200"
-                    >
-                      Add {selectedTool}
-                    </button>
+                      <option value="solid">Solid</option>
+                      <option value="dashed">Dashed</option>
+                      <option value="dotted">Dotted</option>
+                    </select>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Properties Panel */}
-          {selectedElement && (
-            <div className="w-64 bg-gray-50 border-l border-gray-200 p-4">
-              <h3 className="font-medium text-gray-900 mb-4">Properties</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content
-                  </label>
-                  <input
-                    type="text"
-                    value={elements.find(e => e.id === selectedElement)?.content || ''}
-                    onChange={(e) => updateElement(selectedElement, { content: e.target.value })}
-                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
+                  {/* Opacity */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">X</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Opacity</label>
                     <input
-                      type="number"
-                      value={elements.find(e => e.id === selectedElement)?.x || 0}
-                      onChange={(e) => updateElement(selectedElement, { x: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round(((elements.find(e => e.id === selectedElement)?.style.opacity ?? 1) * 100))}
+                      onChange={(e) => updateElement(selectedElement, {
+                        style: {
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          opacity: parseInt(e.target.value) / 100
+                        }
+                      })}
+                      className="w-full"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Y</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Border Radius</label>
                     <input
-                      type="number"
-                      value={elements.find(e => e.id === selectedElement)?.y || 0}
-                      onChange={(e) => updateElement(selectedElement, { y: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      type="range"
+                      min="0"
+                      max="50"
+                      value={elements.find(e => e.id === selectedElement)?.style.borderRadius || 0}
+                      onChange={(e) => updateElement(selectedElement, { 
+                        style: { 
+                          ...elements.find(el => el.id === selectedElement)?.style!,
+                          borderRadius: parseInt(e.target.value)
+                        }
+                      })}
+                      className="w-full"
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Width</label>
-                    <input
-                      type="number"
-                      value={elements.find(e => e.id === selectedElement)?.width || 0}
-                      onChange={(e) => updateElement(selectedElement, { width: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Height</label>
-                    <input
-                      type="number"
-                      value={elements.find(e => e.id === selectedElement)?.height || 0}
-                      onChange={(e) => updateElement(selectedElement, { height: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
-                  <input
-                    type="color"
-                    value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
-                    onChange={(e) => updateElement(selectedElement, { 
-                      style: { 
-                        ...elements.find(el => el.id === selectedElement)?.style!,
-                        backgroundColor: e.target.value 
-                      }
-                    })}
-                    className="w-full h-8 border border-gray-300 rounded"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Border Radius</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="50"
-                    value={elements.find(e => e.id === selectedElement)?.style.borderRadius || 0}
-                    onChange={(e) => updateElement(selectedElement, { 
-                      style: { 
-                        ...elements.find(el => el.id === selectedElement)?.style!,
-                        borderRadius: parseInt(e.target.value)
-                      }
-                    })}
-                    className="w-full"
-                  />
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
     </div>
   )
