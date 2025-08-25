@@ -59,7 +59,9 @@ const Sidebar: React.FC = () => {
     <aside className="fixed top-0 left-0 z-40 h-screen w-20 bg-[#f7f8fa] border-r border-gray-200 flex flex-col items-center py-4">
       {/* Logo */}
       <div className="mb-6 flex flex-col items-center">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-300 flex items-center justify-center mb-1">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-300 flex items-center justify-center mb-1 hover:scale-105 transition-all duration-300 cursor-pointer" onClick={() => {
+          window.location.href = '/landingPage';
+        }}>
           {/* Replace with your logo if needed */}
           <span className="text-white font-bold text-2xl">B</span>
         </div>
