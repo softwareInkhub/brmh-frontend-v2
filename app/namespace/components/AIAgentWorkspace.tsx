@@ -39,7 +39,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     console.log('Namespace changed:', namespace);
   }, [namespace]);
   // 1. Change activeTab state to use 'lambda' instead of 'api'
-  const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'lambda' | 'schema' | 'api' | 'files'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'console' | 'lambda' | 'schema' | 'api' | 'files' | 'deployment'>('chat');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -106,6 +106,13 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     environment: '',
     description: '',
   });
+  // Add state for deployed API Gateway URLs
+  const [deployedEndpoints, setDeployedEndpoints] = useState<Array<{
+    functionName: string;
+    apiGatewayUrl: string;
+    functionArn: string;
+    deployedAt: Date;
+  }>>([]);
   const [isCreatingLambda, setIsCreatingLambda] = useState(false);
   const [lambdaError, setLambdaError] = useState('');
   // Add state for live schema preview and streaming
@@ -353,8 +360,16 @@ What would you like to work on today?`,
     const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format', 'api', 'endpoint'];
     const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
     
+    // Check if this might be a Lambda-related request
+    const lambdaKeywords = ['lambda', 'function', 'handler', 'aws lambda', 'serverless'];
+    const isLambdaRequest = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+    
     if (isSchemaRequest) {
       setConsoleOutput(prev => [...prev, `🔍 Detected potential schema request`]);
+      setActiveTab('schema');
+    } else if (isLambdaRequest) {
+      setConsoleOutput(prev => [...prev, `🔍 Detected potential Lambda request`]);
+      setActiveTab('lambda');
     }
 
     try {
@@ -377,6 +392,158 @@ What would you like to work on today?`,
     let actions: any[] = [];
     let lastAssistantMessageId: string | null = null;
 
+    // Check if this is a Lambda generation request
+    const lowerMessage = userMessage.toLowerCase();
+    const lambdaKeywords = ['lambda', 'function', 'handler', 'aws lambda', 'serverless'];
+    const isLambdaRequest = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    // If this is a Lambda request and we're in the Lambda tab, handle Lambda generation
+    if (isLambdaRequest && activeTab === 'lambda') {
+      console.log('[Frontend] Detected Lambda generation request');
+      setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation from chat request`]);
+      
+      // Check if we have a selected schema
+      if (!selectedSchema) {
+        addMessage({
+          role: 'assistant',
+          content: `I'll help you generate a Lambda function! First, please select a schema from the Deployment tab, or ask me to generate a new schema for you.`
+        });
+        return;
+      }
+      
+      try {
+        setGeneratedLambdaCode('');
+        setConsoleOutput(prev => [...prev, `📝 Processing Lambda request: ${userMessage}`]);
+        setConsoleOutput(prev => [...prev, `📋 Using schema: ${selectedSchema.schemaName || selectedSchema.name || 'Selected Schema'}`]);
+        
+        const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: userMessage,
+            selectedSchema,
+            functionName: lambdaForm.functionName || 'handler',
+            runtime: lambdaForm.runtime || 'nodejs18.x',
+            handler: lambdaForm.handler || 'index.handler',
+            memory: lambdaForm.memory || 128,
+            timeout: lambdaForm.timeout || 3,
+            environment: lambdaForm.environment || ''
+          })
+        });
+
+        if (response.ok) {
+          setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting Lambda generation...`]);
+          const reader = response.body?.getReader();
+          if (reader) {
+            let generatedCode = '';
+            let chatMessage = '';
+            let chunkCount = 0;
+            let isCodeSection = false;
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = new TextDecoder().decode(value);
+              const lines = chunk.split('\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6);
+                  if (data === '[DONE]') {
+                    // Generation complete
+                    setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
+                    setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
+                    setConsoleOutput(prev => [...prev, `📏 Code length: ${generatedCode.length} characters`]);
+                    
+                    if (generatedCode.trim()) {
+                      setConsoleOutput(prev => [...prev, `📁 Creating file structure...`]);
+                      generateLambdaFileStructure(generatedCode, lambdaForm.functionName || 'handler', lambdaForm.runtime || 'nodejs18.x');
+                      setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
+                    }
+                    
+                    // Add chat message (excluding the code)
+                    if (chatMessage.trim()) {
+                      addMessage({
+                        role: 'assistant',
+                        content: chatMessage.trim()
+                      });
+                    }
+                    
+                    // Add success message about code generation
+                    addMessage({
+                      role: 'assistant',
+                      content: `✅ Lambda function code generated successfully! The code has been placed in the Lambda tab and saved to the Files tab. You can now configure deployment settings in the Deployment tab.`
+                    });
+                    break;
+                  } else if (data !== '') {
+                    try {
+                      const parsed = JSON.parse(data);
+                      if (parsed.content) {
+                        chunkCount++;
+                        
+                        // Check if this is code content (starts with ``` or contains function/const/let/class)
+                        const content = parsed.content;
+                        if (content.includes('```') || 
+                            content.includes('function') || 
+                            content.includes('const ') || 
+                            content.includes('let ') || 
+                            content.includes('class ') ||
+                            content.includes('module.exports') ||
+                            content.includes('exports.') ||
+                            content.includes('return ') ||
+                            content.includes('console.log')) {
+                          // This is code content
+                          generatedCode += content;
+                          setGeneratedLambdaCode(generatedCode);
+                        } else {
+                          // This is chat content
+                          chatMessage += content;
+                        }
+                        
+                        // Update console every 10 chunks
+                        if (chunkCount % 10 === 0) {
+                          setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars, chat length: ${chatMessage.length} chars`]);
+                        }
+                      } else if (parsed.error) {
+                        console.error('Lambda generation error:', parsed.error);
+                        setGeneratedLambdaCode('Error: ' + parsed.error);
+                        setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
+                        
+                        addMessage({
+                          role: 'assistant',
+                          content: `❌ Error generating Lambda function: ${parsed.error}`
+                        });
+                      }
+                    } catch (e) {
+                      // Ignore parsing errors
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          console.error('Failed to generate Lambda code:', response.status);
+          setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
+          
+          addMessage({
+            role: 'assistant',
+            content: `❌ Failed to generate Lambda function. Please try again.`
+          });
+        }
+      } catch (error) {
+        console.error('Error generating Lambda code:', error);
+        setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+        
+        addMessage({
+          role: 'assistant',
+          content: `❌ Error generating Lambda function: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+      }
+      return;
+    }
+
     // Always pass the existing schema if we have one, regardless of the request type
     let schemaToEdit = currentSchema;
     if (!schemaToEdit && schemas.length > 0) {
@@ -384,7 +551,6 @@ What would you like to work on today?`,
       schemaToEdit = schemas[0].schema;
       console.log('[Frontend] Using existing schema for request:', schemaToEdit);
       // Check if this is an edit command for visual feedback
-      const lowerMessage = userMessage.toLowerCase();
       const editKeywords = ['edit', 'modify', 'update', 'change', 'add', 'remove', 'delete', 'rename'];
       const isEditCommand = editKeywords.some(keyword => lowerMessage.includes(keyword));
       if (isEditCommand) {
@@ -394,7 +560,6 @@ What would you like to work on today?`,
     }
     
     // Add console output for schema generation start
-    const lowerMessage = userMessage.toLowerCase();
     const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format'];
     const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
     
@@ -1730,6 +1895,75 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           setConsoleOutput(prev => [...prev, `   Function ARN: ${deployResult.functionArn}`]);
           setConsoleOutput(prev => [...prev, `   Code Size: ${deployResult.codeSize} bytes`]);
           
+          // Create API Gateway if not exists and get URL
+          setConsoleOutput(prev => [...prev, `🌐 Creating/Configuring API Gateway for: ${func.name}`]);
+          
+          try {
+            const apiGatewayResponse = await fetch(`${API_BASE_URL}/lambda/create-api-gateway`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                functionName: func.name,
+                functionArn: deployResult.functionArn,
+                runtime: func.runtime,
+                handler: func.handler
+              })
+            });
+            
+            if (apiGatewayResponse.ok) {
+              const apiGatewayResult = await apiGatewayResponse.json();
+              if (apiGatewayResult.success) {
+                setConsoleOutput(prev => [...prev, `✅ API Gateway created successfully!`]);
+                setConsoleOutput(prev => [...prev, `🌐 API Gateway URL: ${apiGatewayResult.apiGatewayUrl}`]);
+                setConsoleOutput(prev => [...prev, `   Endpoint: ${apiGatewayResult.apiGatewayUrl}/${func.name}`]);
+                setConsoleOutput(prev => [...prev, `   API ID: ${apiGatewayResult.apiId}`]);
+                setConsoleOutput(prev => [...prev, `   Stage: ${apiGatewayResult.stage}`]);
+                
+                // Store the API Gateway URL for testing
+                deployResult.apiGatewayUrl = apiGatewayResult.apiGatewayUrl;
+                
+                // Store the deployed endpoint for display
+                setDeployedEndpoints(prev => [...prev, {
+                  functionName: func.name,
+                  apiGatewayUrl: `${apiGatewayResult.apiGatewayUrl}/${func.name}`,
+                  functionArn: deployResult.functionArn,
+                  deployedAt: new Date()
+                }]);
+                
+                // Add success message to chat
+                addMessage({
+                  role: 'assistant',
+                  content: `✅ Lambda function "${func.name}" deployed successfully!\n\n🌐 **API Gateway URL:** ${apiGatewayResult.apiGatewayUrl}/${func.name}\n\nYou can now invoke your function via HTTP POST requests to this endpoint.`
+                });
+              } else {
+                setConsoleOutput(prev => [...prev, `⚠️ API Gateway creation failed: ${apiGatewayResult.error}`]);
+                setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
+                
+                addMessage({
+                  role: 'assistant',
+                  content: `⚠️ Lambda function "${func.name}" deployed, but API Gateway creation failed: ${apiGatewayResult.error}\n\nYou can still invoke the function directly via AWS Lambda.`
+                });
+              }
+            } else {
+              const errorText = await apiGatewayResponse.text();
+              setConsoleOutput(prev => [...prev, `⚠️ Failed to create API Gateway: ${apiGatewayResponse.status} - ${errorText}`]);
+              setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
+              
+              addMessage({
+                role: 'assistant',
+                content: `⚠️ Lambda function "${func.name}" deployed, but API Gateway creation failed with status ${apiGatewayResponse.status}.\n\nYou can still invoke the function directly via AWS Lambda.`
+              });
+            }
+          } catch (error) {
+            setConsoleOutput(prev => [...prev, `⚠️ Error creating API Gateway: ${error.message}`]);
+            setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
+            
+            addMessage({
+              role: 'assistant',
+              content: `⚠️ Lambda function "${func.name}" deployed, but encountered an error creating API Gateway: ${error.message}\n\nYou can still invoke the function directly via AWS Lambda.`
+            });
+          }
+          
           // Test the deployed function
           setConsoleOutput(prev => [...prev, `🧪 Testing deployed function: ${func.name}`]);
           
@@ -1745,11 +1979,25 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           console.log('Testing function with payload:', testPayload);
           setConsoleOutput(prev => [...prev, `🔧 Debug: Testing function: ${func.name}`]);
           
-          const testResponse = await fetch(`${API_BASE_URL}/lambda/invoke`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(testPayload)
-          });
+          // Test via API Gateway (should always be available now)
+          let testResponse;
+          if (deployResult.apiGatewayUrl) {
+            const apiUrl = `${deployResult.apiGatewayUrl}/${func.name}`;
+            setConsoleOutput(prev => [...prev, `🧪 Testing via API Gateway: ${apiUrl}`]);
+            testResponse = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(testPayload.payload)
+            });
+          } else {
+            // Fallback to direct invoke if API Gateway creation failed
+            setConsoleOutput(prev => [...prev, `🧪 Testing via direct invoke (API Gateway unavailable)`]);
+            testResponse = await fetch(`${API_BASE_URL}/lambda/invoke`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(testPayload)
+            });
+          }
           
           console.log('Test response status:', testResponse.status);
           
@@ -1782,6 +2030,50 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
     
     setConsoleOutput(prev => [...prev, '🎉 Project deployment completed!']);
     setConsoleOutput(prev => [...prev, '💡 You can now invoke your Lambda functions from the AWS Console or via API Gateway.']);
+    
+    // Display deployment summary
+    setConsoleOutput(prev => [...prev, '📋 Deployment Summary:']);
+    setConsoleOutput(prev => [...prev, '==================']);
+    
+    // Collect all API Gateway URLs for the summary
+    const apiGatewayUrls = [];
+    
+    lambdaFunctions.forEach((func, index) => {
+      setConsoleOutput(prev => [...prev, `${index + 1}. ${func.name}:`]);
+      setConsoleOutput(prev => [...prev, `   - Runtime: ${func.runtime}`]);
+      setConsoleOutput(prev => [...prev, `   - Handler: ${func.handler}`]);
+      setConsoleOutput(prev => [...prev, `   - Memory: ${func.memory} MB`]);
+      setConsoleOutput(prev => [...prev, `   - Timeout: ${func.timeout} seconds`]);
+      
+      // Show API Gateway URL if available
+      if (deployResult && deployResult.apiGatewayUrl) {
+        const apiUrl = `${deployResult.apiGatewayUrl}/${func.name}`;
+        setConsoleOutput(prev => [...prev, `   - API Gateway: ${apiUrl}`]);
+        apiGatewayUrls.push({ functionName: func.name, url: apiUrl });
+      }
+    });
+    
+    setConsoleOutput(prev => [...prev, '==================']);
+    
+    if (apiGatewayUrls.length > 0) {
+      setConsoleOutput(prev => [...prev, '🌐 API Gateway Endpoints:']);
+      apiGatewayUrls.forEach(({ functionName, url }) => {
+        setConsoleOutput(prev => [...prev, `   ${functionName}: ${url}`]);
+      });
+      setConsoleOutput(prev => [...prev, '🚀 Your Lambda functions are now live and accessible via API Gateway!']);
+      
+      // Add comprehensive summary to chat
+      addMessage({
+        role: 'assistant',
+        content: `🎉 **Deployment Complete!**\n\n✅ Successfully deployed ${lambdaFunctions.length} Lambda function(s)\n\n🌐 **API Gateway Endpoints:**\n${apiGatewayUrls.map(({ functionName, url }) => `• **${functionName}:** \`${url}\``).join('\n')}\n\n💡 **Usage:** Send HTTP POST requests to these endpoints to invoke your Lambda functions.\n\n📋 **Example:**\n\`\`\`bash\ncurl -X POST ${apiGatewayUrls[0].url} \\\n  -H "Content-Type: application/json" \\\n  -d '{"key": "value"}'\n\`\`\``
+      });
+    } else {
+      setConsoleOutput(prev => [...prev, '⚠️ No API Gateway URLs available']);
+      addMessage({
+        role: 'assistant',
+        content: `✅ Lambda functions deployed successfully, but API Gateway creation failed.\n\nYou can still invoke the functions directly via AWS Lambda console or CLI.`
+      });
+    }
   }
 
   async function downloadProjectFiles() {
@@ -1919,6 +2211,16 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           <Database size={16} /> Schema
         </button>
         <button
+          onClick={() => setActiveTab('deployment')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'deployment'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Play size={16} /> Deployment
+        </button>
+        <button
           onClick={() => setActiveTab('console')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
             activeTab === 'console'
@@ -1934,206 +2236,43 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
       <div className="flex-1 overflow-auto p-4 bg-[#f8f9fb]">
         {activeTab === 'lambda' && (
           <div className="h-full overflow-y-auto">
-            <label className="block font-semibold mb-1">Select Schema</label>
-            <select
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.schemaId}
-              onChange={e => {
-                const schemaId = e.target.value;
-                const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
-                setLambdaForm(f => ({ ...f, schemaId }));
-                setSelectedSchema(schema);
-              }}
-              required
-            >
-              <option value="">Select a schema</option>
-              {filteredSavedSchemas.map((s: any) => (
-                <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
-              ))}
-            </select>
-            <label className="block font-semibold mt-4 mb-1">Function Name</label>
-            <input
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.functionName}
-              onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
-              placeholder="handler.js"
-              required
-            />
-            <label className="block font-semibold mt-4 mb-1">Runtime</label>
-            <select
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.runtime}
-              onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
-            >
-              <option value="nodejs18.x">Node.js 18.x</option>
-              <option value="nodejs20.x">Node.js 20.x</option>
-              <option value="python3.12">Python 3.12</option>
-              <option value="python3.11">Python 3.11</option>
-              <option value="python3.10">Python 3.10</option>
-              <option value="java21">Java 21</option>
-              <option value="java17">Java 17</option>
-              <option value="java11">Java 11</option>
-              <option value="dotnet8">.NET 8</option>
-              <option value="dotnet6">.NET 6</option>
-            </select>
-            <label className="block font-semibold mt-4 mb-1">Handler</label>
-            <input
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.handler}
-              onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
-              placeholder="index.handler"
-              required
-            />
-            <label className="block font-semibold mt-4 mb-1">Memory (MB)</label>
-            <input
-              type="number"
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.memory}
-              min={128}
-              max={10240}
-              onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
-              required
-            />
-            <label className="block font-semibold mt-4 mb-1">Timeout (seconds)</label>
-            <input
-              type="number"
-              className="w-full border rounded px-2 py-1 mb-2"
-              value={lambdaForm.timeout}
-              min={1}
-              max={900}
-              onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
-              required
-            />
-            <label className="block font-semibold mt-4 mb-1">Environment Variables (JSON)</label>
-            <textarea
-              className="w-full border rounded px-2 py-1 mb-2 font-mono"
-              value={lambdaForm.environment}
-              onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
-              placeholder='{"KEY":"VALUE"}'
-              rows={2}
-            />
-            <label className="block font-semibold mt-4 mb-1">Describe the Lambda Handler</label>
-            <textarea
-              value={lambdaPrompt}
-              onChange={e => setLambdaPrompt(e.target.value)}
-              placeholder="Describe what Lambda handler you want to generate for the selected schema..."
-              className="w-full border rounded px-2 py-1 mb-2"
-              rows={3}
-            />
-            <button
-              onClick={async () => {
-                console.log('selectedSchema:', selectedSchema);
-                if (!selectedSchema) {
-                  alert('Please select a schema before generating a Lambda handler.');
-                  return;
-                }
-                if (!lambdaPrompt.trim()) {
-                  alert('Please enter a prompt describing the Lambda handler you want to generate.');
-                  return;
-                }
-                setGeneratedLambdaCode('');
-                console.log('DEBUG: Submitting Lambda prompt:', lambdaPrompt, 'for schema:', selectedSchema);
-                
-                try {
-                  setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation for: ${lambdaForm.functionName}`]);
-                  setConsoleOutput(prev => [...prev, `📝 Prompt: ${lambdaPrompt}`]);
-                  setConsoleOutput(prev => [...prev, `⚙️ Runtime: ${lambdaForm.runtime}`]);
-                  setConsoleOutput(prev => [...prev, `💾 Memory: ${lambdaForm.memory} MB`]);
-                  setConsoleOutput(prev => [...prev, `⏱️ Timeout: ${lambdaForm.timeout} seconds`]);
-                  
-                  const response = await fetch(`${API_BASE_URL}/ai-agent/lambda-codegen`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      message: lambdaPrompt,
-                      selectedSchema,
-                      functionName: lambdaForm.functionName,
-                      runtime: lambdaForm.runtime,
-                      handler: lambdaForm.handler,
-                      memory: lambdaForm.memory,
-                      timeout: lambdaForm.timeout,
-                      environment: lambdaForm.environment || ''
-                    })
-                  });
-
-                  if (response.ok) {
-                    setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting generation...`]);
-                    const reader = response.body?.getReader();
-                    if (reader) {
-                      let generatedCode = '';
-                      let chunkCount = 0;
-                      
-                      while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        
-                        const chunk = new TextDecoder().decode(value);
-                        const lines = chunk.split('\n');
-                        
-                        for (const line of lines) {
-                          if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') {
-                              // Generation complete
-                              setConsoleOutput(prev => [...prev, `🎉 Lambda generation completed!`]);
-                              setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
-                              setConsoleOutput(prev => [...prev, `📏 Code length: ${generatedCode.length} characters`]);
-                              
-                              if (generatedCode.trim()) {
-                                setConsoleOutput(prev => [...prev, `📁 Creating file structure...`]);
-                                generateLambdaFileStructure(generatedCode, lambdaForm.functionName, lambdaForm.runtime);
-                                setConsoleOutput(prev => [...prev, `✅ Files created successfully!`]);
-                              }
-                              break;
-                            } else if (data !== '') {
-                              try {
-                                const parsed = JSON.parse(data);
-                                if (parsed.content) {
-                                  generatedCode += parsed.content;
-                                  setGeneratedLambdaCode(generatedCode);
-                                  chunkCount++;
-                                  
-                                  // Update console every 10 chunks
-                                  if (chunkCount % 10 === 0) {
-                                    setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars`]);
-                                  }
-                                } else if (parsed.error) {
-                                  console.error('Lambda generation error:', parsed.error);
-                                  setGeneratedLambdaCode('Error: ' + parsed.error);
-                                  setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
-                                }
-                              } catch (e) {
-                                // Ignore parsing errors
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  } else {
-                    console.error('Failed to generate Lambda code:', response.status);
-                    setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
-                  }
-                } catch (error) {
-                  console.error('Error generating Lambda code:', error);
-                  setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
-                }
-              }}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
-            >
-              Generate Lambda Handler
-            </button>
-            <label className="block font-semibold mt-4 mb-1">Generated Lambda Code</label>
-            <pre className="mt-2 bg-gray-100 p-2 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
-              {generatedLambdaCode || '// Lambda code will appear here'}
-            </pre>
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-2">Lambda Function Generation</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Use the chat below to describe the Lambda function you want to generate. 
+                Make sure to select a schema first, then describe your Lambda handler requirements.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-800 mb-2">Instructions:</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• First, ask the AI to generate or select a schema</li>
+                  <li>• Then describe your Lambda function requirements in the chat</li>
+                  <li>• The AI will generate the Lambda code based on your description</li>
+                  <li>• Generated code will appear in the Files tab</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium mb-2">Generated Lambda Code</h4>
+              <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
+                {generatedLambdaCode || '// Lambda code will appear here after generation'}
+              </pre>
+            </div>
           </div>
         )}
         {activeTab === 'schema' && (
           <div className="h-full overflow-y-auto">
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-2">Schema Management</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Use the chat below to generate and manage schemas. The AI will create schemas based on your descriptions.
+              </p>
+            </div>
+            
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">Generated Schemas</h3>
+                <h4 className="font-medium">Generated Schemas</h4>
                 {isStreamingSchema && (
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
@@ -2349,6 +2488,202 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
             </div>
           </div>
         )}
+        {activeTab === 'deployment' && (
+          <div className="h-full overflow-y-auto">
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-2">Deployment Configuration</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Configure Lambda function deployment settings and deploy your project.
+              </p>
+            </div>
+            
+            {/* Deployed Endpoints Section */}
+            {deployedEndpoints.length > 0 && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h4 className="font-medium text-green-800 mb-3">🌐 Deployed API Gateway Endpoints</h4>
+                <div className="space-y-3">
+                  {deployedEndpoints.map((endpoint, index) => (
+                    <div key={index} className="bg-white border border-green-200 rounded p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-green-700">{endpoint.functionName}</span>
+                        <span className="text-xs text-green-600">
+                          {endpoint.deployedAt.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm">
+                          <span className="font-medium">API Gateway URL:</span>
+                          <code className="ml-2 bg-gray-100 px-2 py-1 rounded text-xs break-all">
+                            {endpoint.apiGatewayUrl}
+                          </code>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          <span className="font-medium">Function ARN:</span>
+                          <span className="ml-2 break-all">{endpoint.functionArn}</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(endpoint.apiGatewayUrl);
+                            setConsoleOutput(prev => [...prev, `📋 Copied API Gateway URL to clipboard: ${endpoint.apiGatewayUrl}`]);
+                          }}
+                          className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                        >
+                          Copy URL
+                        </button>
+                        <button
+                          onClick={() => {
+                            const testUrl = endpoint.apiGatewayUrl;
+                            setConsoleOutput(prev => [...prev, `🧪 Testing endpoint: ${testUrl}`]);
+                            fetch(testUrl, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ test: true, message: 'Hello from deployment tab!' })
+                            })
+                              .then(res => res.json())
+                              .then(data => {
+                                setConsoleOutput(prev => [...prev, `✅ Test successful: ${JSON.stringify(data)}`]);
+                              })
+                              .catch(err => {
+                                setConsoleOutput(prev => [...prev, `❌ Test failed: ${err.message}`]);
+                              });
+                          }}
+                          className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                          Test Endpoint
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h4 className="font-medium">Lambda Configuration</h4>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Select Schema</label>
+                  <select
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.schemaId}
+                    onChange={e => {
+                      const schemaId = e.target.value;
+                      const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
+                      setLambdaForm(f => ({ ...f, schemaId }));
+                      setSelectedSchema(schema);
+                    }}
+                    required
+                  >
+                    <option value="">Select a schema</option>
+                    {filteredSavedSchemas.map((s: any) => (
+                      <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Function Name</label>
+                  <input
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.functionName}
+                    onChange={e => setLambdaForm(f => ({ ...f, functionName: e.target.value }))}
+                    placeholder="handler.js"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Runtime</label>
+                  <select
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.runtime}
+                    onChange={e => setLambdaForm(f => ({ ...f, runtime: e.target.value }))}
+                  >
+                    <option value="nodejs18.x">Node.js 18.x</option>
+                    <option value="nodejs20.x">Node.js 20.x</option>
+                    <option value="python3.12">Python 3.12</option>
+                    <option value="python3.11">Python 3.11</option>
+                    <option value="python3.10">Python 3.10</option>
+                    <option value="java21">Java 21</option>
+                    <option value="java17">Java 17</option>
+                    <option value="java11">Java 11</option>
+                    <option value="dotnet8">.NET 8</option>
+                    <option value="dotnet6">.NET 6</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Handler</label>
+                  <input
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.handler}
+                    onChange={e => setLambdaForm(f => ({ ...f, handler: e.target.value }))}
+                    placeholder="index.handler"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <h4 className="font-medium">Resource Configuration</h4>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Memory (MB)</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.memory}
+                    min={128}
+                    max={10240}
+                    onChange={e => setLambdaForm(f => ({ ...f, memory: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Timeout (seconds)</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded px-2 py-1 mb-2"
+                    value={lambdaForm.timeout}
+                    min={1}
+                    max={900}
+                    onChange={e => setLambdaForm(f => ({ ...f, timeout: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block font-semibold mb-1">Environment Variables (JSON)</label>
+                  <textarea
+                    className="w-full border rounded px-2 py-1 mb-2 font-mono"
+                    value={lambdaForm.environment}
+                    onChange={e => setLambdaForm(f => ({ ...f, environment: e.target.value }))}
+                    placeholder='{"KEY":"VALUE"}'
+                    rows={3}
+                  />
+                </div>
+                
+                <div className="pt-4">
+                  <button
+                    onClick={runProject}
+                    disabled={isRunningProject}
+                    className={`w-full px-4 py-2 text-sm rounded ${
+                      isRunningProject 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-green-500 hover:bg-green-600'
+                    } text-white`}
+                  >
+                    {isRunningProject ? 'Deploying...' : 'Deploy Project'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === 'console' && (
           <div className="h-full flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
@@ -2362,17 +2697,6 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
                 )}
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={runProject}
-                  disabled={isRunningProject}
-                  className={`px-3 py-1 text-sm rounded ${
-                    isRunningProject 
-                      ? 'bg-gray-400 cursor-not-allowed' 
-                      : 'bg-green-500 hover:bg-green-600'
-                  } text-white`}
-                >
-                  {isRunningProject ? 'Deploying...' : 'Run Project'}
-                </button>
                 <button
                   onClick={() => setConsoleOutput([])}
                   className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
