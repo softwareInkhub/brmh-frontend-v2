@@ -132,6 +132,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   // 1. Add state for lambdaPrompt and generatedLambdaCode
   // Run Project functionality
   const [isRunningProject, setIsRunningProject] = useState(false);
+  const [isSavingToS3, setIsSavingToS3] = useState(false);
   const [lambdaPrompt, setLambdaPrompt] = useState('');
   const [generatedLambdaCode, setGeneratedLambdaCode] = useState('');
   
@@ -1886,7 +1887,9 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           handler: func.handler,
           memorySize: func.memory,
           timeout: func.timeout,
-          dependencies: func.dependencies || {}
+          dependencies: func.dependencies || {},
+          environment: lambdaForm.environment || '',
+          createApiGateway: true
         };
         
         console.log('Deploying with payload:', deployPayload);
@@ -1917,72 +1920,33 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
           setConsoleOutput(prev => [...prev, `   Function ARN: ${deployResult.functionArn}`]);
           setConsoleOutput(prev => [...prev, `   Code Size: ${deployResult.codeSize} bytes`]);
           
-          // Create API Gateway if not exists and get URL
-          setConsoleOutput(prev => [...prev, `🌐 Creating/Configuring API Gateway for: ${func.name}`]);
-          
-          try {
-            const apiGatewayResponse = await fetch(`${API_BASE_URL}/lambda/create-api-gateway`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                functionName: func.name,
-                functionArn: deployResult.functionArn,
-                runtime: func.runtime,
-                handler: func.handler
-              })
-            });
+          // API Gateway is now created automatically during deployment
+          if (deployResult.apiGatewayUrl) {
+            setConsoleOutput(prev => [...prev, `✅ API Gateway created automatically!`]);
+            setConsoleOutput(prev => [...prev, `🌐 API Gateway URL: ${deployResult.apiGatewayUrl}`]);
+            setConsoleOutput(prev => [...prev, `   Endpoint: ${deployResult.apiGatewayUrl}/${func.name}`]);
+            setConsoleOutput(prev => [...prev, `   API ID: ${deployResult.apiId}`]);
             
-            if (apiGatewayResponse.ok) {
-              const apiGatewayResult = await apiGatewayResponse.json();
-              if (apiGatewayResult.success) {
-                setConsoleOutput(prev => [...prev, `✅ API Gateway created successfully!`]);
-                setConsoleOutput(prev => [...prev, `🌐 API Gateway URL: ${apiGatewayResult.apiGatewayUrl}`]);
-                setConsoleOutput(prev => [...prev, `   Endpoint: ${apiGatewayResult.apiGatewayUrl}/${func.name}`]);
-                setConsoleOutput(prev => [...prev, `   API ID: ${apiGatewayResult.apiId}`]);
-                setConsoleOutput(prev => [...prev, `   Stage: ${apiGatewayResult.stage}`]);
-                
-                // Store the API Gateway URL for testing
-                deployResult.apiGatewayUrl = apiGatewayResult.apiGatewayUrl;
-                
-                // Store the deployed endpoint for display
-                setDeployedEndpoints(prev => [...prev, {
-                  functionName: func.name,
-                  apiGatewayUrl: `${apiGatewayResult.apiGatewayUrl}/${func.name}`,
-                  functionArn: deployResult.functionArn,
-                  deployedAt: new Date()
-                }]);
-                
-                // Add success message to chat
-                addMessage({
-                  role: 'assistant',
-                  content: `✅ Lambda function "${func.name}" deployed successfully!\n\n🌐 **API Gateway URL:** ${apiGatewayResult.apiGatewayUrl}/${func.name}\n\nYou can now invoke your function via HTTP POST requests to this endpoint.`
-                });
-              } else {
-                setConsoleOutput(prev => [...prev, `⚠️ API Gateway creation failed: ${apiGatewayResult.error}`]);
-                setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
-                
-                addMessage({
-                  role: 'assistant',
-                  content: `⚠️ Lambda function "${func.name}" deployed, but API Gateway creation failed: ${apiGatewayResult.error}\n\nYou can still invoke the function directly via AWS Lambda.`
-                });
-              }
-            } else {
-              const errorText = await apiGatewayResponse.text();
-              setConsoleOutput(prev => [...prev, `⚠️ Failed to create API Gateway: ${apiGatewayResponse.status} - ${errorText}`]);
-              setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
-              
-              addMessage({
-                role: 'assistant',
-                content: `⚠️ Lambda function "${func.name}" deployed, but API Gateway creation failed with status ${apiGatewayResponse.status}.\n\nYou can still invoke the function directly via AWS Lambda.`
-              });
-            }
-          } catch (error) {
-            setConsoleOutput(prev => [...prev, `⚠️ Error creating API Gateway: ${error.message}`]);
+            // Store the deployed endpoint for display
+            setDeployedEndpoints(prev => [...prev, {
+              functionName: func.name,
+              apiGatewayUrl: `${deployResult.apiGatewayUrl}/${func.name}`,
+              functionArn: deployResult.functionArn,
+              deployedAt: new Date()
+            }]);
+            
+            // Add success message to chat
+            addMessage({
+              role: 'assistant',
+              content: `✅ Lambda function "${func.name}" deployed successfully!\n\n🌐 **API Gateway URL:** ${deployResult.apiGatewayUrl}/${func.name}\n\nYou can now invoke your function via HTTP POST requests to this endpoint.`
+            });
+          } else {
+            setConsoleOutput(prev => [...prev, `⚠️ API Gateway creation was skipped or failed`]);
             setConsoleOutput(prev => [...prev, `   Using Function URL as fallback`]);
             
             addMessage({
               role: 'assistant',
-              content: `⚠️ Lambda function "${func.name}" deployed, but encountered an error creating API Gateway: ${error.message}\n\nYou can still invoke the function directly via AWS Lambda.`
+              content: `✅ Lambda function "${func.name}" deployed successfully!\n\n⚠️ API Gateway was not created. You can invoke the function directly via AWS Lambda.`
             });
           }
           
@@ -2095,6 +2059,117 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
         role: 'assistant',
         content: `✅ Lambda functions deployed successfully, but API Gateway creation failed.\n\nYou can still invoke the functions directly via AWS Lambda console or CLI.`
       });
+    }
+  }
+
+  async function saveFilesToS3() {
+    if (projectFiles.length === 0) {
+      alert('No files to save to S3');
+      return;
+    }
+
+    try {
+      setIsSavingToS3(true);
+      setConsoleOutput(prev => [...prev, '☁️ Saving project files to S3 cloud bucket...']);
+      
+      // Create a zip file using JSZip
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      // Helper function to add files to zip recursively
+      let fileCount = 0;
+      function addFilesToZip(files: ProjectFile[], zipFolder: any) {
+        files.forEach(file => {
+          if (file.type === 'file' && file.content) {
+            // Remove leading slash from path
+            const filePath = file.path.startsWith('/') ? file.path.slice(1) : file.path;
+            zipFolder.file(filePath, file.content);
+            fileCount++;
+          } else if (file.type === 'folder' && file.children) {
+            // Create folder in zip
+            const folderPath = file.path.startsWith('/') ? file.path.slice(1) : file.path;
+            const folder = zipFolder.folder(folderPath);
+            if (folder) {
+              addFilesToZip(file.children, folder);
+            }
+          }
+        });
+      }
+      
+      // Add all files to zip
+      setConsoleOutput(prev => [...prev, '📁 Adding files to ZIP archive...']);
+      addFilesToZip(projectFiles, zip);
+      setConsoleOutput(prev => [...prev, `✅ Added ${fileCount} file(s) to archive`]);
+      
+      setConsoleOutput(prev => [...prev, '📝 Generating ZIP file...']);
+      
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      
+      // Convert blob to base64 for sending to backend
+      const reader = new FileReader();
+      const base64Promise = new Promise((resolve) => {
+        reader.onload = () => resolve(reader.result);
+      });
+      reader.readAsDataURL(zipBlob);
+      const base64Data = await base64Promise;
+      
+      // Send to backend for S3 upload
+      setConsoleOutput(prev => [...prev, '🚀 Uploading to S3...']);
+      
+      const response = await fetch(`${API_BASE_URL}/workspace/save-files-to-s3`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          namespaceId: namespace?.['namespace-id'],
+          projectName: namespace?.['namespace-name'] || 'unnamed-project',
+          zipData: base64Data,
+          fileCount: fileCount,
+          files: projectFiles.map(file => ({
+            name: file.name,
+            path: file.path,
+            type: file.type
+          }))
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Files] S3 save result:', result);
+        
+        setConsoleOutput(prev => [...prev, `✅ Files saved to S3 successfully!`]);
+        setConsoleOutput(prev => [...prev, `📁 S3 Bucket: ${result.bucket}`]);
+        setConsoleOutput(prev => [...prev, `🔗 S3 Key: ${result.s3Key}`]);
+        setConsoleOutput(prev => [...prev, `📊 Files saved: ${result.filesSaved}`]);
+        
+        if (result.metadataId) {
+          setConsoleOutput(prev => [...prev, `💾 Metadata saved to DynamoDB: ${result.metadataId}`]);
+        }
+        
+        addMessage({
+          role: 'assistant',
+          content: `✅ Project files saved to S3 cloud bucket successfully!
+
+📁 **S3 Location:** ${result.s3Url}
+📊 **Files Saved:** ${result.filesSaved}
+💾 **Metadata ID:** ${result.metadataId || 'N/A'}
+
+Your files are now safely stored in the cloud and can be accessed anytime.`
+        });
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error('[Files] Error saving to S3:', error);
+      setConsoleOutput(prev => [...prev, `❌ Failed to save files to S3: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+      
+      addMessage({
+        role: 'assistant',
+        content: `❌ Failed to save project files to S3: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setIsSavingToS3(false);
     }
   }
 
@@ -2454,6 +2529,18 @@ To test locally, you can use AWS SAM or the AWS Lambda runtime interface emulato
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium">Project Files</h3>
                 <div className="flex gap-2">
+                  <button
+                    onClick={saveFilesToS3}
+                    disabled={projectFiles.length === 0 || isSavingToS3}
+                    className={`px-2 py-1 text-xs rounded ${
+                      projectFiles.length === 0 || isSavingToS3
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : 'bg-purple-500 hover:bg-purple-600 text-white'
+                    }`}
+                    title="Save all project files to S3 cloud bucket"
+                  >
+                    {isSavingToS3 ? 'Saving to S3...' : 'Save to S3 Cloud Bucket'}
+                  </button>
                   <button
                     onClick={downloadProjectFiles}
                     disabled={projectFiles.length === 0 || isDownloading}
