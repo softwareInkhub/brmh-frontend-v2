@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, File, Folder, Play, Database, Code, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Bot, Send, File, Folder, Play, Database, Code, X, Maximize2, Minimize2, Upload, FileText, Image, Archive } from 'lucide-react';
+import { useDrop } from 'react-dnd';
 
 interface Message {
   id: string;
@@ -7,6 +8,16 @@ interface Message {
   content: string;
   timestamp: Date;
   type?: string;
+  files?: UploadedFile[];
+}
+
+interface UploadedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  content?: string;
+  url?: string;
 }
 
 interface ProjectFile {
@@ -45,7 +56,14 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
       id: '1',
       role: 'assistant',
       content: `Hello! I'm your AI development assistant. I can help you:
-\n• Design and generate API schemas\n• Write and test code\n• Create database models\n• Set up authentication\n• Run tests and debug issues\n• Manage your project structure\n\nWhat would you like to work on today?`,
+\n• Design and generate API schemas\n• Write and test code\n• Create database models\n• Set up authentication\n• Run tests and debug issues\n• Manage your project structure
+
+💡 **Pro Tips:**
+• Upload files using the upload button or drag & drop
+• Drag schemas from the sidebar directly into this chat area for context
+• Drag schemas from the Schema tab for additional context
+
+What would you like to work on today?`,
       timestamp: new Date()
     }
   ]);
@@ -93,11 +111,16 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   // Memory service state
   const [sessionId, setSessionId] = useState<string>('');
   const [userId] = useState<string>('default-user');
-  const [workspaceState, setWorkspaceState] = useState<WorkspaceState | null>(null);
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceState>({
+    files: [],
+    schemas: [],
+    apis: [],
+    projectType: 'nodejs',
+    lastGenerated: null
+  });
   // 2. Add state for Lambda functions and Lambda creation form
   const [lambdaFunctions, setLambdaFunctions] = useState<any[]>([]);
   const [lambdaForm, setLambdaForm] = useState({
-    schemaId: '',
     functionName: '',
     runtime: 'nodejs18.x',
     handler: 'index.handler',
@@ -124,10 +147,17 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   const [isEditingSchema, setIsEditingSchema] = useState(false);
   // Add state for schema names
   const [schemaNames, setSchemaNames] = useState<{ [id: string]: string }>({});
-  // 1. Add selectedSchema state at the top
-  const [selectedSchema, setSelectedSchema] = useState<any>(null);
+
   // Add state for API endpoints
   const [apiEndpoints, setApiEndpoints] = useState<any[]>([]);
+  
+  // File upload and drag-drop state
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragDropSchemas, setDragDropSchemas] = useState<any[]>([]);
+  const [isDraggingSchema, setIsDraggingSchema] = useState(false);
+  const [droppedSchemas, setDroppedSchemas] = useState<any[]>([]);
   // Lambda tab UI additions
   // 1. Add state for lambdaPrompt and generatedLambdaCode
   // Run Project functionality
@@ -135,6 +165,35 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   const [isSavingToS3, setIsSavingToS3] = useState(false);
   const [lambdaPrompt, setLambdaPrompt] = useState('');
   const [generatedLambdaCode, setGeneratedLambdaCode] = useState('');
+  
+  // API Generation state
+  const [generatedApiCode, setGeneratedApiCode] = useState('');
+  const [apiDocumentation, setApiDocumentation] = useState('');
+  const [isStreamingApi, setIsStreamingApi] = useState(false);
+  const [apiForm, setApiForm] = useState({
+    apiName: '',
+    baseUrl: '',
+    description: '',
+    version: '1.0.0',
+    authentication: 'none',
+    rateLimit: 1000,
+  });
+  
+  // Web Scraping state
+  const [selectedService, setSelectedService] = useState('');
+  const [customUrl, setCustomUrl] = useState('');
+  const [supportedServices, setSupportedServices] = useState([]);
+  const [scrapeOptions, setScrapeOptions] = useState({
+    apis: true,
+    schemas: true,
+    documentation: true,
+    followLinks: true
+  });
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapedData, setScrapedData] = useState(null);
+  const [scrapingLog, setScrapingLog] = useState([]);
+  
+
   
   // Debug: Track generatedLambdaCode changes
   useEffect(() => {
@@ -146,6 +205,355 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+
+  // File upload and drag-drop functions
+  const handleFileUpload = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    
+    setIsUploading(true);
+    const newFiles: UploadedFile[] = [];
+    
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          const fileId = `file-${Date.now()}-${Math.random()}`;
+          let content = '';
+          
+          // Read file content based on type
+          if (file.type.startsWith('text/') || file.type === 'application/json' || file.type === 'application/javascript') {
+            content = await file.text();
+          } else if (file.type.startsWith('image/')) {
+            // For images, create a data URL
+            const reader = new FileReader();
+            content = await new Promise((resolve, reject) => {
+              reader.onload = (e) => resolve(e.target?.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+          }
+          
+          const uploadedFile: UploadedFile = {
+            id: fileId,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            content
+          };
+          
+          newFiles.push(uploadedFile);
+        } catch (error) {
+          console.error('Error processing file:', file.name, error);
+        }
+      }
+      
+      setUploadedFiles(prev => [...prev, ...newFiles]);
+      
+      // Add message with uploaded files
+      if (newFiles.length > 0) {
+        addMessage({
+          role: 'user',
+          content: `Uploaded ${newFiles.length} file(s): ${newFiles.map(f => f.name).join(', ')}`,
+          files: newFiles
+        });
+      }
+    } catch (error) {
+      console.error('Error in file upload:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set drag over to false if we're leaving the actual drop zone
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    setIsDraggingSchema(false);
+    
+    try {
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        handleFileUpload(files);
+      }
+      
+      // Also check for schema data
+      const schemaData = e.dataTransfer.getData('application/json');
+      if (schemaData) {
+        try {
+          // Handle case where data might already be an object
+          let schema;
+          if (typeof schemaData === 'string') {
+            schema = JSON.parse(schemaData);
+          } else if (typeof schemaData === 'object') {
+            schema = schemaData;
+          } else {
+            console.warn('Invalid schema data type:', typeof schemaData);
+            return;
+          }
+          
+          const schemaWithSource = { ...schema, source: 'workspace' };
+          setDroppedSchemas(prev => [...prev, schemaWithSource]);
+          
+          // Add message about dropped schema
+          addMessage({
+            role: 'user',
+            content: `Added schema context from workspace: ${schema.schemaName || schema.name || 'Unknown Schema'}`
+          });
+        } catch (parseError) {
+          console.error('Error parsing schema data:', parseError);
+          console.error('Schema data received:', schemaData);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling drop:', error);
+    }
+  };
+
+  const removeUploadedFile = (fileId: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+  };
+
+  // Schema drag-drop functions
+  const handleSchemaDragStart = (e: React.DragEvent, schema: any) => {
+    e.stopPropagation();
+    try {
+      e.dataTransfer.setData('application/json', JSON.stringify(schema));
+      e.dataTransfer.effectAllowed = 'copy';
+      setIsDraggingSchema(true);
+    } catch (error) {
+      console.error('Error starting schema drag:', error);
+    }
+  };
+
+  const handleSchemaDragEnd = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setIsDraggingSchema(false);
+  };
+
+  const handleSchemaDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const schemaData = e.dataTransfer.getData('application/json');
+      if (schemaData) {
+        try {
+          // Handle case where data might already be an object
+          let schema;
+          if (typeof schemaData === 'string') {
+            schema = JSON.parse(schemaData);
+          } else if (typeof schemaData === 'object') {
+            schema = schemaData;
+          } else {
+            console.warn('Invalid schema data type:', typeof schemaData);
+            return;
+          }
+          
+          const schemaWithSource = { ...schema, source: 'workspace' };
+          setDroppedSchemas(prev => [...prev, schemaWithSource]);
+          
+          // Add message about dropped schema
+          addMessage({
+            role: 'user',
+            content: `Added schema context from workspace: ${schema.schemaName || schema.name || 'Unknown Schema'}`
+          });
+        } catch (parseError) {
+          console.error('Error parsing schema data:', parseError);
+          console.error('Schema data received:', schemaData);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing dropped schema:', error);
+    }
+  };
+
+  const removeDroppedSchema = (schemaId: string) => {
+    setDroppedSchemas(prev => prev.filter(s => s.id !== schemaId));
+  };
+
+  // React-DnD drop functionality for schemas from sidebar
+  const [{ isOver: isSchemaDropOver }, schemaDropRef] = useDrop({
+    accept: 'SCHEMA',
+    drop: (item: { type: string; data: any }) => {
+      if (item.type === 'SCHEMA') {
+        const schema = { ...item.data, source: 'sidebar' };
+        setDroppedSchemas(prev => [...prev, schema]);
+        
+        // Add message about dropped schema
+        addMessage({
+          role: 'user',
+          content: `Added schema context from sidebar: ${schema.schemaName || schema.name || 'Unknown Schema'}`
+        });
+      }
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  });
+
+  // Load available schemas for drag-drop functionality
+  const loadAvailableSchemas = async () => {
+    if (!namespace?.['namespace-id']) return;
+    
+    try {
+      const response = await fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`);
+      if (response.ok) {
+        const schemas = await response.json();
+        setDragDropSchemas(schemas);
+        console.log('[Drag-Drop] Loaded schemas for drag-drop:', schemas.length);
+      }
+    } catch (error) {
+      console.error('Error loading schemas for drag-drop:', error);
+    }
+  };
+
+  // Web Scraping functions
+  const loadSupportedServices = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/web-scraping/supported-services`);
+      if (response.ok) {
+        const data = await response.json();
+        setSupportedServices(data.services || []);
+      }
+    } catch (error) {
+      console.error('Error loading supported services:', error);
+    }
+  };
+
+  const addScrapingLog = (message, type = 'info') => {
+    setScrapingLog(prev => [...prev, {
+      message,
+      type,
+      timestamp: new Date().toLocaleTimeString()
+    }]);
+  };
+
+  const handlePreviewScrape = async () => {
+    if (!selectedService) return;
+    
+    const serviceToScrape = selectedService === 'custom-url' ? customUrl : selectedService;
+    if (selectedService === 'custom-url' && !customUrl) {
+      addScrapingLog('Please enter a valid URL', 'error');
+      return;
+    }
+    
+    setIsScraping(true);
+    addScrapingLog(`Starting preview scrape for ${serviceToScrape}...`, 'info');
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/web-scraping/scrape-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceName: serviceToScrape,
+          options: scrapeOptions
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setScrapedData(data.data);
+        addScrapingLog(`Preview completed: ${data.summary.apis} APIs, ${data.summary.schemas} schemas, ${data.summary.documentation} docs`, 'success');
+      } else {
+        const error = await response.json();
+        addScrapingLog(`Preview failed: ${error.error}`, 'error');
+      }
+    } catch (error) {
+      addScrapingLog(`Preview error: ${error.message}`, 'error');
+    } finally {
+      setIsScraping(false);
+    }
+  };
+
+  const handleScrapeAndSave = async () => {
+    if (!selectedService || !namespace?.['namespace-id']) return;
+    
+    const serviceToScrape = selectedService === 'custom-url' ? customUrl : selectedService;
+    if (selectedService === 'custom-url' && !customUrl) {
+      addScrapingLog('Please enter a valid URL', 'error');
+      return;
+    }
+    
+    setIsScraping(true);
+    addScrapingLog(`Starting scrape and save for ${serviceToScrape}...`, 'info');
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/web-scraping/scrape-and-save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceName: serviceToScrape,
+          namespaceId: namespace['namespace-id'],
+          options: scrapeOptions
+        })
+      });
+
+      if (response.ok) {
+        const reader = response.body?.getReader();
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                  addScrapingLog('Scraping and saving completed!', 'success');
+                  break;
+                } else if (data !== '') {
+                  try {
+                    const parsed = JSON.parse(data);
+                    addScrapingLog(parsed.message, parsed.type || 'info');
+                    
+                                         if (parsed.type === 'success' && parsed.summary) {
+                       const serviceName = selectedService === 'custom-url' ? customUrl : selectedService;
+                       addMessage({
+                         role: 'assistant',
+                         content: `✅ Successfully scraped and saved data from ${serviceName}!
+
+📊 **Summary:**
+• APIs: ${parsed.summary.apis}
+• Schemas: ${parsed.summary.schemas}
+• Documentation: ${parsed.summary.documentation}
+
+🎉 All data has been saved to your namespace library and is now available for use in your projects!`
+                       });
+                     }
+                  } catch (e) {
+                    // Ignore parsing errors
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        const error = await response.json();
+        addScrapingLog(`Scrape and save failed: ${error.error}`, 'error');
+      }
+    } catch (error) {
+      addScrapingLog(`Scrape and save error: ${error.message}`, 'error');
+    } finally {
+      setIsScraping(false);
+    }
+  };
 
   // Initialize terminal only on client side
   useEffect(() => {
@@ -165,6 +573,8 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     if (namespace?.['namespace-id']) {
       refreshFileTree();
       loadWorkspaceState();
+      loadAvailableSchemas(); // Load schemas for drag-drop functionality
+      loadSupportedServices(); // Load supported services for web scraping
       
       // Add a welcome message with context if workspace state exists
       setTimeout(() => {
@@ -202,30 +612,7 @@ const AIAgentWorkspace: React.FC<AIAgentWorkspaceProps> = ({ namespace, onClose 
     }
   }, [namespace?.['namespace-id'], sessionId]);
 
-  // Fetch saved schemas for Lambda dropdown only
-  useEffect(() => {
-    if (namespace?.['namespace-id']) {
-      fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`)
-        .then(res => res.json())
-        .then(data => setSavedSchemas(data));
-    }
-  }, [namespace?.['namespace-id']]);
 
-  // Function to refresh saved schemas
-  const refreshSavedSchemas = async () => {
-    if (namespace?.['namespace-id']) {
-      try {
-        const response = await fetch(`/unified/schema?namespaceId=${namespace['namespace-id']}`);
-        if (response.ok) {
-          const schemas = await response.json();
-          setSavedSchemas(schemas);
-          console.log('Refreshed saved schemas:', schemas);
-        }
-      } catch (error) {
-        console.error('Error refreshing saved schemas:', error);
-      }
-    }
-  };
 
   const getNowId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -353,6 +740,9 @@ What would you like to work on today?`,
     const userMessage = inputMessage.trim();
     setInputMessage('');
     
+    // Debug: Log the message being processed
+    console.log('[Frontend] Processing message:', userMessage);
+    
     // Add user message to chat
     addMessage({
       role: 'user',
@@ -364,18 +754,27 @@ What would you like to work on today?`,
     
     // Check if this might be a schema-related request
     const lowerMessage = userMessage.toLowerCase();
-    const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format', 'api', 'endpoint'];
-    const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
-    
-    // Check if this might be a Lambda-related request
+    // Robust intent detection for tab switching (less strict than generation)
+    const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format'];
     const lambdaKeywords = ['lambda', 'function', 'handler', 'aws lambda', 'serverless'];
-    const isLambdaRequest = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+    const apiKeywords = ['api', 'endpoint', 'route', 'rest', 'http', 'get', 'post', 'put', 'delete'];
     
-    if (isSchemaRequest) {
-      setConsoleOutput(prev => [...prev, `🔍 Detected potential schema request`]);
+    const hasSchemaKeyword = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
+    const hasLambdaKeyword = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+    const hasApiKeyword = apiKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    // Only switch tabs for clear intent, not casual mentions
+    const isQuestion = lowerMessage.includes('?') || lowerMessage.includes('what') || lowerMessage.includes('how') || lowerMessage.includes('why');
+    const isCasualMention = lowerMessage.includes('about') || lowerMessage.includes('regarding') || lowerMessage.includes('concerning');
+    
+    if (hasApiKeyword && !isQuestion && !isCasualMention) {
+      setConsoleOutput(prev => [...prev, `🔍 Detected API-related request`]);
+      setActiveTab('api');
+    } else if (hasSchemaKeyword && !isQuestion && !isCasualMention) {
+      setConsoleOutput(prev => [...prev, `🔍 Detected schema-related request`]);
       setActiveTab('schema');
-    } else if (isLambdaRequest) {
-      setConsoleOutput(prev => [...prev, `🔍 Detected potential Lambda request`]);
+    } else if (hasLambdaKeyword && !isQuestion && !isCasualMention) {
+      setConsoleOutput(prev => [...prev, `🔍 Detected lambda-related request`]);
       setActiveTab('lambda');
     }
 
@@ -399,46 +798,129 @@ What would you like to work on today?`,
     let actions: any[] = [];
     let lastAssistantMessageId: string | null = null;
 
-    // Check if this is a Lambda generation request
-    const lowerMessage = userMessage.toLowerCase();
-    const lambdaKeywords = [
-      'lambda', 'function', 'handler', 'aws lambda', 'serverless', 
-      'generate lambda', 'create lambda', 'build lambda', 'write lambda',
-      'lambda function', 'aws function', 'serverless function'
-    ];
-    const isLambdaRequest = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+      // Robust intent detection for Lambda generation
+  const lowerMessage = userMessage.toLowerCase();
+  
+  // Explicit action keywords that indicate user wants to generate/create something
+  const explicitActionKeywords = [
+    'generate', 'create', 'build', 'write', 'make', 'develop', 'code', 'program',
+    'implement', 'set up', 'configure', 'deploy', 'launch', 'start'
+  ];
+  
+  // Lambda-related keywords
+  const lambdaKeywords = [
+    'lambda', 'function', 'handler', 'aws lambda', 'serverless', 
+    'lambda function', 'aws function', 'serverless function'
+  ];
+  
+  // Schema-related keywords
+  const schemaKeywords = [
+    'schema', 'json schema', 'data model', 'structure', 'format', 'validation',
+    'type definition', 'interface', 'model'
+  ];
+  
+  // API-related keywords
+  const apiKeywords = [
+    'api', 'endpoint', 'route', 'rest', 'http', 'get', 'post', 'put', 'delete',
+    'api endpoint', 'rest api', 'http endpoint', 'webhook', 'microservice'
+  ];
+  
+  // Check for explicit generation intent
+  const hasExplicitAction = explicitActionKeywords.some(action => lowerMessage.includes(action));
+  const hasLambdaKeyword = lambdaKeywords.some(keyword => lowerMessage.includes(keyword));
+  const hasSchemaKeyword = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
+  const hasApiKeyword = apiKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  // More sophisticated intent detection
+  // Prioritize lambda requests over schema requests when both keywords are present
+  // Also detect lambda generation requests that mention schema context
+  const isLambdaRequest = hasExplicitAction && hasLambdaKeyword;
+  
+  // Check for lambda generation requests that mention schema (common pattern)
+  const hasLambdaContext = hasLambdaKeyword || (hasExplicitAction && (lowerMessage.includes('handler') || lowerMessage.includes('function')));
+  const mentionsSchemaContext = lowerMessage.includes('from this schema') || lowerMessage.includes('using this schema') || lowerMessage.includes('with this schema') || lowerMessage.includes('based on this schema');
+  const isLambdaWithSchemaContext = hasLambdaContext && mentionsSchemaContext;
+  
+  // API generation requests
+  const isApiRequest = hasExplicitAction && hasApiKeyword && !hasLambdaKeyword && !isLambdaWithSchemaContext;
+  
+  // Schema requests should not include lambda or api generation patterns
+  const isSchemaRequest = hasExplicitAction && hasSchemaKeyword && !hasLambdaKeyword && !hasApiKeyword && !isLambdaWithSchemaContext;
+  
+  // Debug the intermediate values
+  console.log('[Intent Debug] Intermediate values:');
+  console.log('[Intent Debug] isLambdaRequest:', isLambdaRequest, '(hasExplicitAction:', hasExplicitAction, '&& hasLambdaKeyword:', hasLambdaKeyword, ')');
+  console.log('[Intent Debug] hasLambdaContext:', hasLambdaContext, '(hasLambdaKeyword:', hasLambdaKeyword, '|| (hasExplicitAction && handler/function))');
+  console.log('[Intent Debug] mentionsSchemaContext:', mentionsSchemaContext, '(from/using/with/based on this schema)');
+  console.log('[Intent Debug] isLambdaWithSchemaContext:', isLambdaWithSchemaContext, '(hasLambdaContext && mentionsSchemaContext)');
+  console.log('[Intent Debug] isSchemaRequest:', isSchemaRequest, '(hasExplicitAction && hasSchemaKeyword && !hasLambdaKeyword && !isLambdaWithSchemaContext)');
+  
+  // Additional context checks to avoid false positives
+  const isQuestion = lowerMessage.includes('?') || lowerMessage.includes('what') || lowerMessage.includes('how') || lowerMessage.includes('why');
+  const isCasualMention = lowerMessage.includes('about') || lowerMessage.includes('regarding') || lowerMessage.includes('concerning');
+  const isExplanatory = lowerMessage.includes('explain') || lowerMessage.includes('describe') || lowerMessage.includes('tell me');
+  
+  // Final intent determination
+  const shouldGenerateLambda = (isLambdaRequest || isLambdaWithSchemaContext) && !isQuestion && !isCasualMention && !isExplanatory;
+  const shouldGenerateApi = isApiRequest && !isQuestion && !isCasualMention && !isExplanatory;
+  const shouldGenerateSchema = isSchemaRequest && !isQuestion && !isCasualMention && !isExplanatory;
     
-    console.log('[Lambda Debug] Message:', userMessage);
-    console.log('[Lambda Debug] Lower message:', lowerMessage);
-    console.log('[Lambda Debug] Lambda keywords:', lambdaKeywords);
-    console.log('[Lambda Debug] Is Lambda request:', isLambdaRequest);
-    console.log('[Lambda Debug] Active tab:', activeTab);
+    console.log('[Intent Debug] Message:', userMessage);
+    console.log('[Intent Debug] Has explicit action:', hasExplicitAction);
+    console.log('[Intent Debug] Has lambda keyword:', hasLambdaKeyword);
+    console.log('[Intent Debug] Has schema keyword:', hasSchemaKeyword);
+    console.log('[Intent Debug] Is lambda request:', isLambdaRequest);
+    console.log('[Intent Debug] Is schema request:', isSchemaRequest);
+    console.log('[Intent Debug] Is question:', isQuestion);
+    console.log('[Intent Debug] Is casual mention:', isCasualMention);
+    console.log('[Intent Debug] Is explanatory:', isExplanatory);
+    console.log('[Intent Debug] Should generate lambda:', shouldGenerateLambda);
+    console.log('[Intent Debug] Should generate schema:', shouldGenerateSchema);
+    console.log('[Intent Debug] Processing as regular chat:', !shouldGenerateLambda && !shouldGenerateSchema);
     
-    // If this is a Lambda request, handle Lambda generation (regardless of current tab)
-    if (isLambdaRequest) {
-      console.log('[Frontend] Detected Lambda generation request');
+    // Add more detailed logging
+    console.log('[Intent Debug] === DETAILED ANALYSIS ===');
+    console.log('[Intent Debug] Original message:', userMessage);
+    console.log('[Intent Debug] Lower message:', lowerMessage);
+    console.log('[Intent Debug] Explicit action keywords found:', explicitActionKeywords.filter(action => lowerMessage.includes(action)));
+    console.log('[Intent Debug] Lambda keywords found:', lambdaKeywords.filter(keyword => lowerMessage.includes(keyword)));
+    console.log('[Intent Debug] Schema keywords found:', schemaKeywords.filter(keyword => lowerMessage.includes(keyword)));
+    console.log('[Intent Debug] === END ANALYSIS ===');
+    
+    // Handle Lambda generation only when explicitly requested
+    if (shouldGenerateLambda) {
+      console.log('[Frontend] !!! ENTERING LAMBDA GENERATION BLOCK !!!');
+      console.log('[Frontend] Detected Lambda generation request - sending to lambda generation endpoint');
+      console.log('[Frontend] shouldGenerateLambda:', shouldGenerateLambda);
+      console.log('[Frontend] shouldGenerateSchema:', shouldGenerateSchema);
+      console.log('[Frontend] isLambdaRequest:', isLambdaRequest);
+      console.log('[Frontend] isLambdaWithSchemaContext:', isLambdaWithSchemaContext);
       setConsoleOutput(prev => [...prev, `🚀 Starting Lambda generation from chat request`]);
       
       // Automatically switch to Lambda tab
       setActiveTab('lambda');
       
-            // Check if we have a selected schema
-      if (!selectedSchema) {
-        addMessage({
-          role: 'assistant',
-          content: `I'll help you generate a Lambda function! First, please select a schema from the Deployment tab, or ask me to generate a new schema for you.`
-        });
-        return;
-      }
-      
       try {
         setGeneratedLambdaCode('');
         setConsoleOutput(prev => [...prev, `📝 Processing Lambda request: ${userMessage}`]);
-        setConsoleOutput(prev => [...prev, `📋 Using schema: ${selectedSchema.schemaName || selectedSchema.name || 'Selected Schema'}`]);
+        setConsoleOutput(prev => [...prev, `📋 Using automatic schema detection from workspace`]);
+        
+        // Prepare context from uploaded files and dropped schemas
+        const fileContext = uploadedFiles.length > 0 ? 
+          `\n\nUploaded Files Context:\n${uploadedFiles.map(file => 
+            `File: ${file.name} (${file.type})\nContent:\n${file.content?.substring(0, 1000)}${file.content && file.content.length > 1000 ? '...' : ''}`
+          ).join('\n\n')}` : '';
+        
+        const schemaContext = droppedSchemas.length > 0 ? 
+          `\n\nDropped Schema Context:\n${droppedSchemas.map(schema => 
+            `Schema: ${schema.schemaName || schema.name || 'Unknown'}\nContent:\n${JSON.stringify(schema, null, 2)}`
+          ).join('\n\n')}` : '';
+        
+        const enhancedMessage = userMessage + fileContext + schemaContext;
         
         const requestBody = {
-          message: userMessage,
-          selectedSchema,
+          message: enhancedMessage,
+          originalMessage: userMessage, // Send original message for intent detection
           functionName: lambdaForm.functionName || 'handler',
           runtime: lambdaForm.runtime || 'nodejs18.x',
           handler: lambdaForm.handler || 'index.handler',
@@ -526,7 +1008,7 @@ What would you like to work on today?`,
                         
                         // Update console every 10 chunks
                         if (chunkCount % 10 === 0) {
-                          setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars, chat length: ${chatMessage.length} chars`]);
+                          setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${generatedCode.length} chars`]);
                         }
                       } else if (parsed.error) {
                         console.error('Lambda generation error:', parsed.error);
@@ -565,6 +1047,230 @@ What would you like to work on today?`,
         });
       }
       return;
+    } else if (shouldGenerateApi) {
+      // Handle API generation when explicitly requested
+      console.log('[Frontend] !!! ENTERING API GENERATION BLOCK !!!');
+      console.log('[Frontend] Detected API generation request - sending to API generation endpoint');
+      setConsoleOutput(prev => [...prev, `🚀 Starting API generation from chat request`]);
+      
+      // Automatically switch to API tab
+      setActiveTab('api');
+      
+      try {
+        setGeneratedApiCode('');
+        setApiDocumentation('');
+        setConsoleOutput(prev => [...prev, `📝 Processing API request: ${userMessage}`]);
+        setConsoleOutput(prev => [...prev, `📋 Using automatic schema detection from workspace`]);
+        
+        // Prepare context from uploaded files and dropped schemas
+        const fileContext = uploadedFiles.length > 0 ? 
+          `\n\nUploaded Files Context:\n${uploadedFiles.map(file => 
+            `File: ${file.name} (${file.type})\nContent:\n${file.content?.substring(0, 1000)}${file.content && file.content.length > 1000 ? '...' : ''}`
+          ).join('\n\n')}` : '';
+        
+        const schemaContext = droppedSchemas.length > 0 ? 
+          `\n\nDropped Schema Context:\n${droppedSchemas.map(schema => 
+            `Schema: ${schema.schemaName || schema.name || 'Unknown'}\nContent:\n${JSON.stringify(schema, null, 2)}`
+          ).join('\n\n')}` : '';
+        
+        const enhancedMessage = userMessage + fileContext + schemaContext;
+        
+        const requestBody = {
+          message: enhancedMessage,
+          originalMessage: userMessage,
+          namespace: namespace ? { id: namespace['namespace-id'] } : null,
+          action: 'api-generation',
+          history: messages.map(m => ({ role: m.role, content: m.content })),
+          userId,
+          schema: null,
+        };
+        
+        console.log('[API Debug] Making backend request to:', `${API_BASE_URL}/ai-agent/stream`);
+        console.log('[API Debug] Request body:', requestBody);
+        
+        const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (response.ok) {
+          setConsoleOutput(prev => [...prev, `✅ Connected to backend, starting API generation...`]);
+          const reader = response.body?.getReader();
+          if (reader) {
+            let apiCode = '';
+            let documentation = '';
+            let chunkCount = 0;
+            let isCodeSection = false;
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = new TextDecoder().decode(value);
+              const lines = chunk.split('\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6);
+                  if (data === '[DONE]') {
+                    // Generation complete
+                    setConsoleOutput(prev => [...prev, `🎉 API generation completed!`]);
+                    setConsoleOutput(prev => [...prev, `📊 Total chunks received: ${chunkCount}`]);
+                    
+                    addMessage({
+                      role: 'assistant',
+                      content: `✅ API code and documentation generated successfully! 
+
+📝 **Code Location:** The generated API code is now available in the "Generated API Code" box in the API tab.
+
+📚 **Documentation:** API documentation is available in the "API Documentation" box.
+
+🚀 **Next Steps:** You can now review the generated code and documentation, and deploy your API.`
+                    });
+                    break;
+                  } else if (data !== '') {
+                    try {
+                      const parsed = JSON.parse(data);
+                      if (parsed.content) {
+                        chunkCount++;
+                        const content = parsed.content;
+                        
+                        // Check if this is code or documentation based on content
+                        if (content.includes('```') || content.includes('function') || content.includes('const') || content.includes('export')) {
+                          apiCode += content;
+                          setGeneratedApiCode(apiCode);
+                        } else {
+                          documentation += content;
+                          setApiDocumentation(documentation);
+                        }
+                        
+                        // Update console every 10 chunks
+                        if (chunkCount % 10 === 0) {
+                          setConsoleOutput(prev => [...prev, `📦 Received chunk ${chunkCount}, code length: ${apiCode.length} chars, docs length: ${documentation.length} chars`]);
+                        }
+                      } else if (parsed.error) {
+                        console.error('API generation error:', parsed.error);
+                        setGeneratedApiCode('Error: ' + parsed.error);
+                        setConsoleOutput(prev => [...prev, `❌ Error: ${parsed.error}`]);
+                        
+                        addMessage({
+                          role: 'assistant',
+                          content: `❌ Error generating API: ${parsed.error}`
+                        });
+                      }
+                    } catch (e) {
+                      // Ignore parsing errors
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          console.error('Failed to generate API code:', response.status);
+          setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
+          
+          addMessage({
+            role: 'assistant',
+            content: `❌ Failed to generate API. Please try again.`
+          });
+        }
+      } catch (error) {
+        console.error('Error generating API code:', error);
+        setConsoleOutput(prev => [...prev, `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+        
+        addMessage({
+          role: 'assistant',
+          content: `❌ Error generating API: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+      }
+      return;
+    } else if (shouldGenerateSchema) {
+      // Handle Schema generation when explicitly requested
+      console.log('[Frontend] !!! ENTERING SCHEMA GENERATION BLOCK !!!');
+      console.log('[Frontend] Detected Schema generation request - sending to schema generation endpoint');
+      console.log('[Frontend] shouldGenerateLambda:', shouldGenerateLambda);
+      console.log('[Frontend] shouldGenerateSchema:', shouldGenerateSchema);
+      console.log('[Frontend] isLambdaRequest:', isLambdaRequest);
+      console.log('[Frontend] isLambdaWithSchemaContext:', isLambdaWithSchemaContext);
+      
+      // Double-check: if lambda context is detected, don't generate schema
+      if (isLambdaWithSchemaContext || isLambdaRequest) {
+        console.log('[Frontend] SAFEGUARD: Lambda context detected, skipping schema generation');
+        addMessage({
+          role: 'assistant',
+          content: `I detected that you want to generate a Lambda function! Since you have a schema dropped as context, I'll help you create a Lambda handler that uses that schema. Please use the Lambda tab or ask me to 'generate a lambda handler' to create Lambda functions.`
+        });
+        return;
+      }
+      
+      setConsoleOutput(prev => [...prev, `🚀 Starting Schema generation from chat request`]);
+      
+      // Automatically switch to Schema tab
+      setActiveTab('schema');
+      
+      // Use the existing schema generation logic
+      try {
+        setIsStreamingSchema(true);
+        setLiveSchema('');
+        
+        const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: userMessage,
+            namespace: namespace ? { id: namespace['namespace-id'] } : null,
+            action: null,
+            history: messages.map(m => ({ role: m.role, content: m.content })),
+            userId,
+            schema: null,
+          })
+        });
+
+        if (response.ok) {
+          const reader = response.body?.getReader();
+          if (reader) {
+            let schemaContent = '';
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = new TextDecoder().decode(value);
+              const lines = chunk.split('\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6);
+                  if (data === '[DONE]') {
+                    setIsStreamingSchema(false);
+                    break;
+                  } else if (data !== '') {
+                    try {
+                      const parsed = JSON.parse(data);
+                      if (parsed.content) {
+                        schemaContent += parsed.content;
+                        setLiveSchema(schemaContent);
+                      }
+                    } catch (e) {
+                      console.error('[Schema Generation] Error parsing data:', e);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Schema Generation] Error:', error);
+        setIsStreamingSchema(false);
+        addMessage({
+          role: 'assistant',
+          content: `Sorry, I encountered an error while generating the schema: ${error.message}`
+        });
+      }
+      return;
     }
 
     // Always pass the existing schema if we have one, regardless of the request type
@@ -583,17 +1289,12 @@ What would you like to work on today?`,
     }
     
     // Add console output for schema generation start
-    const schemaKeywords = ['schema', 'json', 'model', 'structure', 'format'];
-    const isSchemaRequest = schemaKeywords.some(keyword => lowerMessage.includes(keyword));
-    
-    if (isSchemaRequest) {
-      if (schemaToEdit) {
-        setConsoleOutput(prev => [...prev, `📝 Schema editing request: ${userMessage}`]);
-        setConsoleOutput(prev => [...prev, `📋 Using existing schema as base`]);
-      } else {
-        setConsoleOutput(prev => [...prev, `🆕 Schema generation request: ${userMessage}`]);
-        setConsoleOutput(prev => [...prev, `✨ Creating new schema from scratch`]);
-      }
+    if (schemaToEdit) {
+      setConsoleOutput(prev => [...prev, `📝 Schema editing request: ${userMessage}`]);
+      setConsoleOutput(prev => [...prev, `📋 Using existing schema as base`]);
+    } else {
+      setConsoleOutput(prev => [...prev, `🆕 Schema generation request: ${userMessage}`]);
+      setConsoleOutput(prev => [...prev, `✨ Creating new schema from scratch`]);
     }
     
     console.log('[Frontend] Sending request to backend:', {
@@ -602,20 +1303,35 @@ What would you like to work on today?`,
       schemaToEdit: schemaToEdit ? 'Schema exists' : 'No schema'
     });
     
+    console.log('[Frontend] Sending regular chat request to backend (no generation intent detected)');
+    console.log('[Frontend] This should NOT happen for lambda requests!');
     setConsoleOutput(prev => [...prev, `🌐 Connecting to AI agent backend...`]);
     
-    const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: userMessage,
-        namespace: namespace ? { id: namespace['namespace-id'] } : null,
-        action: null,
-        history: messages.map(m => ({ role: m.role, content: m.content })),
-        userId,
-        schema: schemaToEdit,
-      })
-    });
+        // Prepare context from uploaded files and dropped schemas for regular chat
+        const fileContext = uploadedFiles.length > 0 ? 
+          `\n\nUploaded Files Context:\n${uploadedFiles.map(file => 
+            `File: ${file.name} (${file.type})\nContent:\n${file.content?.substring(0, 1000)}${file.content && file.content.length > 1000 ? '...' : ''}`
+          ).join('\n\n')}` : '';
+        
+        const schemaContext = droppedSchemas.length > 0 ? 
+          `\n\nDropped Schema Context:\n${droppedSchemas.map(schema => 
+            `Schema: ${schema.schemaName || schema.name || 'Unknown'}\nContent:\n${JSON.stringify(schema, null, 2)}`
+          ).join('\n\n')}` : '';
+        
+        const enhancedMessage = userMessage + fileContext + schemaContext;
+        
+        const response = await fetch(`${API_BASE_URL}/ai-agent/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: enhancedMessage,
+            namespace: namespace ? { id: namespace['namespace-id'] } : null,
+            action: null,
+            history: messages.map(m => ({ role: m.role, content: m.content })),
+            userId,
+            schema: schemaToEdit,
+          })
+        });
     
     if (!response.ok) {
       setConsoleOutput(prev => [...prev, `❌ Failed to connect to backend: ${response.status}`]);
@@ -1489,7 +2205,6 @@ What would you like to work on today?`,
   };
 
   // State for saved items
-  const [savedSchemas, setSavedSchemas] = useState<any[]>([]); // For Lambda dropdown only
   const [savedApis, setSavedApis] = useState<any[]>([]);
   const [savedFiles, setSavedFiles] = useState<ProjectFile[]>([]);
 
@@ -1499,8 +2214,11 @@ What would you like to work on today?`,
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationHistory, setGenerationHistory] = useState<any[]>([]);
 
-  // 1. Filter schemas for the current namespace in the Lambda tab dropdown
-  const filteredSavedSchemas = savedSchemas.filter(s => !namespace || !namespace['namespace-id'] || s.namespaceId === namespace['namespace-id']);
+
+
+
+
+
 
   // Place function declarations before their first usage
   function generateLambdaFileStructure(lambdaCode: string, functionName: string, runtime: string) {
@@ -2288,6 +3006,26 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
           <Code size={16} /> Lambda
         </button>
         <button
+          onClick={() => setActiveTab('api')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'api'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Database size={16} /> API
+        </button>
+        <button
+          onClick={() => setActiveTab('web-scraping')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'web-scraping'
+              ? 'border-blue-500 text-blue-600 bg-white'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <FileText size={16} /> Web Scraping
+        </button>
+        <button
           onClick={() => setActiveTab('files')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
             activeTab === 'files'
@@ -2358,12 +3096,194 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
             </div>
           </div>
         )}
+        {activeTab === 'api' && (
+          <div className="h-full overflow-y-auto">
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-2">API Generation & Management</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Use the chat below to generate and manage APIs. The AI will create API endpoints, routes, and documentation based on your descriptions.
+                <br />
+                <span className="text-blue-600 font-medium">💡 Tip:</span> Drag schemas from the Schema tab to provide context for API generation!
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h4 className="font-medium text-green-800 mb-2">Instructions:</h4>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>• Describe the API endpoints you want to create</li>
+                  <li>• Specify HTTP methods (GET, POST, PUT, DELETE)</li>
+                  <li>• Include authentication and validation requirements</li>
+                  <li>• The AI will generate complete API code and documentation</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium mb-2">Generated API Code</h4>
+              <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
+                {generatedApiCode || '// API code will appear here after generation'}
+              </pre>
+            </div>
+            
+            <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium mb-2">API Documentation</h4>
+              <div className="bg-gray-100 p-3 rounded text-xs overflow-x-auto" style={{ minHeight: 80 }}>
+                {apiDocumentation || '// API documentation will appear here after generation'}
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'web-scraping' && (
+          <div className="h-full overflow-y-auto">
+            <div className="mb-4">
+              <h3 className="font-medium text-lg mb-2">Web Scraping Agent</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Automatically scrape APIs, schemas, and documentation from popular services like Shopify, Pinterest, Google, Stripe, and GitHub.
+                <br />
+                <span className="text-blue-600 font-medium">💡 Tip:</span> Select a service and click "Scrape & Save" to import everything into your namespace!
+              </p>
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-800 mb-2">Instructions:</h4>
+                <ul className="text-sm text-purple-700 space-y-1">
+                  <li>• Select a service from the dropdown below</li>
+                  <li>• Choose what to scrape (APIs, Schemas, Documentation)</li>
+                  <li>• Click "Preview" to see what will be scraped</li>
+                  <li>• Click "Scrape & Save" to import everything to your namespace</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+              <h4 className="font-medium mb-4">Service Selection</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Service or URL</label>
+                  <select 
+                    value={selectedService} 
+                    onChange={(e) => setSelectedService(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                  >
+                    <option value="">Select a service or enter custom URL...</option>
+                    {supportedServices.map(service => (
+                      <option key={service.key} value={service.key}>
+                        {service.name}
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {selectedService === 'custom-url' && (
+                    <input
+                      type="url"
+                      placeholder="Enter any URL (e.g., https://api.example.com/docs)"
+                      value={customUrl}
+                      onChange={(e) => setCustomUrl(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Options</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={scrapeOptions.apis} 
+                        onChange={(e) => setScrapeOptions(prev => ({ ...prev, apis: e.target.checked }))}
+                        className="mr-2"
+                      />
+                      Scrape APIs
+                    </label>
+                    <label className="flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={scrapeOptions.schemas} 
+                        onChange={(e) => setScrapeOptions(prev => ({ ...prev, schemas: e.target.checked }))}
+                        className="mr-2"
+                      />
+                      Scrape Schemas
+                    </label>
+                    <label className="flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={scrapeOptions.documentation} 
+                        onChange={(e) => setScrapeOptions(prev => ({ ...prev, documentation: e.target.checked }))}
+                        className="mr-2"
+                      />
+                      Scrape Documentation
+                    </label>
+                    <label className="flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={scrapeOptions.followLinks} 
+                        onChange={(e) => setScrapeOptions(prev => ({ ...prev, followLinks: e.target.checked }))}
+                        className="mr-2"
+                      />
+                      Follow Links (find more content)
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handlePreviewScrape}
+                  disabled={!selectedService || isScraping}
+                  className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isScraping ? 'Scraping...' : 'Preview'}
+                </button>
+                <button
+                  onClick={handleScrapeAndSave}
+                  disabled={!selectedService || isScraping}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isScraping ? 'Scraping...' : 'Scrape & Save'}
+                </button>
+              </div>
+            </div>
+            
+            {scrapedData && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                <h4 className="font-medium mb-4">Scraped Data Preview</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-3 rounded">
+                    <h5 className="font-medium text-blue-800">APIs</h5>
+                    <p className="text-2xl font-bold text-blue-600">{scrapedData.apis?.length || 0}</p>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded">
+                    <h5 className="font-medium text-green-800">Schemas</h5>
+                    <p className="text-2xl font-bold text-green-600">{scrapedData.schemas?.length || 0}</p>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded">
+                    <h5 className="font-medium text-purple-800">Documentation</h5>
+                    <p className="text-2xl font-bold text-purple-600">{scrapedData.documentation?.length || 0}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="font-medium mb-2">Scraping Log</h4>
+              <div className="bg-gray-100 p-3 rounded text-xs overflow-y-auto max-h-40">
+                {scrapingLog.length > 0 ? (
+                  scrapingLog.map((log, index) => (
+                    <div key={index} className={`mb-1 ${log.type === 'error' ? 'text-red-600' : log.type === 'success' ? 'text-green-600' : 'text-gray-600'}`}>
+                      {log.timestamp}: {log.message}
+                    </div>
+                  ))
+                ) : (
+                  'No scraping activity yet...'
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === 'schema' && (
           <div className="h-full overflow-y-auto">
             <div className="mb-4">
               <h3 className="font-medium text-lg mb-2">Schema Management</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Use the chat below to generate and manage schemas. The AI will create schemas based on your descriptions.
+                <br />
+                <span className="text-blue-600 font-medium">💡 Tip:</span> Drag any schema below to the chat area to provide context for your AI conversations!
               </p>
             </div>
             
@@ -2408,9 +3328,19 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
             ) : (
               <div className="space-y-4">
                 {schemas.map((schema: any, index: number) => (
-                  <div key={schema.id} className={`border border-gray-200 rounded-lg p-4 ${isEditingSchema && index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-white'}`}>
+                  <div 
+                    key={schema.id} 
+                    className={`border border-gray-200 rounded-lg p-4 ${isEditingSchema && index === 0 ? 'bg-blue-50 border-blue-200' : 'bg-white'} cursor-move hover:shadow-md transition-shadow`}
+                    draggable
+                    onDragStart={(e) => handleSchemaDragStart(e, schema)}
+                    onDragEnd={handleSchemaDragEnd}
+                    title="Drag this schema to the chat area for context"
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <span className="text-xs">📋</span>
+                        </div>
                         <h4 className="font-medium">{schema.schemaName || schema.name || 'Unnamed Schema'}</h4>
                         {schema.edited && (
                           <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">Edited</span>
@@ -2673,25 +3603,7 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
               <div className="space-y-4">
                 <h4 className="font-medium">Lambda Configuration</h4>
                 
-                <div>
-                  <label className="block font-semibold mb-1">Select Schema</label>
-                  <select
-                    className="w-full border rounded px-2 py-1 mb-2"
-                    value={lambdaForm.schemaId}
-                    onChange={e => {
-                      const schemaId = e.target.value;
-                      const schema = savedSchemas.find((s: any) => String(s.id) === String(schemaId));
-                      setLambdaForm(f => ({ ...f, schemaId }));
-                      setSelectedSchema(schema);
-                    }}
-                    required
-                  >
-                    <option value="">Select a schema</option>
-                    {filteredSavedSchemas.map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.schemaName || s.name || 'Unnamed Schema'}</option>
-                    ))}
-                  </select>
-                </div>
+
                 
                 <div>
                   <label className="block font-semibold mb-1">Function Name</label>
@@ -2831,7 +3743,17 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+      <div 
+        ref={schemaDropRef}
+        className={`flex-1 overflow-y-auto p-4 space-y-4 bg-white transition-colors ${
+          isSchemaDropOver ? 'bg-purple-50 border-2 border-dashed border-purple-300' : ''
+        }`}
+      >
+        {isSchemaDropOver && (
+          <div className="text-center py-8 text-purple-600 font-medium">
+            Drop schema here to add context
+          </div>
+        )}
         {messages.map((message) => (
           <div
             key={message.id}
@@ -2854,6 +3776,113 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
         <div ref={messagesEndRef} />
       </div>
 
+      {/* File Upload and Context Area */}
+      {(uploadedFiles.length > 0 || droppedSchemas.length > 0) && (
+        <div className="border-t border-gray-200 p-4 bg-gray-50">
+          <div className="space-y-3">
+            {/* Uploaded Files */}
+            {uploadedFiles.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">📎 Uploaded Files</h4>
+                <div className="flex flex-wrap gap-2">
+                  {uploadedFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {file.type.startsWith('image/') ? (
+                        <Image className="w-4 h-4 text-blue-500" />
+                      ) : file.type.includes('json') ? (
+                        <FileText className="w-4 h-4 text-green-500" />
+                      ) : file.type.includes('zip') || file.type.includes('tar') ? (
+                        <Archive className="w-4 h-4 text-orange-500" />
+                      ) : (
+                        <File className="w-4 h-4 text-gray-500" />
+                      )}
+                      <span className="truncate max-w-32">{file.name}</span>
+                      <span className="text-xs text-gray-500">
+                        ({(file.size / 1024).toFixed(1)} KB)
+                      </span>
+                      <button
+                        onClick={() => removeUploadedFile(file.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dropped Schemas */}
+            {droppedSchemas.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">
+                  📋 Schema Context ({droppedSchemas.length} schema{droppedSchemas.length !== 1 ? 's' : ''})
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {droppedSchemas.map((schema) => (
+                    <div
+                      key={schema.id}
+                      className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      <Database className="w-4 h-4 text-purple-500" />
+                      <span className="truncate max-w-32">
+                        {schema.schemaName || schema.name || 'Unknown Schema'}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {schema.source === 'sidebar' ? '(from sidebar)' : '(from workspace)'}
+                      </span>
+                      <button
+                        onClick={() => removeDroppedSchema(schema.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* File Upload Drop Zone */}
+      <div
+        className={`border-t border-gray-200 p-4 bg-white ${
+          isDragOver ? 'bg-blue-50 border-blue-300' : ''
+        } ${isDraggingSchema ? 'bg-purple-50 border-purple-300' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className="flex items-center gap-3">
+          {/* File Upload Button */}
+          <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+            isUploading ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+          }`}>
+            <Upload className={`w-4 h-4 ${isUploading ? 'animate-pulse' : ''}`} />
+            <span className="text-sm">{isUploading ? 'Uploading...' : 'Upload Files'}</span>
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
+              accept=".txt,.json,.js,.ts,.py,.java,.cpp,.c,.html,.css,.md,.xml,.yaml,.yml,.csv,.pdf,.jpg,.jpeg,.png,.gif"
+            />
+          </label>
+
+          {/* Drag & Drop Indicator */}
+          <div className="flex-1 text-center">
+            <div className={`text-sm ${isDragOver ? 'text-blue-600' : isDraggingSchema ? 'text-purple-600' : isSchemaDropOver ? 'text-purple-600' : 'text-gray-500'}`}>
+              {isDragOver ? 'Drop files here' : isDraggingSchema ? 'Drop schema here for context' : isSchemaDropOver ? 'Drop schema from sidebar here' : 'Drag & drop files here'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Chat Input */}
       <div className="border-t border-gray-200 p-4 bg-white">
         <div className="flex gap-2">
@@ -2862,7 +3891,7 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
+            placeholder="Type your message... (Upload files or drag schemas for context)"
             className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             rows={1}
             disabled={isLoading}
@@ -2876,6 +3905,8 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
           </button>
         </div>
       </div>
+      
+
     </div>
   );
 };
