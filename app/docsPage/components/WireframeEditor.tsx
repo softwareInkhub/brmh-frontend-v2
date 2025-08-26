@@ -43,6 +43,7 @@ interface WireframeElement {
   sy?: number
   ex?: number
   ey?: number
+  points?: { x: number; y: number }[] // For pencil drawings
   style: {
     backgroundColor: string
     borderColor: string
@@ -75,7 +76,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   const [wireframeName, setWireframeName] = useState(wireframe?.name || '')
   const [elements, setElements] = useState<WireframeElement[]>(wireframe?.elements || [])
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser'>('select')
+  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser' | 'image'>('select')
   const [canvas, setCanvas] = useState({
     width: wireframe?.canvas?.width || 800,
     height: wireframe?.canvas?.height || 600,
@@ -95,6 +96,11 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   const [isRotating, setIsRotating] = useState(false)
   const [rotateElementId, setRotateElementId] = useState<string | null>(null)
   const [rotateData, setRotateData] = useState({ cx: 0, cy: 0, startAngle: 0, initialRotation: 0 })
+  const [pencilPoints, setPencilPoints] = useState<{ x: number; y: number }[]>([])
+  const [isPenciling, setIsPenciling] = useState(false)
+  const [isErasing, setIsErasing] = useState(false)
+  const [eraserPos, setEraserPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [eraserRadius] = useState<number>(12)
 
   const addElement = (type: WireframeElement['type'], x: number, y: number, width?: number, height?: number) => {
     const newElement: WireframeElement = {
@@ -167,13 +173,90 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     )
   }
 
+  const renderLine = (element: WireframeElement) => {
+    const { width, height } = element
+    const sx = element.sx ?? 0
+    const sy = element.sy ?? height / 2
+    const ex = element.ex ?? width
+    const ey = element.ey ?? height / 2
+    const stroke = element.style.borderColor || '#374151'
+    const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+
+    return (
+      <svg
+        style={{
+          width: width,
+          height: height,
+          pointerEvents: 'none'
+        }}
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <line 
+          x1={sx} 
+          y1={sy} 
+          x2={ex} 
+          y2={ey} 
+          stroke={stroke} 
+          strokeWidth={strokeWidth} 
+          strokeLinecap="round"
+        />
+      </svg>
+    )
+  }
+
+  const renderPencil = (element: WireframeElement) => {
+    if (!element.points || element.points.length < 2) return null
+    
+    const stroke = element.style.borderColor || '#374151'
+    const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+    
+    // Use stored bounding box for eraser hit-test compatibility
+    const left = element.x
+    const top = element.y
+    const width = Math.max(element.width, 1)
+    const height = Math.max(element.height, 1)
+    
+    // Convert points to relative coordinates based on stored bbox
+    const relativePoints = element.points.map(p => ({
+      x: p.x - left,
+      y: p.y - top
+    }))
+    
+    const pathData = relativePoints.map((point, index) => 
+      `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+    ).join(' ')
+
+    return (
+      <svg
+        style={{
+          position: 'absolute',
+          left,
+          top,
+          width,
+          height,
+          pointerEvents: 'none'
+        }}
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <path
+          d={pathData}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </svg>
+    )
+  }
+
   const handleMouseDown = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
     
-    // Check if clicking on resize or rotate handle
-    if (selectedElement && selectedTool === 'select') {
+    // Check if clicking on resize or rotate handle (allow regardless of tool)
+    if (selectedElement) {
       const element = elements.find(el => el.id === selectedElement)
       if (element) {
         const handleSize = 8
@@ -239,6 +322,27 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     }
     
     if (selectedTool === 'select') return
+    
+    // Handle pencil tool
+    if (selectedTool === 'pencil') {
+      setIsPenciling(true)
+      setIsDrawing(true)
+      setPencilPoints([{ x, y }])
+      return
+    }
+    
+    // Handle eraser tool
+    if (selectedTool === 'eraser') {
+      setIsErasing(true)
+      setEraserPos({ x, y })
+      // Immediately erase on mousedown too
+      const hit = elements.find(element => (
+        x >= element.x && x <= element.x + element.width &&
+        y >= element.y && y <= element.y + element.height
+      ))
+      if (hit) removeElement(hit.id)
+      return
+    }
     
     setIsDrawing(true)
     setDrawStart({ x, y })
@@ -365,8 +469,29 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       return
     }
     
-    if (!isDrawing || selectedTool === 'select') return
+    if (selectedTool === 'select') return
+
+    // Update eraser preview and perform erase while dragging
+    if (selectedTool === 'eraser') {
+      setEraserPos({ x, y })
+      if (isErasing) {
+        const hit = elements.find(element => (
+          x >= element.x && x <= element.x + element.width &&
+          y >= element.y && y <= element.y + element.height
+        ))
+        if (hit) removeElement(hit.id)
+      }
+      return
+    }
+
+    // Handle pencil drawing (allow even if isDrawing was not set elsewhere)
+    if (isPenciling && selectedTool === 'pencil') {
+      setPencilPoints(prev => [...prev, { x, y }])
+      return
+    }
     
+    if (!isDrawing) return
+
     setDrawEnd({ x, y })
     
     if (tempElement) {
@@ -377,7 +502,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       
       let left = Math.min(startX, endX)
       let top = Math.min(startY, endY)
-      const width = Math.max(Math.abs(endX - startX), 2)
+      let width = Math.max(Math.abs(endX - startX), 2)
       let height = Math.max(Math.abs(endY - startY), 2)
       
       // compute relative positions inside the element box
@@ -386,8 +511,39 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       let ex = endX - left
       let ey = endY - top
 
+      // Ensure circles maintain perfect circle shape
+      if (tempElement.type === 'circle') {
+        const size = Math.max(width, height, 40) // Minimum 40px diameter
+        width = size
+        height = size
+        
+        // Recalculate position to center the circle
+        const centerX = (startX + endX) / 2
+        const centerY = (startY + endY) / 2
+        left = centerX - size / 2
+        top = centerY - size / 2
+        
+        // Update relative positions
+        sx = startX - left
+        sy = startY - top
+        ex = endX - left
+        ey = endY - top
+      }
+
       // Ensure arrows have some visual height and center the line
       if (tempElement.type === 'arrow') {
+        const minH = Math.max(24, (tempElement.style.borderWidth || 2) * 4)
+        if (height < minH) {
+          const pad = (minH - height) / 2
+          top = top - pad
+          height = minH
+          sy += pad
+          ey += pad
+        }
+      }
+
+      // Ensure lines have some visual height and center the line
+      if (tempElement.type === 'line') {
         const minH = Math.max(24, (tempElement.style.borderWidth || 2) * 4)
         if (height < minH) {
           const pad = (minH - height) / 2
@@ -435,7 +591,48 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       return
     }
     
-    if (!isDrawing || selectedTool === 'select') return
+    if (selectedTool === 'select') return
+
+    // Handle eraser end (keep tool selected; just stop erasing)
+    if (selectedTool === 'eraser') {
+      setIsErasing(false)
+      return
+    }
+
+    // Handle pencil end (finish regardless of isDrawing flag)
+    if (isPenciling) {
+      setIsPenciling(false)
+      if (pencilPoints.length > 1) {
+        // Compute bounding box for pencil stroke so eraser can hit-test by bbox
+        const minX = Math.min(...pencilPoints.map(p => p.x))
+        const minY = Math.min(...pencilPoints.map(p => p.y))
+        const maxX = Math.max(...pencilPoints.map(p => p.x))
+        const maxY = Math.max(...pencilPoints.map(p => p.y))
+        const newElement: WireframeElement = {
+          id: `element-${Date.now()}`,
+          type: 'pencil',
+          x: minX,
+          y: minY,
+          width: Math.max(maxX - minX, 1),
+          height: Math.max(maxY - minY, 1),
+          points: [...pencilPoints],
+          content: '',
+          style: {
+            backgroundColor: 'transparent',
+            borderColor: '#374151',
+            borderWidth: 2,
+            borderStyle: 'solid',
+            borderRadius: 0,
+            fontSize: 14,
+            color: '#374151',
+            opacity: 1
+          }
+        }
+        setElements([...elements, newElement])
+      }
+      setPencilPoints([])
+      return
+    }
     
     setIsDrawing(false)
     
@@ -460,8 +657,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       setTempElement(null)
     }
     
-    // Reset to select tool after drawing
-    setSelectedTool('select')
+    // Keep current tool selected (do not auto-switch for pencil/eraser)
   }
 
   const removeElement = (elementId: string) => {
@@ -814,6 +1010,107 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                           </>
                         )}
                       </div>
+                    ) : element.type === 'line' ? (
+                      <div
+                        className={`absolute cursor-pointer ${
+                          selectedElement === element.id ? 'ring-2 ring-primary-500' : ''
+                        } ${isDragging && dragElement === element.id ? 'z-10' : ''}`}
+                        style={{
+                          left: element.x,
+                          top: element.y,
+                          width: element.width,
+                          height: element.height,
+                          transform: `rotate(${element.rotation || 0}deg)`,
+                          transformOrigin: 'center',
+                          pointerEvents: 'auto'
+                        }}
+                        onClick={() => setSelectedElement(element.id)}
+                      >
+                        {renderLine(element)}
+                        {selectedElement === element.id && (
+                          <>
+                            <button
+                              onClick={() => removeElement(element.id)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 z-20"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            {/* Rotate Handle (top-left) */}
+                            <div
+                              className="absolute -top-4 -left-4 w-4 h-4 bg-purple-500 border-2 border-white rounded-full cursor-grab z-20"
+                              onMouseDown={(ev) => {
+                                ev.stopPropagation()
+                                const cx = element.x + element.width / 2
+                                const cy = element.y + element.height / 2
+                                const doc = (ev.currentTarget as HTMLDivElement).ownerDocument
+                                const canvasEl = doc.getElementById('wireframe-canvas-layer') as HTMLDivElement | null
+                                const rect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 } as DOMRect
+                                const mx = ev.clientX - rect.left
+                                const my = ev.clientY - rect.top
+                                const startAngle = Math.atan2(my - cy, mx - cx)
+                                setIsRotating(true)
+                                setRotateElementId(element.id)
+                                setRotateData({ cx, cy, startAngle, initialRotation: element.rotation || 0 })
+                              }}
+                            />
+                            {/* Resize Handles */}
+                            <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-nw-resize" />
+                            <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-n-resize" />
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-ne-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-w-resize" />
+                            <div className="absolute top-1/2 transform -translate-y-1/2 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-e-resize" />
+                            <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 border border-white cursor-sw-resize" />
+                            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-blue-500 border border-white cursor-s-resize" />
+                            <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-blue-500 border border-white cursor-se-resize" />
+                          </>
+                        )}
+                      </div>
+                    ) : element.type === 'pencil' ? (
+                      <div
+                        className={`absolute cursor-pointer ${
+                          selectedElement === element.id ? 'ring-2 ring-primary-500' : ''
+                        } ${isDragging && dragElement === element.id ? 'z-10' : ''}`}
+                        style={{
+                          left: element.x,
+                          top: element.y,
+                          width: element.width,
+                          height: element.height,
+                          transform: `rotate(${element.rotation || 0}deg)`,
+                          transformOrigin: 'center',
+                          pointerEvents: 'auto'
+                        }}
+                        onClick={() => setSelectedElement(element.id)}
+                      >
+                        {renderPencil(element)}
+                        {selectedElement === element.id && (
+                          <>
+                            <button
+                              onClick={() => removeElement(element.id)}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 z-20"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            {/* Rotate Handle (top-left) */}
+                            <div
+                              className="absolute -top-4 -left-4 w-4 h-4 bg-purple-500 border-2 border-white rounded-full cursor-grab z-20"
+                              onMouseDown={(ev) => {
+                                ev.stopPropagation()
+                                const cx = element.x + element.width / 2
+                                const cy = element.y + element.height / 2
+                                const doc = (ev.currentTarget as HTMLDivElement).ownerDocument
+                                const canvasEl = doc.getElementById('wireframe-canvas-layer') as HTMLDivElement | null
+                                const rect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 } as DOMRect
+                                const mx = ev.clientX - rect.left
+                                const my = ev.clientY - rect.top
+                                const startAngle = Math.atan2(my - cy, mx - cx)
+                                setIsRotating(true)
+                                setRotateElementId(element.id)
+                                setRotateData({ cx, cy, startAngle, initialRotation: element.rotation || 0 })
+                              }}
+                            />
+                          </>
+                        )}
+                      </div>
                     ) : (
                       <motion.div
                         initial={{ scale: 0 }}
@@ -828,9 +1125,9 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                           height: element.height,
                           transform: `rotate(${element.rotation || 0}deg)`,
                           transformOrigin: 'center',
-                          backgroundColor: element.style.backgroundColor,
-                          border: `${element.style.borderWidth}px ${element.style.borderStyle || 'solid'} ${element.style.borderColor}`,
-                          borderRadius: element.style.borderRadius,
+                          backgroundColor: element.type === 'diamond' ? 'transparent' : element.style.backgroundColor,
+                          border: element.type === 'diamond' ? 'none' : `${element.style.borderWidth}px ${element.style.borderStyle || 'solid'} ${element.style.borderColor}`,
+                          borderRadius: element.type === 'circle' ? '50%' : element.style.borderRadius,
                           fontSize: element.style.fontSize,
                           color: element.style.color,
                           opacity: element.style.opacity ?? 1,
@@ -840,7 +1137,37 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                         }}
                         onClick={() => setSelectedElement(element.id)}
                       >
-                        {element.content}
+                        {element.type === 'diamond' ? (
+                          <>
+                            {/* Border layer */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                backgroundColor: element.style.borderColor,
+                                WebkitClipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
+                                clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
+                                opacity: element.style.opacity ?? 1
+                              }}
+                            />
+                            {/* Fill layer (simulates border by insetting) */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: element.style.borderWidth,
+                                top: element.style.borderWidth,
+                                right: element.style.borderWidth,
+                                bottom: element.style.borderWidth,
+                                backgroundColor: element.style.backgroundColor,
+                                WebkitClipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
+                                clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)',
+                                opacity: element.style.opacity ?? 1
+                              }}
+                            />
+                          </>
+                        ) : (
+                          element.content
+                        )}
                         {selectedElement === element.id && (
                           <>
                             <button
@@ -894,7 +1221,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                       height: tempElement.height,
                       backgroundColor: tempElement.style.backgroundColor,
                       border: `${tempElement.style.borderWidth}px solid ${tempElement.style.borderColor}`,
-                      borderRadius: tempElement.style.borderRadius,
+                      borderRadius: tempElement.type === 'circle' ? '50%' : tempElement.style.borderRadius,
                       fontSize: tempElement.style.fontSize,
                       color: tempElement.style.color,
                       display: 'flex',
@@ -925,9 +1252,30 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                         />
                         {/* Arrowhead */}
                         <polygon
-                          points={`${tempElement.ex - 10},${tempElement.ey - 5} ${tempElement.ex},${tempElement.ey} ${tempElement.ex - 10},${tempElement.ey + 5}`}
+                          points={`${(tempElement.ex || 0) - 10},${(tempElement.ey || 0) - 5} ${tempElement.ex || 0},${tempElement.ey || 0} ${(tempElement.ex || 0) - 10},${(tempElement.ey || 0) + 5}`}
                           fill={tempElement.style.borderColor || '#3B82F6'}
                           opacity="0.7"
+                        />
+                      </svg>
+                    ) : tempElement.type === 'line' ? (
+                      <svg
+                        style={{
+                          width: tempElement.width,
+                          height: tempElement.height,
+                          pointerEvents: 'none'
+                        }}
+                        viewBox={`0 0 ${tempElement.width} ${tempElement.height}`}
+                      >
+                        {/* Line */}
+                        <line
+                          x1={tempElement.sx}
+                          y1={tempElement.sy}
+                          x2={tempElement.ex}
+                          y2={tempElement.ey}
+                          stroke={tempElement.style.borderColor || '#3B82F6'}
+                          strokeWidth={Math.max(1, tempElement.style.borderWidth || 2)}
+                          strokeLinecap="round"
+                          strokeDasharray="5,5"
                         />
                       </svg>
                     ) : (
@@ -938,12 +1286,54 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
 
                 {/* Canvas Mouse Event Handlers */}
                 <div 
-                  className={`absolute inset-0 ${selectedTool !== 'select' ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-default'}`}
+                  className={`absolute inset-0 ${selectedTool === 'pencil' ? 'cursor-crosshair' : selectedTool === 'eraser' ? 'cursor-pointer' : selectedTool !== 'select' ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-default'}`}
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
                 />
+
+                {/* Pencil Drawing Preview */}
+                {isPenciling && pencilPoints.length > 1 && (
+                  <svg
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none'
+                    }}
+                  >
+                    <path
+                      d={pencilPoints.map((point, index) => 
+                        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+                      ).join(' ')}
+                      stroke="#3B82F6"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                      strokeDasharray="5,5"
+                    />
+                  </svg>
+                )}
+
+                {/* Eraser Circle Preview */}
+                {selectedTool === 'eraser' && (
+                  <div
+                    className="pointer-events-none absolute"
+                    style={{
+                      left: eraserPos.x - eraserRadius,
+                      top: eraserPos.y - eraserRadius,
+                      width: eraserRadius * 2,
+                      height: eraserRadius * 2,
+                      borderRadius: '50%',
+                      border: '2px solid rgba(59, 130, 246, 0.6)',
+                      backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                    }}
+                  />
+                )}
               </div>
             </div>
 
@@ -1116,4 +1506,6 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     </div>
   )
 }
+
+
 
