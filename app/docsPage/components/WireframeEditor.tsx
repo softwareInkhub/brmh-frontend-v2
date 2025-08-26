@@ -55,6 +55,11 @@ interface WireframeElement {
     fontSize: number
     color: string
     opacity?: number
+    fontWeight?: 'normal' | 'bold' | 'lighter' | 'bolder'
+    fontStyle?: 'normal' | 'italic'
+    textDecoration?: 'none' | 'underline' | 'line-through'
+    fontFamily?: string
+    textAlign?: 'left' | 'center' | 'right'
   }
 }
 
@@ -126,7 +131,12 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
         borderRadius: type === 'circle' ? 50 : type === 'diamond' ? 0 : type === 'button' ? 6 : 0,
         fontSize: 14,
         color: type === 'button' ? '#FFFFFF' : '#374151',
-        opacity: 1
+        opacity: 1,
+        fontWeight: 'normal',
+        fontStyle: 'normal',
+        textDecoration: 'none',
+        fontFamily: 'Inter, system-ui, Arial',
+        textAlign: 'center'
       }
     }
     setElements([...elements, newElement])
@@ -1289,6 +1299,11 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                           borderRadius: element.type === 'circle' ? '50%' : element.style.borderRadius,
                           fontSize: element.style.fontSize,
                           color: element.style.color,
+                          fontWeight: element.style.fontWeight,
+                          fontStyle: element.style.fontStyle,
+                          textDecoration: element.style.textDecoration,
+                          fontFamily: element.style.fontFamily,
+                          textAlign: element.style.textAlign,
                           opacity: element.style.opacity ?? 1,
                           display: 'flex',
                           alignItems: 'center',
@@ -1561,7 +1576,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
 
             {/* Properties Panel */}
             {selectedElement && (
-              <div className="w-64 bg-gray-50 border-l border-gray-200 p-4">
+              <div className="w-80 h-full overflow-y-auto bg-gray-50/80 backdrop-blur-sm border-l border-gray-200 p-5">
                 <h3 className="font-medium text-gray-900 mb-4">Properties</h3>
                 <div className="space-y-4">
                   <div>
@@ -1574,6 +1589,172 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                       onChange={(e) => updateElement(selectedElement, { content: e.target.value })}
                       className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                     />
+                  </div>
+                  
+                  {/* Text Styles */}
+                  <div className="grid grid-cols-1 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Font Size</label>
+                      <input
+                        type="number"
+                        min="8"
+                        max="72"
+                        value={elements.find(e => e.id === selectedElement)?.style.fontSize || 14}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            fontSize: parseInt(e.target.value) || 12
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Colors Row: Text, Background, Stroke */}
+                  <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                    <div className="grid grid-cols-3 gap-2">
+                    {/* Text Color */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Text</label>
+                      <input
+                        type="color"
+                        value={elements.find(e => e.id === selectedElement)?.style.color || '#374151'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            color: e.target.value
+                          }
+                        })}
+                        className="w-full h-8 border border-gray-300 rounded"
+                      />
+                    </div>
+                    {/* Background Color (hidden for images) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bg</label>
+                      {elements.find(e => e.id === selectedElement)?.type !== 'image' ? (
+                        <input
+                          type="color"
+                          value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
+                          onChange={(e) => updateElement(selectedElement, { 
+                            style: { 
+                              ...elements.find(el => el.id === selectedElement)?.style!,
+                              backgroundColor: e.target.value 
+                            }
+                          })}
+                          className="w-full h-8 border border-gray-300 rounded"
+                        />
+                      ) : (
+                        <div className="h-8 w-full border border-dashed border-gray-300 rounded text-[11px] flex items-center justify-center text-gray-400 select-none">N/A</div>
+                      )}
+                    </div>
+                    {/* Stroke Color */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stroke</label>
+                      <input
+                        type="color"
+                        value={elements.find(e => e.id === selectedElement)?.style.borderColor || '#374151'}
+                        onChange={(e) => updateElement(selectedElement, {
+                          style: {
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            borderColor: e.target.value
+                          }
+                        })}
+                        className="w-full h-8 border border-gray-300 rounded"
+                      />
+                    </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Weight</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.fontWeight || 'normal'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            fontWeight: e.target.value as 'normal' | 'bold' | 'lighter' | 'bolder'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="bold">Bold</option>
+                        <option value="lighter">Light</option>
+                        <option value="bolder">Bolder</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Style</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.fontStyle || 'normal'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            fontStyle: e.target.value as 'normal' | 'italic'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="italic">Italic</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Decoration</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.textDecoration || 'none'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            textDecoration: e.target.value as 'none' | 'underline' | 'line-through'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="none">None</option>
+                        <option value="underline">Underline</option>
+                        <option value="line-through">Strike</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Font Family</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.fontFamily || 'Inter, system-ui, Arial'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            fontFamily: e.target.value
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="Inter, system-ui, Arial">Inter / System</option>
+                        <option value="Arial, Helvetica, sans-serif">Arial</option>
+                        <option value="Georgia, serif">Georgia</option>
+                        <option value="Courier New, monospace">Courier New</option>
+                        <option value="Times New Roman, serif">Times</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Alignment</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.textAlign || 'center'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            textAlign: e.target.value as 'left' | 'center' | 'right'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                      </select>
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2">
@@ -1618,39 +1799,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                     </div>
                   </div>
 
-                  {/* Background Color (hidden for images) */}
-                  {elements.find(e => e.id === selectedElement)?.type !== 'image' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
-                      <input
-                        type="color"
-                        value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
-                        onChange={(e) => updateElement(selectedElement, { 
-                          style: { 
-                            ...elements.find(el => el.id === selectedElement)?.style!,
-                            backgroundColor: e.target.value 
-                          }
-                        })}
-                        className="w-full h-8 border border-gray-300 rounded"
-                      />
-                    </div>
-                  )}
-
-                  {/* Stroke Color */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Color</label>
-                    <input
-                      type="color"
-                      value={elements.find(e => e.id === selectedElement)?.style.borderColor || '#374151'}
-                      onChange={(e) => updateElement(selectedElement, {
-                        style: {
-                          ...elements.find(el => el.id === selectedElement)?.style!,
-                          borderColor: e.target.value
-                        }
-                      })}
-                      className="w-full h-8 border border-gray-300 rounded"
-                    />
-                  </div>
+                  
 
                   {/* Border Width - For shapes and images (not lines/arrows) */}
                   {elements.find(e => e.id === selectedElement)?.type !== 'line' && 
