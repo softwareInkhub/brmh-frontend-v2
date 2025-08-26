@@ -27,7 +27,9 @@ import {
   Minus,
   Pencil,
   Eraser,
-  Shapes
+  Shapes,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react'
 
 interface WireframeElement {
@@ -76,7 +78,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   const [wireframeName, setWireframeName] = useState(wireframe?.name || '')
   const [elements, setElements] = useState<WireframeElement[]>(wireframe?.elements || [])
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser' | 'image'>('select')
+  const [selectedTool, setSelectedTool] = useState<'select' | 'rectangle' | 'circle' | 'text' | 'button' | 'input' | 'diamond' | 'arrow' | 'line' | 'pencil' | 'eraser' | 'image' | 'hand'>('select')
   const [canvas, setCanvas] = useState({
     width: wireframe?.canvas?.width || 800,
     height: wireframe?.canvas?.height || 600,
@@ -101,6 +103,11 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   const [isErasing, setIsErasing] = useState(false)
   const [eraserPos, setEraserPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [eraserRadius] = useState<number>(12)
+  const [hoveredElement, setHoveredElement] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 })
 
   const addElement = (type: WireframeElement['type'], x: number, y: number, width?: number, height?: number) => {
     const newElement: WireframeElement = {
@@ -133,6 +140,14 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     const ey = element.ey ?? height / 2
     const stroke = element.style.borderColor || '#374151'
     const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+
+    // Calculate stroke pattern based on border style
+    let strokeDasharray = undefined
+    if (element.style.borderStyle === 'dashed') {
+      strokeDasharray = `${strokeWidth * 8},${strokeWidth * 4}` // Larger dashes
+    } else if (element.style.borderStyle === 'dotted') {
+      strokeDasharray = `${strokeWidth * 2},${strokeWidth * 4}` // Larger dots
+    }
 
     return (
       <svg
@@ -168,6 +183,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
           strokeWidth={strokeWidth} 
           strokeLinecap="round" 
           markerEnd={`url(#arrowhead-${element.id})`}
+          strokeDasharray={strokeDasharray}
         />
       </svg>
     )
@@ -181,6 +197,14 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     const ey = element.ey ?? height / 2
     const stroke = element.style.borderColor || '#374151'
     const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+
+    // Calculate stroke pattern based on border style
+    let strokeDasharray = undefined
+    if (element.style.borderStyle === 'dashed') {
+      strokeDasharray = `${strokeWidth * 8},${strokeWidth * 4}` // Larger dashes
+    } else if (element.style.borderStyle === 'dotted') {
+      strokeDasharray = `${strokeWidth * 2},${strokeWidth * 4}` // Larger dots
+    }
 
     return (
       <svg
@@ -199,6 +223,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
           stroke={stroke} 
           strokeWidth={strokeWidth} 
           strokeLinecap="round"
+          strokeDasharray={strokeDasharray}
         />
       </svg>
     )
@@ -209,6 +234,14 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     
     const stroke = element.style.borderColor || '#374151'
     const strokeWidth = Math.max(1, element.style.borderWidth || 2)
+    
+    // Calculate stroke pattern based on border style
+    let strokeDasharray = undefined
+    if (element.style.borderStyle === 'dashed') {
+      strokeDasharray = `${strokeWidth * 8},${strokeWidth * 4}` // Larger dashes
+    } else if (element.style.borderStyle === 'dotted') {
+      strokeDasharray = `${strokeWidth * 2},${strokeWidth * 4}` // Larger dots
+    }
     
     // Use stored bounding box for eraser hit-test compatibility
     const left = element.x
@@ -245,6 +278,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
+          strokeDasharray={strokeDasharray}
         />
       </svg>
     )
@@ -252,8 +286,15 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
 
   const handleMouseDown = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const x = (e.clientX - rect.left) / zoom
+    const y = (e.clientY - rect.top) / zoom
+    
+    // Handle panning with hand tool
+    if (selectedTool === 'hand') {
+      setIsPanning(true)
+      setPanStart({ x: e.clientX, y: e.clientY })
+      return
+    }
     
     // Check if clicking on resize or rotate handle (allow regardless of tool)
     if (selectedElement) {
@@ -304,7 +345,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
     })
     
     if (clickedElement && selectedTool === 'select') {
-      // Start dragging existing element
+      // Start dragging existing element from anywhere inside it
       setIsDragging(true)
       setDragElement(clickedElement.id)
       setSelectedElement(clickedElement.id)
@@ -375,8 +416,30 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const x = (e.clientX - rect.left) / zoom
+    const y = (e.clientY - rect.top) / zoom
+    
+    // Handle panning with hand tool
+    if (isPanning && selectedTool === 'hand') {
+      const deltaX = e.clientX - panStart.x
+      const deltaY = e.clientY - panStart.y
+      setCanvasOffset(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }))
+      setPanStart({ x: e.clientX, y: e.clientY })
+      return
+    }
+    
+    // Handle hover detection for cursor changes - only show grab cursor on selected elements
+    if (selectedTool === 'select' && !isDragging && !isResizing && !isRotating) {
+      const hoveredElement = elements.find(element => {
+        return x >= element.x && x <= element.x + element.width &&
+               y >= element.y && y <= element.y + element.height
+      })
+      // Only show grab cursor if hovering over the currently selected element
+      setHoveredElement(hoveredElement?.id === selectedElement ? hoveredElement.id : null)
+    }
     
     // Handle rotating
     if (isRotating && rotateElementId) {
@@ -569,6 +632,12 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
   }
 
   const handleMouseUp = () => {
+    // Handle panning end
+    if (isPanning) {
+      setIsPanning(false)
+      return
+    }
+
     // Handle rotating end
     if (isRotating) {
       setIsRotating(false)
@@ -655,9 +724,12 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
       }
       setElements([...elements, newElement])
       setTempElement(null)
+      
+      // Auto-switch to select tool after drawing (except for pencil/eraser)
+      if (!['pencil', 'eraser'].includes(selectedTool)) {
+        setSelectedTool('select')
+      }
     }
-    
-    // Keep current tool selected (do not auto-switch for pencil/eraser)
   }
 
   const removeElement = (elementId: string) => {
@@ -718,6 +790,18 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
           </div>
           <div className="flex items-center space-x-1">
             <button 
+              onClick={() => {
+                if (window.confirm('Are you sure you want to clear the entire canvas? This action cannot be undone.')) {
+                  setElements([])
+                  setSelectedElement(null)
+                }
+              }}
+              className="p-2 rounded-lg text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 text-xs font-medium"
+              title="Clear Canvas"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button 
               className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-all duration-200 text-xs font-medium"
               title="Share Wireframe"
             >
@@ -755,8 +839,16 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
             </button>
             
             {/* Hand Tool */}
-            <button className="p-2 rounded hover:bg-gray-100 transition-colors" title="Hand Tool">
-              <Hand className="w-5 h-5 text-gray-600" />
+            <button 
+              onClick={() => setSelectedTool('hand')}
+              className={`p-2 rounded transition-colors ${
+                selectedTool === 'hand' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : 'hover:bg-gray-100 text-gray-600'
+              }`}
+              title="Hand Tool (Pan)"
+            >
+              <Hand className="w-5 h-5" />
             </button>
             
             {/* Select Tool */}
@@ -873,7 +965,51 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
               }`}
               title="Image"
             >
-              <Image className="w-5 h-5" />
+              <label className="cursor-pointer">
+                <Image className="w-5 h-5" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      const src = reader.result as string
+                      // Create a default image element in the center
+                      const x = 40
+                      const y = 40
+                      const width = 200
+                      const height = 150
+                      const newElement: WireframeElement = {
+                        id: `element-${Date.now()}`,
+                        type: 'image',
+                        x,
+                        y,
+                        width,
+                        height,
+                        content: src,
+                        style: {
+                          backgroundColor: 'transparent',
+                          borderColor: '#374151',
+                          borderWidth: 0,
+                          borderStyle: 'solid',
+                          borderRadius: 8,
+                          fontSize: 14,
+                          color: '#374151',
+                          opacity: 1
+                        }
+                      }
+                      setElements(prev => [...prev, newElement])
+                      setSelectedTool('select')
+                    }
+                    reader.readAsDataURL(file)
+                    // reset input so the same file can be selected again
+                    e.currentTarget.value = ''
+                  }}
+                />
+              </label>
             </button>
             
             {/* Eraser Tool */}
@@ -897,6 +1033,27 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
             {/* Separator */}
             <div className="w-px h-8 bg-gray-300 mx-2"></div>
             
+            {/* Zoom Controls */}
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setZoom(prev => Math.max(0.25, prev - 0.25))}
+                className="p-2 rounded hover:bg-gray-100 transition-colors"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-4 h-4 text-gray-600" />
+              </button>
+              <span className="text-sm text-gray-600 min-w-[3rem] text-center">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={() => setZoom(prev => Math.min(3, prev + 0.25))}
+                className="p-2 rounded hover:bg-gray-100 transition-colors"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-4 h-4 text-gray-600" />
+              </button>
+            </div>
+
             {/* Canvas Settings */}
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
@@ -937,7 +1094,9 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                 id="wireframe-canvas-layer"
                 className="relative w-full h-full"
                 style={{ 
-                  backgroundColor: canvas.backgroundColor 
+                  backgroundColor: canvas.backgroundColor,
+                  transform: `scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
+                  transformOrigin: 'top left'
                 }}
               >
                 {/* Grid Overlay */}
@@ -1165,6 +1324,25 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                               }}
                             />
                           </>
+                        ) : element.type === 'image' ? (
+                          element.content ? (
+                            <img
+                              src={element.content}
+                              alt=""
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                borderRadius: element.style.borderRadius
+                              }}
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-gray-500 text-xs select-none">
+                              <Image className="w-5 h-5 mb-1" />
+                              <span>Image</span>
+                            </div>
+                          )
                         ) : (
                           element.content
                         )}
@@ -1248,7 +1426,13 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                           stroke={tempElement.style.borderColor || '#3B82F6'}
                           strokeWidth={Math.max(1, tempElement.style.borderWidth || 2)}
                           strokeLinecap="round"
-                          strokeDasharray="5,5"
+                          strokeDasharray={
+                            tempElement.style.borderStyle === 'dashed' 
+                              ? `${Math.max(1, tempElement.style.borderWidth || 2) * 8},${Math.max(1, tempElement.style.borderWidth || 2) * 4}`
+                              : tempElement.style.borderStyle === 'dotted'
+                              ? `${Math.max(1, tempElement.style.borderWidth || 2) * 2},${Math.max(1, tempElement.style.borderWidth || 2) * 4}`
+                              : undefined
+                          }
                         />
                         {/* Arrowhead */}
                         <polygon
@@ -1275,9 +1459,34 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                           stroke={tempElement.style.borderColor || '#3B82F6'}
                           strokeWidth={Math.max(1, tempElement.style.borderWidth || 2)}
                           strokeLinecap="round"
-                          strokeDasharray="5,5"
+                          strokeDasharray={
+                            tempElement.style.borderStyle === 'dashed' 
+                              ? `${Math.max(1, tempElement.style.borderWidth || 2) * 8},${Math.max(1, tempElement.style.borderWidth || 2) * 4}`
+                              : tempElement.style.borderStyle === 'dotted'
+                              ? `${Math.max(1, tempElement.style.borderWidth || 2) * 2},${Math.max(1, tempElement.style.borderWidth || 2) * 4}`
+                              : undefined
+                          }
                         />
                       </svg>
+                    ) : tempElement.type === 'image' ? (
+                      tempElement.content ? (
+                        <img
+                          src={tempElement.content}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            borderRadius: tempElement.style.borderRadius
+                          }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-gray-500 text-xs select-none w-full h-full">
+                          <Image className="w-5 h-5 mb-1" />
+                          <span>Image</span>
+                        </div>
+                      )
                     ) : (
                       tempElement.content
                     )}
@@ -1286,11 +1495,24 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
 
                 {/* Canvas Mouse Event Handlers */}
                 <div 
-                  className={`absolute inset-0 ${selectedTool === 'pencil' ? 'cursor-crosshair' : selectedTool === 'eraser' ? 'cursor-pointer' : selectedTool !== 'select' ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-default'}`}
+                  className={`absolute inset-0 ${
+                    selectedTool === 'pencil' ? 'cursor-crosshair' : 
+                    selectedTool === 'eraser' ? 'cursor-pointer' : 
+                    selectedTool === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') :
+                    selectedTool === 'select' ? (
+                      isDragging ? 'cursor-grabbing' : 
+                      hoveredElement ? 'cursor-grab' : 
+                      'cursor-default'
+                    ) : 
+                    'cursor-default'
+                  }`}
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp}
+                  onMouseLeave={() => {
+                    handleMouseUp()
+                    setHoveredElement(null)
+                  }}
                 />
 
                 {/* Pencil Drawing Preview */}
@@ -1314,7 +1536,7 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       fill="none"
-                      strokeDasharray="5,5"
+                      strokeDasharray="16,8"
                     />
                   </svg>
                 )}
@@ -1396,20 +1618,23 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
-                    <input
-                      type="color"
-                      value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
-                      onChange={(e) => updateElement(selectedElement, { 
-                        style: { 
-                          ...elements.find(el => el.id === selectedElement)?.style!,
-                          backgroundColor: e.target.value 
-                        }
-                      })}
-                      className="w-full h-8 border border-gray-300 rounded"
-                    />
-                  </div>
+                  {/* Background Color (hidden for images) */}
+                  {elements.find(e => e.id === selectedElement)?.type !== 'image' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
+                      <input
+                        type="color"
+                        value={elements.find(e => e.id === selectedElement)?.style.backgroundColor || '#ffffff'}
+                        onChange={(e) => updateElement(selectedElement, { 
+                          style: { 
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            backgroundColor: e.target.value 
+                          }
+                        })}
+                        className="w-full h-8 border border-gray-300 rounded"
+                      />
+                    </div>
+                  )}
 
                   {/* Stroke Color */}
                   <div>
@@ -1427,42 +1652,123 @@ export default function WireframeEditor({ isOpen, onClose, wireframe, onSave }: 
                     />
                   </div>
 
-                  {/* Stroke Width */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Width</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="16"
-                      value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 1}
-                      onChange={(e) => updateElement(selectedElement, {
-                        style: {
-                          ...elements.find(el => el.id === selectedElement)?.style!,
-                          borderWidth: parseInt(e.target.value)
-                        }
-                      })}
-                      className="w-full"
-                    />
-                  </div>
+                  {/* Border Width - For shapes and images (not lines/arrows) */}
+                  {elements.find(e => e.id === selectedElement)?.type !== 'line' && 
+                   elements.find(e => e.id === selectedElement)?.type !== 'arrow' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Border Width</label>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="20"
+                          value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 1}
+                          onChange={(e) => updateElement(selectedElement, {
+                            style: {
+                              ...elements.find(el => el.id === selectedElement)?.style!,
+                              borderWidth: parseInt(e.target.value)
+                            }
+                          })}
+                          className="w-full"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 1}
+                          onChange={(e) => updateElement(selectedElement, {
+                            style: {
+                              ...elements.find(el => el.id === selectedElement)?.style!,
+                              borderWidth: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                          placeholder="0-20"
+                        />
+                      </div>
+                    </div>
+                  )}
 
-                  {/* Stroke Style */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Style</label>
-                    <select
-                      value={elements.find(e => e.id === selectedElement)?.style.borderStyle || 'solid'}
-                      onChange={(e) => updateElement(selectedElement, {
-                        style: {
-                          ...elements.find(el => el.id === selectedElement)?.style!,
-                          borderStyle: e.target.value as 'solid' | 'dashed' | 'dotted'
-                        }
-                      })}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-                    >
-                      <option value="solid">Solid</option>
-                      <option value="dashed">Dashed</option>
-                      <option value="dotted">Dotted</option>
-                    </select>
-                  </div>
+                  {/* Stroke Width - Only for lines and arrows */}
+                  {(elements.find(e => e.id === selectedElement)?.type === 'line' || 
+                    elements.find(e => e.id === selectedElement)?.type === 'arrow') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Width</label>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min="1"
+                          max="16"
+                          value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 2}
+                          onChange={(e) => updateElement(selectedElement, {
+                            style: {
+                              ...elements.find(el => el.id === selectedElement)?.style!,
+                              borderWidth: parseInt(e.target.value)
+                            }
+                          })}
+                          className="w-full"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          max="16"
+                          value={elements.find(e => e.id === selectedElement)?.style.borderWidth || 2}
+                          onChange={(e) => updateElement(selectedElement, {
+                            style: {
+                              ...elements.find(el => el.id === selectedElement)?.style!,
+                              borderWidth: parseInt(e.target.value) || 1
+                            }
+                          })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                          placeholder="1-16"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Border Style - For shapes and images */}
+                  {elements.find(e => e.id === selectedElement)?.type !== 'line' && 
+                   elements.find(e => e.id === selectedElement)?.type !== 'arrow' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Border Style</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.borderStyle || 'solid'}
+                        onChange={(e) => updateElement(selectedElement, {
+                          style: {
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            borderStyle: e.target.value as 'solid' | 'dashed' | 'dotted'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Stroke Style - Only for lines and arrows */}
+                  {(elements.find(e => e.id === selectedElement)?.type === 'line' || 
+                    elements.find(e => e.id === selectedElement)?.type === 'arrow') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stroke Style</label>
+                      <select
+                        value={elements.find(e => e.id === selectedElement)?.style.borderStyle || 'solid'}
+                        onChange={(e) => updateElement(selectedElement, {
+                          style: {
+                            ...elements.find(el => el.id === selectedElement)?.style!,
+                            borderStyle: e.target.value as 'solid' | 'dashed' | 'dotted'
+                          }
+                        })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                      </select>
+                    </div>
+                  )}
 
                   {/* Opacity */}
                   <div>
