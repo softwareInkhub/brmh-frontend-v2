@@ -31,6 +31,8 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import AllWebhookPage from './pages/AllWebhookPage';
 import WebhookPage from './pages/WebhookPage';
+import AllLambdasPage from './pages/AllLambdasPage';
+import LambdaPage from './pages/LambdaPage';
 
 
 
@@ -159,6 +161,15 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
   // Add state for webhookPage tabs
   const [webhookPageTabs, setWebhookPageTabs] = useState<{ key: string; webhook: any; namespace: any }[]>([]);
+  
+  // Add state for lambdas per namespace
+  const [lambdasMap, setLambdasMap] = useState<Record<string, any[]>>({});
+  
+  // Add state for all lambdas tabs
+  const [allLambdasTabs, setAllLambdasTabs] = useState<{ key: string; namespace?: any }[]>([]);
+  
+  // Add state for lambdaPage tabs
+  const [lambdaPageTabs, setLambdaPageTabs] = useState<{ key: string; lambda: any; namespace: any }[]>([]);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -246,7 +257,19 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
     }
   };
 
-  // Update fetchNamespaceDetails to also fetch webhooks
+  // Fetch lambdas for a namespace
+  const fetchNamespaceLambdas = async (namespaceId: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/workspace/lambdas/${namespaceId}`);
+      if (!res.ok) throw new Error('Failed to fetch lambdas');
+      const data = await res.json();
+      setLambdasMap(prev => ({ ...prev, [namespaceId]: Array.isArray(data.lambdas) ? data.lambdas : [] }));
+    } catch (err) {
+      setLambdasMap(prev => ({ ...prev, [namespaceId]: [] }));
+    }
+  };
+
+  // Update fetchNamespaceDetails to also fetch webhooks and lambdas
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
@@ -258,8 +281,9 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
         methodsRes.json()
       ]);
       setNamespaceDetailsMap(prev => ({ ...prev, [namespaceId]: { accounts, methods } }));
-      // Fetch webhooks for this namespace
+      // Fetch webhooks and lambdas for this namespace
       fetchNamespaceWebhooks(namespaceId);
+      fetchNamespaceLambdas(namespaceId);
     } catch (err) {
       // handle error
     }
@@ -408,6 +432,28 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
       setWebhookPageTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, webhook: parentData.webhook, namespace: parentData.namespace }];
+      });
+      return;
+    } else if (type === 'allLambdas') {
+      const key = parentData ? `allLambdas-${parentData['namespace-id']}` : 'allLambdas';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Lambdas: ${parentData['namespace-name']}` : 'All Lambdas', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllLambdasTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'lambdaPage' && parentData?.lambda) {
+      const key = `lambdaPage-${parentData.lambda.id}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Lambda: ${parentData.lambda.functionName}`, pinned: false }]);
+      }
+      setActiveTab(key);
+      setLambdaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, lambda: parentData.lambda, namespace: parentData.namespace }];
       });
       return;
     }
@@ -749,6 +795,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
               schemas={schemas}
               methods={methods}
               webhooks={webhooksMap}
+              lambdas={lambdasMap}
               onItemClick={handleSidePanelClick}
               onAdd={handleSidePanelAdd}
               fetchNamespaceDetails={fetchNamespaceDetails}
@@ -1093,6 +1140,27 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           <WebhookPage webhook={webhook} namespace={namespace} />
                         </div>
                       ))}
+                      {allLambdasTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllLambdasPage
+                            namespace={namespace}
+                            onViewLambda={(lambda, ns) => {
+                              // (Optional) Open single lambda tab here
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {lambdaPageTabs.map(({ key, lambda, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <LambdaPage lambda={lambda} namespace={namespace} />
+                        </div>
+                      ))}
 
                     </div>
                   </>
@@ -1356,6 +1424,27 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <WebhookPage webhook={webhook} namespace={namespace} />
+              </div>
+            ))}
+            {allLambdasTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllLambdasPage
+                  namespace={namespace}
+                  onViewLambda={(lambda, ns) => {
+                    // (Optional) Open single lambda tab here
+                  }}
+                />
+              </div>
+            ))}
+            {lambdaPageTabs.map(({ key, lambda, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <LambdaPage lambda={lambda} namespace={namespace} />
               </div>
             ))}
             {activeTab !== 'overview' &&

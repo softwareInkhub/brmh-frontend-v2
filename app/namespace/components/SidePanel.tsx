@@ -9,8 +9,9 @@ interface SidePanelProps {
   schemas: any[];
   methods: Record<string, any[]>; // namespaceId -> methods
   webhooks: Record<string, any[]>; // namespaceId -> webhooks
+  lambdas: Record<string, any[]>; // namespaceId -> lambdas
   onItemClick: (type: 'namespace' | 'account' | 'schema' | 'method', data: any) => void;
-  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace' | 'webhook' | 'allWebhooks' | 'webhookPage', parentData?: any) => void;
+  onAdd: (type: 'namespace' | 'account' | 'schema' | 'method' | 'accountPage' | 'methodPage' | 'allAccounts' | 'allMethods' | 'allSchemas' | 'singleNamespace' | 'webhook' | 'allWebhooks' | 'webhookPage' | 'lambda' | 'allLambdas' | 'lambdaPage', parentData?: any) => void;
   fetchNamespaceDetails: (namespaceId: string) => void;
   selectedSchemaId?: string | null;
   onEditSchema?: (schema: any) => void;
@@ -109,10 +110,11 @@ const DraggableSchema: React.FC<{ schema: any; children: React.ReactNode; onClic
   );
 };
 
-const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, webhooks, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, methods, webhooks, lambdas, onItemClick, onAdd, fetchNamespaceDetails, selectedSchemaId, onEditSchema, onDeleteSchema, onDeleteNamespace }) => {
   // Debug logs
   console.log('SidePanel namespaces:', namespaces);
   console.log('SidePanel schemas:', schemas);
+  console.log('SidePanel lambdas:', lambdas);
 
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({
@@ -122,7 +124,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
     requests: false,
   });
   const [expandedNs, setExpandedNs] = useState<Record<string, boolean>>({});
-  const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean; schemas: boolean; webhooks: boolean }>>({});
+  const [expandedSection, setExpandedSection] = useState<Record<string, { accounts: boolean; methods: boolean; schemas: boolean; webhooks: boolean; lambdas: boolean }>>({});
   const [viewingNamespace, setViewingNamespace] = useState<any>(null);
   const [expandedNamespaces, setExpandedNamespaces] = useState(true);
 
@@ -136,7 +138,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
       return newState;
     });
   };
-  const toggleSection = (nsId: string, section: 'accounts' | 'methods' | 'schemas' | 'webhooks') => {
+  const toggleSection = (nsId: string, section: 'accounts' | 'methods' | 'schemas' | 'webhooks' | 'lambdas') => {
     setExpandedSection(e => ({
       ...e,
       [nsId]: {
@@ -426,6 +428,50 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                               ))
                             ) : (
                               <div className="text-xs text-gray-400 pl-2 py-2">No webhooks found</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Lambdas */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2 py-1 pr-4 text-xs text-gray-500">
+                          <button
+                            className="flex items-center gap-1 group hover:underline cursor-pointer"
+                            onClick={() => {
+                              toggleSection(ns['namespace-id'], 'lambdas');
+                              onAdd('allLambdas', ns);
+                            }}
+                            type="button"
+                          >
+                            {expandedSection[ns['namespace-id']]?.lambdas ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <span>Lambdas</span>
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 align-middle inline-block">
+                              <Plus size={14} className="text-blue-400" />
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => onAdd('lambda', ns)}
+                            className="p-1 rounded hover:bg-blue-50"
+                            title="Add Lambda"
+                            type="button"
+                          >
+                            <Plus size={14} className="text-blue-500" />
+                          </button>
+                        </div>
+                        {expandedSection[ns['namespace-id']]?.lambdas && (
+                          <div className="space-y-1">
+                            {(lambdas[ns['namespace-id']] && lambdas[ns['namespace-id']].length > 0) ? (
+                              lambdas[ns['namespace-id']].map((lambda, lambdaIdx) => (
+                                <button
+                                  key={lambda.id || lambdaIdx}
+                                  onClick={() => onAdd('lambdaPage', { lambda: lambda, namespace: ns })}
+                                  className="flex items-center gap-2 px-4 py-2 w-full text-gray-700 hover:bg-blue-50 text-sm group"
+                                >
+                                  <span className="truncate group-hover:text-blue-600 text-xs">{lambda.functionName}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="text-xs text-gray-400 pl-2 py-2">No lambdas found</div>
                             )}
                           </div>
                         )}
