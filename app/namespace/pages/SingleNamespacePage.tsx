@@ -1,10 +1,10 @@
 'use client'
 import React, { useEffect, useState } from 'react';
-import { Database, Globe, FileCode, Terminal, User, Link2, Copy, MoreVertical, Trash2, Search } from 'lucide-react';
+import { Database, Globe, FileCode, Terminal, User, Link2, Copy, MoreVertical, Trash2, Search, Play } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
-export default function SingleNamespacePage({ namespaceId, initialNamespace, onViewAccount, onViewMethod, onViewSchema }: { namespaceId: string, initialNamespace?: any, onViewAccount?: (account: any, ns?: any) => void, onViewMethod?: (method: any, ns?: any) => void, onViewSchema?: (schema: any, ns?: any) => void }) {
+export default function SingleNamespacePage({ namespaceId, initialNamespace, onViewAccount, onViewMethod, onViewSchema, onTestMethod }: { namespaceId: string, initialNamespace?: any, onViewAccount?: (account: any, ns?: any) => void, onViewMethod?: (method: any, ns?: any) => void, onViewSchema?: (schema: any, ns?: any) => void, onTestMethod?: (method: any, ns?: any) => void }) {
   const [namespace, setNamespace] = useState<any>(initialNamespace || null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
@@ -295,6 +295,17 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace, onV
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-[11px] px-2 py-0.5 rounded font-mono ${typeBadgeClasses(m['namespace-method-type'])}`}>{m['namespace-method-type']}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTestMethod && onTestMethod(m, namespace);
+                        }}
+                        className="p-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition"
+                        title="Test method"
+                        aria-label="Test method"
+                      >
+                        <Play size={14} />
+                      </button>
                       <div className="relative">
                         <button
                           onClick={(e) => {

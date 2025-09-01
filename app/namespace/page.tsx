@@ -1187,6 +1187,17 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                                 return [...prev, { key: tabKey, method, namespace: ns || namespace }];
                               });
                             }}
+                            onTestMethod={(m, ns) => {
+                              const testKey = `methodTest-${m['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === testKey)) {
+                                setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(testKey);
+                              setMethodTestTabs(prev => {
+                                if (prev.find(t => t.key === testKey)) return prev;
+                                return [...prev, { key: testKey, method: m, namespace: ns || namespace }];
+                              });
+                            }}
                             onViewSchema={(schema, ns) => {
                               const tabKey = `schema-preview-${schema.id}`;
                               if (!tabs.find(tab => tab.key === tabKey)) {

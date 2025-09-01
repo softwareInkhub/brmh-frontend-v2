@@ -254,7 +254,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                         />
                       ) : null}
                       <Folder size={16} className={`text-gray-600 ${ns['icon-url'] ? 'hidden' : ''}`} />
-                      <span className="font-medium text-sm text-gray-900 truncate">
+                      <span className="font-medium text-xs text-gray-900 truncate">
                         {ns['namespace-name']}
                       </span>
                     </button>
