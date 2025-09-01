@@ -134,7 +134,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
 
   // Add state for schema page tabs
-  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
+  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview' | 'edit'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
 
   // Add state for all schemas tabs
   const [allSchemasTabs, setAllSchemasTabs] = useState<{ key: string; namespace?: any }[]>([]);
@@ -1003,6 +1003,39 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             // trigger fetchData in useEffect
                             setNamespaces([]);
                           }}
+                          onViewAccount={(account, ns) => {
+                            const tabKey = `accountPage-${account['namespace-account-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setAccountPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, account, namespace: ns }];
+                            });
+                          }}
+                          onViewMethod={(method, ns) => {
+                            const tabKey = `methodPage-${method['namespace-method-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setMethodPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, method, namespace: ns }];
+                            });
+                          }}
+                          onViewSchema={(schema, ns) => {
+                            const tabKey = `schemaPage-${schema.id}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Schema: ${schema.schemaName}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setSchemaPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, schema, mode: 'edit', initialSchemaName: schema.schemaName, namespace: ns }];
+                            });
+                          }}
                         />
                       )}
                       {activeTab === 'namespace' && <Namespace />}
@@ -1020,6 +1053,39 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             setNamespaceDetailsMap({});
                             // trigger fetchData in useEffect
                             setNamespaces([]);
+                          }}
+                          onViewAccount={(account, ns) => {
+                            const tabKey = `accountPage-${account['namespace-account-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setAccountPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, account, namespace: ns }];
+                            });
+                          }}
+                          onViewMethod={(method, ns) => {
+                            const tabKey = `methodPage-${method['namespace-method-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setMethodPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, method, namespace: ns }];
+                            });
+                          }}
+                          onViewSchema={(schema, ns) => {
+                            const tabKey = `schemaPage-${schema.id}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Schema: ${schema.schemaName}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setSchemaPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, schema, mode: 'edit', initialSchemaName: schema.schemaName, namespace: ns }];
+                            });
                           }}
                         />
                       )}

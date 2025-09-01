@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Eye, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key, MoreVertical } from "react-feather";
+import { Plus, Edit, Trash2, Database, RefreshCw, ChevronDown, ChevronRight, Search, Code, Table, Grid, List as ListIcon, Users, Terminal, X, Info, UserPlus, FilePlus, Globe, User, Edit2, Key, MoreVertical } from "react-feather";
 import { FileCode } from 'lucide-react';
 import UnifiedSchemaModal from '../Modals/UnifiedSchemaModal';
 import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
-import AccountPreviewModal from '../Modals/AccountPreviewModal';
+
 import CreateDataModal from '../Modals/CreateDataModal';
 import NamespaceModal from '../Modals/NamespaceModal';
 import { useSidePanel } from "@/app/components/SidePanelContext";
@@ -288,9 +288,12 @@ export interface UnifiedNamespaceProps {
   namespaceDetailsMap: Record<string, { accounts: any[]; methods: any[] }>;
   setNamespaceDetailsMap: React.Dispatch<React.SetStateAction<Record<string, { accounts: any[]; methods: any[] }>>>;
   refreshData: () => void;
+  onViewAccount?: (account: any, ns?: any) => void;
+  onViewMethod?: (method: any, ns?: any) => void;
+  onViewSchema?: (schema: any, ns?: any) => void;
 }
 
-const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigger, onModalClose, fetchNamespaceDetails, namespaceDetailsMap, setNamespaceDetailsMap, refreshData }) => {
+const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigger, onModalClose, fetchNamespaceDetails, namespaceDetailsMap, setNamespaceDetailsMap, refreshData, onViewAccount, onViewMethod, onViewSchema }) => {
   const { isCollapsed } = useSidePanel();
   // --- State ---
   const [namespaces, setNamespaces] = useState<UnifiedNamespace[]>([]);
@@ -383,9 +386,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [methodLoading, setMethodLoading] = useState(false);
   const [methodError, setMethodError] = useState('');
 
-  // Add preview state
-  const [previewAccount, setPreviewAccount] = useState<Account | null>(null);
-  const [previewMethod, setPreviewMethod] = useState<Method | null>(null);
+
 
   // Add state for proper NamespaceModal
   const [showNamespaceModal, setShowNamespaceModal] = useState(false);
@@ -783,14 +784,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
     }
   };
 
-  // Add preview handlers
-  const handlePreviewAccount = (account: Account) => {
-    setPreviewAccount(account);
-  };
 
-  const handlePreviewMethod = (method: Method) => {
-    setPreviewMethod(method);
-  };
 
   // Handler to open MethodTestModal
   const handleTestMethod = (method: Method) => {
@@ -1024,9 +1018,15 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 ) : (!namespaceDetailsMap[expandedNamespaceId]?.accounts || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.accounts) || namespaceDetailsMap[expandedNamespaceId]?.accounts.length === 0 ? (
                         <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No accounts found.</div>
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
                     {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map(account => (
-                            <div key={account["namespace-account-id"]} className="group rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-3 flex items-center gap-3 hover:shadow-md transition">
+                            <div key={account["namespace-account-id"]} className="group rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-3 flex items-center gap-3 hover:shadow-md transition cursor-pointer" onClick={() => {
+                              // Open the single namespace tab and trigger account view
+                              const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                              if (currentNamespace && onViewAccount) {
+                                onViewAccount(account, currentNamespace);
+                              }
+                            }}>
                               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/70 border border-blue-100"><User size={14} className="text-blue-600"/></div>
                               <div className="min-w-0">
                                 <div className="font-medium text-gray-900 text-sm truncate">{account["namespace-account-name"]}</div>
@@ -1039,9 +1039,16 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                                 {account.tags && account.tags.length > 2 && (
                                   <span className="px-2 py-0.5 bg-white/80 border border-blue-100 text-blue-700 text-[10px] rounded-full">+{account.tags.length - 2}</span>
                                 )}
-                                <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white/70 rounded-md transition" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
-                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
-                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={() => handleDeleteAccount(account)}><Trash2 size={12} /></button>
+
+                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Open the account tab in edit mode
+                                  const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                                  if (currentNamespace && onViewAccount) {
+                                    onViewAccount(account, currentNamespace);
+                                  }
+                                }}><Edit size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { e.stopPropagation(); handleDeleteAccount(account); }}><Trash2 size={12} /></button>
                               </div>
                             </div>
                           ))}
@@ -1059,9 +1066,15 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                 ) : (!namespaceDetailsMap[expandedNamespaceId]?.methods || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.methods) || namespaceDetailsMap[expandedNamespaceId]?.methods.length === 0 ? (
                         <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No methods found.</div>
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto">
                     {namespaceDetailsMap[expandedNamespaceId]?.methods?.map((method, index) => (
-                            <div key={method["namespace-method-id"] || `method-${expandedNamespaceId}-${index}`} className="group rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 flex items-center gap-3 hover:shadow-md transition">
+                            <div key={method["namespace-method-id"] || `method-${expandedNamespaceId}-${index}`} className="group rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 flex items-center gap-3 hover:shadow-md transition cursor-pointer" onClick={() => {
+                              // Open the single namespace tab and trigger method view
+                              const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                              if (currentNamespace && onViewMethod) {
+                                onViewMethod(method, currentNamespace);
+                              }
+                            }}>
                               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-200"><Terminal size={14} className="text-gray-700"/></div>
                               <div className="min-w-0">
                                 <div className="font-medium text-gray-900 text-sm truncate">{method["namespace-method-name"]}</div>
@@ -1076,9 +1089,16 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                                 </div>
                               </div>
                               <div className="ml-auto flex items-center gap-1">
-                                <button className="p-1.5 text-gray-400 hover:text-sky-600 hover:bg-white/70 rounded-md transition" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
-                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
-                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={() => handleDeleteMethod(method)}><Trash2 size={12} /></button>
+
+                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Open the method tab in edit mode
+                                  const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                                  if (currentNamespace && onViewMethod) {
+                                    onViewMethod(method, currentNamespace);
+                                  }
+                                }}><Edit size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { e.stopPropagation(); handleDeleteMethod(method); }}><Trash2 size={12} /></button>
                               </div>
                             </div>
                           ))}
@@ -1110,12 +1130,34 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                       return <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No schemas found.</div>;
                     }
               return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2 max-h-80 overflow-y-auto">
                         {nsSchemas.map(schema => (
-                          <div key={schema.id} className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 p-3 hover:shadow-md transition">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="w-8 h-8 rounded-lg bg-white/70 border border-purple-100 flex items-center justify-center"><FileCode size={14} className="text-purple-600"/></div>
-                              <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
+                          <div key={schema.id} className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 p-3 hover:shadow-md transition cursor-pointer" onClick={() => {
+                            // Open the single namespace tab and trigger schema view
+                            const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                            if (currentNamespace && onViewSchema) {
+                              onViewSchema(schema, currentNamespace);
+                            }
+                          }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-lg bg-white/70 border border-purple-100 flex items-center justify-center"><FileCode size={14} className="text-purple-600"/></div>
+                                <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Open the schema tab in edit mode
+                                  const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
+                                  if (currentNamespace && onViewSchema) {
+                                    onViewSchema(schema, currentNamespace);
+                                  }
+                                }}><Edit size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  handleDelete('schema', schema.id); 
+                                }}><Trash2 size={12} /></button>
+                              </div>
                             </div>
                             <span className="text-xs text-gray-600">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
                           </div>
@@ -1630,55 +1672,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         </div>
       )}
 
-      {/* Method Preview Modal */}
-      {previewMethod && (
-        <MethodPreviewModal
-          onClose={() => setPreviewMethod(null)}
-          method={previewMethod}
-          onEdit={method => {
-            setEditingMethod(method as any); // Acceptable since editingMethod is any/null
-            setMethodForm({
-              "namespace-method-name": method["namespace-method-name"],
-              "namespace-method-type": method["namespace-method-type"],
-              "namespace-method-url-override": method["namespace-method-url-override"] || '',
-              tags: method.tags || [],
-              "namespace-method-queryParams": method["namespace-method-queryParams"] || [],
-              "namespace-method-header": method["namespace-method-header"] || [],
-              "save-data": !!method["save-data"],
-              "isInitialized": !!method["isInitialized"],
-              "sample-request": '',
-              "sample-response": '',
-              "request-schema": '',
-              "response-schema": '',
-            });
-            setShowMethodModal(true);
-            setPreviewMethod(null);
-          }}
-          onDelete={method => {
-            handleDeleteMethod(method);
-            setPreviewMethod(null);
-          }}
-          onTest={method => {
-            setTestingMethod(method);
-            setIsMethodTestModalOpen(true);
-            setPreviewMethod(null);
-          }}
-          onTable={async (method, tableName) => {
-            try {
-              const res = await fetch(`${API_BASE_URL}/unified/schema/table`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tableName })
-              });
-              if (!res.ok) throw new Error('Failed to create table');
-              await res.json();
-              toast.success('Table created successfully!');
-            } catch (err) {
-              toast.error('Failed to create table');
-            }
-          }}
-        />
-      )}
+
 
       {/* Method Test Modal */}
       {testingMethod && (
@@ -1694,36 +1688,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         />
       )}
 
-      {/* Account Preview Modal */}
-      {previewAccount && (
-        <AccountPreviewModal
-          isOpen={!!previewAccount}
-          onClose={() => setPreviewAccount(null)}
-          account={{
-            ...previewAccount,
-            ["namespace-account-variables"]: previewAccount.variables || [],
-          }}
-          onEdit={account => {
-            setEditingAccount(account as any); // Acceptable since editingAccount is any/null
-            setAccountForm({
-              "namespace-account-name": account["namespace-account-name"],
-              "namespace-account-url-override": account["namespace-account-url-override"] || '',
-              tags: account.tags || [],
-              "namespace-account-header": account["namespace-account-header"] || [],
-              variables: account["namespace-account-variables"] || [],
-            });
-            setShowAccountModal(true);
-            setPreviewAccount(null);
-          }}
-          onDelete={account => {
-            handleDeleteAccount({ ...account, variables: account["namespace-account-variables"] || [] });
-            setPreviewAccount(null);
-          }}
-          onLink={account => {
-            handleOAuthRedirect({ ...account, variables: account["namespace-account-variables"] || [] }, selectedNamespace, API_BASE_URL, fetchNamespaceDetails);
-          }}
-        />
-      )}
+
 
       <CreateDataModal
         open={showDataModal && !!dataFormSchema}
