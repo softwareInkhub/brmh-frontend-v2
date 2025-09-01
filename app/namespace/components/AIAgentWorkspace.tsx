@@ -147,6 +147,24 @@ What would you like to work on today?`,
   const [isEditingSchema, setIsEditingSchema] = useState(false);
   // Add state for schema names
   const [schemaNames, setSchemaNames] = useState<{ [id: string]: string }>({});
+  
+  // Add state for Lambda saving functionality
+  const [isSavingLambda, setIsSavingLambda] = useState(false);
+  const [savedLambdas, setSavedLambdas] = useState<Array<{
+    id: string;
+    functionName: string;
+    apiGatewayUrl: string;
+    functionArn: string;
+    description: string;
+    code: string;
+    runtime: string;
+    handler: string;
+    memory: number;
+    timeout: number;
+    environment: string;
+    savedAt: Date;
+    namespaceId: string;
+  }>>([]);
 
   // Add state for API endpoints
   const [apiEndpoints, setApiEndpoints] = useState<any[]>([]);
@@ -182,7 +200,13 @@ What would you like to work on today?`,
   // Web Scraping state
   const [selectedService, setSelectedService] = useState('');
   const [customUrl, setCustomUrl] = useState('');
-  const [supportedServices, setSupportedServices] = useState([]);
+  const [supportedServices, setSupportedServices] = useState<Array<{key: string, name: string, type: string, description?: string}>>([
+    { key: 'shopify', name: 'Shopify', type: 'known-service' },
+    { key: 'stripe', name: 'Stripe', type: 'known-service' },
+    { key: 'github', name: 'GitHub', type: 'known-service' },
+    { key: 'google', name: 'Google APIs', type: 'known-service' },
+    { key: 'custom-url', name: 'Custom URL', type: 'custom-url', description: 'Enter any URL to scrape APIs, schemas, and documentation' }
+  ]);
   const [scrapeOptions, setScrapeOptions] = useState({
     apis: true,
     schemas: true,
@@ -191,6 +215,9 @@ What would you like to work on today?`,
   });
   const [isScraping, setIsScraping] = useState(false);
   const [scrapedData, setScrapedData] = useState(null);
+  const [showAllScrapedData, setShowAllScrapedData] = useState(false);
+  
+
   const [scrapingLog, setScrapingLog] = useState([]);
   
 
@@ -204,7 +231,7 @@ What would you like to work on today?`,
   const terminalInstance = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BACKEND_URL || 'http://localhost:5001';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
   // File upload and drag-drop functions
   const handleFileUpload = async (files: FileList | File[]) => {
@@ -423,10 +450,14 @@ What would you like to work on today?`,
   // Web Scraping functions
   const loadSupportedServices = async () => {
     try {
+      console.log('Loading supported services from:', `${API_BASE_URL}/web-scraping/supported-services`);
       const response = await fetch(`${API_BASE_URL}/web-scraping/supported-services`);
       if (response.ok) {
         const data = await response.json();
+        console.log('Supported services loaded:', data.services);
         setSupportedServices(data.services || []);
+      } else {
+        console.error('Failed to load supported services:', response.status);
       }
     } catch (error) {
       console.error('Error loading supported services:', error);
@@ -469,6 +500,7 @@ What would you like to work on today?`,
         addScrapingLog(`Preview completed: ${data.summary.apis} APIs, ${data.summary.schemas} schemas, ${data.summary.documentation} docs`, 'success');
       } else {
         const error = await response.json();
+        console.error('Preview failed:', error);
         addScrapingLog(`Preview failed: ${error.error}`, 'error');
       }
     } catch (error) {
@@ -568,13 +600,17 @@ What would you like to work on today?`,
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Load supported services when component mounts
+  useEffect(() => {
+    loadSupportedServices();
+  }, []);
+
   // Load file tree and workspace state when namespace changes
   useEffect(() => {
     if (namespace?.['namespace-id']) {
       refreshFileTree();
       loadWorkspaceState();
       loadAvailableSchemas(); // Load schemas for drag-drop functionality
-      loadSupportedServices(); // Load supported services for web scraping
       
       // Add a welcome message with context if workspace state exists
       setTimeout(() => {
@@ -2956,6 +2992,87 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
     }
   }
 
+  async function saveLambdaToNamespace() {
+    if (!generatedLambdaCode || !lambdaForm.functionName) {
+      alert('Please generate Lambda code and provide a function name first');
+      return;
+    }
+
+    try {
+      setIsSavingLambda(true);
+      setConsoleOutput(prev => [...prev, '💾 Saving Lambda function to namespace library...']);
+      
+      // Generate a unique ID for this Lambda
+      const lambdaId = `lambda-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create Lambda metadata
+      const lambdaData = {
+        id: lambdaId,
+        functionName: lambdaForm.functionName,
+        apiGatewayUrl: '', // Will be populated after deployment
+        functionArn: '', // Will be populated after deployment
+        description: lambdaForm.description || `Lambda function: ${lambdaForm.functionName}`,
+        code: generatedLambdaCode,
+        runtime: lambdaForm.runtime,
+        handler: lambdaForm.handler,
+        memory: lambdaForm.memory,
+        timeout: lambdaForm.timeout,
+        environment: lambdaForm.environment,
+        savedAt: new Date(),
+        namespaceId: namespace?.['namespace-id'] || 'unknown'
+      };
+      
+      // Save to backend
+      const response = await fetch(`${API_BASE_URL}/workspace/save-lambda`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          namespaceId: namespace?.['namespace-id'],
+          lambdaData: lambdaData
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Lambda] Save result:', result);
+        
+        // Add to local state
+        setSavedLambdas(prev => [...prev, lambdaData]);
+        
+        setConsoleOutput(prev => [...prev, `✅ Lambda function saved to namespace library!`]);
+        setConsoleOutput(prev => [...prev, `📝 Function Name: ${lambdaForm.functionName}`]);
+        setConsoleOutput(prev => [...prev, `🆔 Lambda ID: ${lambdaId}`]);
+        setConsoleOutput(prev => [...prev, `💾 Saved to namespace: ${namespace?.['namespace-name'] || 'Unknown'}`]);
+        
+        addMessage({
+          role: 'assistant',
+          content: `✅ Lambda function saved to namespace library!
+
+📝 **Function Name:** ${lambdaForm.functionName}
+🆔 **Lambda ID:** ${lambdaId}
+💾 **Namespace:** ${namespace?.['namespace-name'] || 'Unknown'}
+
+🚀 **Next Steps:** 
+• Deploy the function to get the API Gateway URL
+• The function is now available in your namespace library for future use`
+        });
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error('[Lambda] Error saving to namespace:', error);
+      setConsoleOutput(prev => [...prev, `❌ Error saving Lambda to namespace: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+      
+      addMessage({
+        role: 'assistant',
+        content: `❌ Error saving Lambda function to namespace: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setIsSavingLambda(false);
+    }
+  }
+
   return (
     <div className="fixed top-0 right-0 h-full w-[800px] flex flex-col bg-white shadow-2xl border-l border-gray-200 z-50 transform transition-transform duration-300 ease-in-out">
       {/* Header */}
@@ -3089,7 +3206,18 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
             </div>
             
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h4 className="font-medium mb-2">Generated Lambda Code</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium">Generated Lambda Code</h4>
+                {generatedLambdaCode && (
+                  <button
+                    onClick={saveLambdaToNamespace}
+                    disabled={isSavingLambda}
+                    className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingLambda ? 'Saving...' : 'Save Lambda'}
+                  </button>
+                )}
+              </div>
               <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto" style={{ minHeight: 120 }}>
                 {generatedLambdaCode || '// Lambda code will appear here after generation'}
               </pre>
@@ -3153,12 +3281,33 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
             
             <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
               <h4 className="font-medium mb-4">Service Selection</h4>
+              
+              {/* Debug info */}
+              <div className="text-xs text-gray-500 mb-2">
+                Debug: selectedService = "{selectedService}", customUrl = "{customUrl}", supportedServices count = {supportedServices.length}
+                <br />
+                Should show custom URL input: {selectedService === 'custom-url' ? 'YES' : 'NO'}
+                <br />
+                <button 
+                  onClick={() => {
+                    console.log('Test button clicked');
+                    setSelectedService('custom-url');
+                    setCustomUrl('https://example.com');
+                  }}
+                  className="px-2 py-1 bg-blue-500 text-white text-xs rounded"
+                >
+                  Test: Set Custom URL
+                </button>
+              </div>>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Service or URL</label>
                   <select 
                     value={selectedService} 
-                    onChange={(e) => setSelectedService(e.target.value)}
+                    onChange={(e) => {
+                      console.log('Service selection changed:', e.target.value);
+                      setSelectedService(e.target.value);
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
                   >
                     <option value="">Select a service or enter custom URL...</option>
@@ -3174,7 +3323,10 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
                       type="url"
                       placeholder="Enter any URL (e.g., https://api.example.com/docs)"
                       value={customUrl}
-                      onChange={(e) => setCustomUrl(e.target.value)}
+                      onChange={(e) => {
+                        console.log('Custom URL input changed:', e.target.value);
+                        setCustomUrl(e.target.value);
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   )}
@@ -3240,10 +3392,20 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
               </div>
             </div>
             
+
+            
             {scrapedData && (
               <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
-                <h4 className="font-medium mb-4">Scraped Data Preview</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium">Scraped Data Preview</h4>
+                  <button
+                    onClick={() => setShowAllScrapedData(true)}
+                    className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    View All Data
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div className="bg-blue-50 p-3 rounded">
                     <h5 className="font-medium text-blue-800">APIs</h5>
                     <p className="text-2xl font-bold text-blue-600">{scrapedData.apis?.length || 0}</p>
@@ -3256,6 +3418,149 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
                     <h5 className="font-medium text-purple-800">Documentation</h5>
                     <p className="text-2xl font-bold text-purple-600">{scrapedData.documentation?.length || 0}</p>
                   </div>
+                </div>
+                
+                {/* Detailed Data Display */}
+                <div className="space-y-4">
+                  {/* APIs Section */}
+                  {scrapedData.apis && scrapedData.apis.length > 0 && (
+                    <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                      <h5 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+                        <span>🔗</span>
+                        APIs ({scrapedData.apis.length})
+                      </h5>
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {scrapedData.apis.slice(0, 10).map((api: any, index: number) => (
+                          <div key={index} className="bg-white p-3 rounded border border-blue-100">
+                            <div className="flex items-center justify-between mb-2">
+                              <h6 className="font-medium text-blue-700">{api.name || api.endpoint}</h6>
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                {api.format || 'API'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{api.description}</p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <span className="bg-gray-100 px-2 py-1 rounded">{api.method || 'GET'}</span>
+                              <span className="truncate">{api.url}</span>
+                            </div>
+                            {api.openapiSpec && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-blue-600 cursor-pointer">View OpenAPI Spec</summary>
+                                <pre className="text-xs bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
+                                  {JSON.stringify(api.openapiSpec, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                        {scrapedData.apis.length > 10 && (
+                          <div className="text-center text-sm text-gray-500">
+                            ... and {scrapedData.apis.length - 10} more APIs
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Schemas Section */}
+                  {scrapedData.schemas && scrapedData.schemas.length > 0 && (
+                    <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+                      <h5 className="font-medium text-green-800 mb-3 flex items-center gap-2">
+                        <span>📋</span>
+                        Schemas ({scrapedData.schemas.length})
+                      </h5>
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {scrapedData.schemas.slice(0, 5).map((schema: any, index: number) => (
+                          <div key={index} className="bg-white p-3 rounded border border-green-100">
+                            <div className="flex items-center justify-between mb-2">
+                              <h6 className="font-medium text-green-700">{schema.name}</h6>
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                {schema.format || 'JSON'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{schema.description}</p>
+                            {schema.schema && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-green-600 cursor-pointer">View JSON Schema</summary>
+                                <pre className="text-xs bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
+                                  {JSON.stringify(schema.schema, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                        {scrapedData.schemas.length > 5 && (
+                          <div className="text-center text-sm text-gray-500">
+                            ... and {scrapedData.schemas.length - 5} more schemas
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Documentation Section */}
+                  {scrapedData.documentation && scrapedData.documentation.length > 0 && (
+                    <div className="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                      <h5 className="font-medium text-purple-800 mb-3 flex items-center gap-2">
+                        <span>📚</span>
+                        Documentation ({scrapedData.documentation.length})
+                      </h5>
+                      <div className="space-y-3 max-h-60 overflow-y-auto">
+                        {scrapedData.documentation.slice(0, 5).map((doc: any, index: number) => (
+                          <div key={index} className="bg-white p-3 rounded border border-purple-100">
+                            <div className="flex items-center justify-between mb-2">
+                              <h6 className="font-medium text-purple-700">{doc.title}</h6>
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                {doc.format || 'PDF'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{doc.content}</p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <span>Section {doc.section}</span>
+                              {doc.url && (
+                                <a href={doc.url} target="_blank" rel="noopener noreferrer" 
+                                   className="text-purple-600 hover:underline">
+                                  View Source
+                                </a>
+                              )}
+                            </div>
+                            {doc.data && doc.contentType && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-purple-600 cursor-pointer">View Document Data</summary>
+                                <div className="text-xs bg-gray-100 p-2 rounded mt-1">
+                                  <p><strong>Content Type:</strong> {doc.contentType}</p>
+                                  <p><strong>Data Size:</strong> {Math.round(doc.data.length / 1024)} KB</p>
+                                  <p><strong>Format:</strong> {doc.format}</p>
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        ))}
+                        {scrapedData.documentation.length > 5 && (
+                          <div className="text-center text-sm text-gray-500">
+                            ... and {scrapedData.documentation.length - 5} more documents
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Errors Section */}
+                  {scrapedData.errors && scrapedData.errors.length > 0 && (
+                    <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+                      <h5 className="font-medium text-red-800 mb-3 flex items-center gap-2">
+                        <span>⚠️</span>
+                        Errors ({scrapedData.errors.length})
+                      </h5>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {scrapedData.errors.map((error: string, index: number) => (
+                          <div key={index} className="text-sm text-red-700 bg-red-100 p-2 rounded">
+                            {error}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3905,7 +4210,156 @@ Your files are now safely stored in the cloud and can be accessed anytime.`
           </button>
         </div>
       </div>
-      
+
+      {/* All Scraped Data Modal */}
+      {showAllScrapedData && scrapedData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-11/12 h-5/6 max-w-6xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium">All Scraped Data - {scrapedData.service}</h3>
+              <button
+                onClick={() => setShowAllScrapedData(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto h-full">
+              <div className="space-y-6">
+                {/* APIs Section */}
+                {scrapedData.apis && scrapedData.apis.length > 0 && (
+                  <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                    <h4 className="font-medium text-blue-800 mb-4 flex items-center gap-2">
+                      <span>🔗</span>
+                      All APIs ({scrapedData.apis.length})
+                    </h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {scrapedData.apis.map((api: any, index: number) => (
+                        <div key={index} className="bg-white p-4 rounded border border-blue-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-medium text-blue-700">{api.name || api.endpoint}</h5>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                              {api.format || 'API'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{api.description}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                            <span className="bg-gray-100 px-2 py-1 rounded">{api.method || 'GET'}</span>
+                            <span className="truncate">{api.url}</span>
+                          </div>
+                          {api.openapiSpec && (
+                            <details className="mt-2">
+                              <summary className="text-sm text-blue-600 cursor-pointer font-medium">View OpenAPI Specification</summary>
+                              <pre className="text-xs bg-gray-100 p-3 rounded mt-2 overflow-x-auto max-h-40">
+                                {JSON.stringify(api.openapiSpec, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Schemas Section */}
+                {scrapedData.schemas && scrapedData.schemas.length > 0 && (
+                  <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+                    <h4 className="font-medium text-green-800 mb-4 flex items-center gap-2">
+                      <span>📋</span>
+                      All Schemas ({scrapedData.schemas.length})
+                    </h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {scrapedData.schemas.map((schema: any, index: number) => (
+                        <div key={index} className="bg-white p-4 rounded border border-green-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-medium text-green-700">{schema.name}</h5>
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              {schema.format || 'JSON'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{schema.description}</p>
+                          {schema.schema && (
+                            <details className="mt-2">
+                              <summary className="text-sm text-green-600 cursor-pointer font-medium">View JSON Schema</summary>
+                              <pre className="text-xs bg-gray-100 p-3 rounded mt-2 overflow-x-auto max-h-40">
+                                {JSON.stringify(schema.schema, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Documentation Section */}
+                {scrapedData.documentation && scrapedData.documentation.length > 0 && (
+                  <div className="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                    <h4 className="font-medium text-purple-800 mb-4 flex items-center gap-2">
+                      <span>📚</span>
+                      All Documentation ({scrapedData.documentation.length})
+                    </h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {scrapedData.documentation.map((doc: any, index: number) => (
+                        <div key={index} className="bg-white p-4 rounded border border-purple-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-medium text-purple-700">{doc.title}</h5>
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                              {doc.format || 'PDF'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{doc.content}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                            <span>Section {doc.section}</span>
+                            {doc.url && (
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" 
+                                 className="text-purple-600 hover:underline">
+                                View Source
+                              </a>
+                            )}
+                          </div>
+                          {doc.data && doc.contentType && (
+                            <details className="mt-2">
+                              <summary className="text-sm text-purple-600 cursor-pointer font-medium">View Document Data</summary>
+                              <div className="text-xs bg-gray-100 p-3 rounded mt-2">
+                                <p><strong>Content Type:</strong> {doc.contentType}</p>
+                                <p><strong>Data Size:</strong> {Math.round(doc.data.length / 1024)} KB</p>
+                                <p><strong>Format:</strong> {doc.format}</p>
+                                <p><strong>Base64 Data:</strong></p>
+                                <pre className="text-xs overflow-x-auto max-h-20 mt-1">
+                                  {doc.data.substring(0, 200)}...
+                                </pre>
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Errors Section */}
+                {scrapedData.errors && scrapedData.errors.length > 0 && (
+                  <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+                    <h4 className="font-medium text-red-800 mb-4 flex items-center gap-2">
+                      <span>⚠️</span>
+                      All Errors ({scrapedData.errors.length})
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {scrapedData.errors.map((error: string, index: number) => (
+                        <div key={index} className="text-sm text-red-700 bg-red-100 p-3 rounded">
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
