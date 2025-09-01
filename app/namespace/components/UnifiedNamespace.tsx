@@ -869,15 +869,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             />
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
           </div>
-          <select
-            className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={search.type}
-            onChange={e => setSearch(prev => ({ ...prev, type: e.target.value as any }))}
-          >
-            <option value="all">All</option>
-            <option value="namespace">Namespaces</option>
-            <option value="schema">Schemas</option>
-          </select>
+        
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('grid')}

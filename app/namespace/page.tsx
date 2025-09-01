@@ -1162,7 +1162,43 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           key={key}
                           style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
                         >
-                          <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
+                          <SingleNamespacePage 
+                            namespaceId={namespace['namespace-id']} 
+                            initialNamespace={namespace}
+                            onViewAccount={(account, ns) => {
+                              const tabKey = `accountPage-${account['namespace-account-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setAccountPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, account, namespace: ns || namespace }];
+                              });
+                            }}
+                            onViewMethod={(method, ns) => {
+                              const tabKey = `methodPage-${method['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setMethodPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, method, namespace: ns || namespace }];
+                              });
+                            }}
+                            onViewSchema={(schema, ns) => {
+                              const tabKey = `schema-preview-${schema.id}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview', pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setSchemaPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns || namespace }];
+                              });
+                            }}
+                          />
                         </div>
                       ))}
                       {allWebhooksTabs.map(({ key, namespace }) => (
