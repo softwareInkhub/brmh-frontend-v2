@@ -521,30 +521,76 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
  
 
-  const handleSaveNamespace = async (namespace: any) => {
+  const handleSaveNamespace = async (namespaceData: any) => {
     try {
-      const isEdit = !!namespace["namespace-id"];
+      const isEdit = !!namespaceData["namespace-id"];
       const url = isEdit
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceData["namespace-id"]}`
         : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`;
       const method = isEdit ? 'PUT' : 'POST';
+      
+      // Check if it's FormData (has icon) or regular object
+      const isFormData = namespaceData instanceof FormData;
+      
+      const headers: Record<string, string> = {};
+      let body: string | FormData;
+      
+      if (isFormData) {
+        // Handle FormData for file upload
+        body = namespaceData;
+        // Don't set Content-Type header for FormData, let browser set it with boundary
+        
+        // Log FormData contents
+        console.log('=== NAMESPACE CREATE/UPDATE REQUEST ===');
+        console.log('URL:', url);
+        console.log('Method:', method);
+        console.log('Content-Type: multipart/form-data (auto-set by browser)');
+        console.log('FormData contents:');
+        for (let [key, value] of namespaceData.entries()) {
+          if (key === 'icon') {
+            console.log(`${key}:`, value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value);
+          } else {
+            console.log(`${key}:`, value);
+          }
+        }
+      } else {
+        // Handle regular JSON data
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({
+          "namespace-name": namespaceData["namespace-name"],
+          "namespace-url": namespaceData["namespace-url"],
+          "tags": namespaceData.tags || []
+        });
+        
+        // Log JSON request
+        console.log('=== NAMESPACE CREATE/UPDATE REQUEST ===');
+        console.log('URL:', url);
+        console.log('Method:', method);
+        console.log('Headers:', headers);
+        console.log('Body:', body);
+      }
+
+      console.log('Sending request...');
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          "namespace-name": namespace["namespace-name"],
-          "namespace-url": namespace["namespace-url"],
-          "tags": namespace.tags || []
-        }),
+        headers,
+        body,
       });
 
+      console.log('=== NAMESPACE CREATE/UPDATE RESPONSE ===');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('Failed to save namespace');
+        const errorText = await response.text();
+        console.error('Error Response Body:', errorText);
+        throw new Error(`Failed to save namespace: ${response.status} ${response.statusText}`);
       }
 
       const savedNamespace = await response.json();
+      console.log('Success Response Body:', savedNamespace);
+      
       if (isEdit) {
         setNamespaces(prev => prev.map(ns => ns["namespace-id"] === savedNamespace["namespace-id"] ? savedNamespace : ns));
       } else {

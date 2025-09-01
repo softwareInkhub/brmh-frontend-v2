@@ -7,6 +7,7 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 import AccountPreviewModal from '../Modals/AccountPreviewModal';
 import CreateDataModal from '../Modals/CreateDataModal';
+import NamespaceModal from '../Modals/NamespaceModal';
 import { useSidePanel } from "@/app/components/SidePanelContext";
 import { toast } from 'react-hot-toast';
 
@@ -45,6 +46,7 @@ interface UnifiedNamespace {
   "namespace-id": string;
   "namespace-name": string;
   "namespace-url": string;
+  "icon-url"?: string;
   tags?: string[];
 }
 
@@ -385,6 +387,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   const [previewAccount, setPreviewAccount] = useState<Account | null>(null);
   const [previewMethod, setPreviewMethod] = useState<Method | null>(null);
 
+  // Add state for proper NamespaceModal
+  const [showNamespaceModal, setShowNamespaceModal] = useState(false);
+  const [editingNamespace, setEditingNamespace] = useState<any>(null);
+
   // Add state for MethodTestModal
   const [isMethodTestModalOpen, setIsMethodTestModalOpen] = useState(false);
   const [testingMethod, setTestingMethod] = useState<Method | null>(null);
@@ -423,6 +429,11 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
         schemaRes.json()
       ]);
 
+      console.log('=== FETCHED NAMESPACES DEBUG ===');
+      console.log('Namespaces data:', nsData);
+      console.log('Sample namespace with icon:', nsData.find((ns: any) => ns['icon-url']));
+      console.log('Namespaces with icons:', nsData.filter((ns: any) => ns['icon-url']).length);
+
       setNamespaces(nsData);
       setSchemas(Array.isArray(schemaData) ? schemaData : []);
     } catch (err: any) {
@@ -444,30 +455,49 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
   }, [fetchData]);
 
   // --- Handlers ---
-  const handleNamespaceSave = async () => {
+  const handleNamespaceSave = async (namespaceData: any) => {
     try {
-      if (!namespaceForm["namespace-name"] || !namespaceForm["namespace-url"]) {
-        setError(prev => ({ ...prev, namespaces: 'Name and URL are required' }));
-        return;
+      const isEdit = !!editingNamespace;
+      const url = isEdit
+        ? `${API_BASE_URL}/unified/namespaces/${editingNamespace["namespace-id"]}`
+        : `${API_BASE_URL}/unified/namespaces`;
+      const method = isEdit ? 'PUT' : 'POST';
+      
+      // Check if it's FormData (has icon) or regular object
+      const isFormData = namespaceData instanceof FormData;
+      
+      const headers: Record<string, string> = {};
+      let body: string | FormData;
+      
+      if (isFormData) {
+        body = namespaceData;
+        // Don't set Content-Type header for FormData, let browser set it with boundary
+      } else {
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({
+          "namespace-name": namespaceData["namespace-name"],
+          "namespace-url": namespaceData["namespace-url"],
+          "tags": namespaceData.tags || []
+        });
       }
 
-      const method = showModal.data ? 'PUT' : 'POST';
-      const url = showModal.data
-        ? `${API_BASE_URL}/unified/namespaces/${showModal.data["namespace-id"]}`
-        : `${API_BASE_URL}/unified/namespaces`;
-
-      const res = await fetch(url, {
+      const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(namespaceForm),
+        headers,
+        body,
       });
 
-      if (!res.ok) throw new Error('Failed to save namespace');
-      setShowModal({ type: null, data: null });
-      setNamespaceForm({ "namespace-name": '', "namespace-url": '', tags: [] });
+      if (!response.ok) {
+        throw new Error('Failed to save namespace');
+      }
+
+      setShowNamespaceModal(false);
+      setEditingNamespace(null);
       fetchData();
-    } catch (err: any) {
-      setError(prev => ({ ...prev, namespaces: err.message }));
+      toast.success(isEdit ? 'Namespace updated successfully!' : 'Namespace created successfully!');
+    } catch (error: any) {
+      console.error('Error saving namespace:', error);
+      toast.error(error.message || 'Failed to save namespace');
     }
   };
 
@@ -833,7 +863,7 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             <input
               type="text"
               placeholder="Search..."
-              className="pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 pr-4 py-[4px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={search.text}
               onChange={e => setSearch(prev => ({ ...prev, text: e.target.value }))}
             />
@@ -861,6 +891,15 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
             >
               <ListIcon size={16} />
             </button>
+           
+            
+            <button
+              onClick={() => { setEditingNamespace(null); setShowNamespaceModal(true); }}
+              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Plus size={14} className="mr-1" /> Add Namespace
+            </button>
+        
           </div>
         </div>
       </div>
@@ -869,141 +908,204 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
       <div className="space-y-6">
         {/* Namespaces Section */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium">Namespaces</h3>
-            <button
-              onClick={() => setShowModal({ type: 'namespace', data: null })}
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <Plus size={14} className="mr-1" /> Add Namespace
-            </button>
-          </div>
+          
 
           {loading.namespaces && <div className="text-gray-500">Loading namespaces...</div>}
           {error.namespaces && <div className="text-red-500">{error.namespaces}</div>}
 
-          <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 justify-start' : 'space-y-2'}>
-            {filteredNamespaces.map((ns, idx) => (
+          <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4' : 'space-y-2'}>
+            {filteredNamespaces.map((ns, idx) => {
+              // Debug logging for namespace icons
+              if (idx === 0) {
+                console.log('=== NAMESPACE CARD DEBUG ===');
+                console.log('First namespace:', ns);
+                console.log('Has icon-url:', !!ns["icon-url"]);
+                console.log('Icon URL:', ns["icon-url"]);
+              }
+              return (
               <React.Fragment key={ns["namespace-id"]}>
                 <div
-                  className={`rounded-lg shadow border p-2 cursor-pointer hover:shadow-md transition-all relative group flex flex-col min-h-[60px] justify-between max-w-xs w-full ${
+                  className={`bg-white rounded-lg border border-gray-200 cursor-pointer hover:shadow-md transition-all duration-200 flex items-center gap-3 p-4 group ${
                     selectedNamespaceId === ns["namespace-id"] 
-                      ? 'bg-blue-50 border-2 border-blue-500 shadow-lg ring-2 ring-blue-200' 
+                      ? 'ring-2 ring-blue-500 border-blue-300' 
                       : expandedNamespaceId === ns["namespace-id"] 
-                        ? 'bg-green-50 border-2 border-green-500 shadow-lg' 
-                        : 'bg-white border border-gray-100'
+                        ? 'ring-2 ring-green-500 border-green-300' 
+                        : 'hover:border-gray-300'
                   }`}
                   onClick={() => handleNamespaceClick(ns)}
-                  style={{ minWidth: 0 }}
+                  onMouseEnter={() => {
+                    if (!namespaceDetailsMap[ns["namespace-id"]]) {
+                      fetchNamespaceDetails(ns["namespace-id"]);
+                    }
+                  }}
                 >
-                  <div className="flex items-center gap-2 justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Database size={16} className="text-blue-500" />
-                      <h4 className="text-sm font-semibold text-gray-900 truncate">{ns["namespace-name"]}</h4>
-                      {selectedNamespaceId === ns["namespace-id"] && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 ml-2">
-                      <button
-                        onClick={e => { e.stopPropagation(); setShowModal({ type: 'namespace', data: ns }); }}
-                        className="p-1 text-gray-400 hover:text-blue-600"
-                        title="Edit"
-                      >
-                        <Edit size={14} />
-                      </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDelete('namespace', ns["namespace-id"]); }}
-                        className="p-1 text-gray-400 hover:text-red-600"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                  {/* Icon */}
+                  <div className="flex-shrink-0">
+                    {ns["icon-url"] ? (
+                      <img 
+                        src={ns["icon-url"]} 
+                        alt={`${ns["namespace-name"]} icon`}
+                        className="w-8 h-8 rounded object-cover"
+                        onLoad={(e) => {
+                          console.log('Icon loaded successfully:', ns["icon-url"]);
+                        }}
+                        onError={(e) => {
+                          console.error('Icon failed to load:', ns["icon-url"], e);
+                          // Fallback to database icon if image fails to load
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-8 h-8 rounded bg-gray-100 flex items-center justify-center ${ns["icon-url"] ? 'hidden' : ''}`}>
+                      <Database size={16} className="text-gray-600" />
                     </div>
                   </div>
-                  {ns.tags && ns.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {ns.tags.map((tag: string) => (
-                        <span key={`${ns["namespace-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  
+                  {/* Name */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium text-gray-900 truncate">{ns["namespace-name"]}</h4>
+                    {viewMode === 'list' && (
+                      <div className="mt-1 flex items-center gap-3 min-w-0">
+                        {ns["namespace-url"] && (
+                          <span className="text-xs text-gray-500 truncate max-w-[280px]">{ns["namespace-url"]}</span>
+                        )}
+                        {Array.isArray(ns.tags) && ns.tags.length > 0 && (
+                          <div className="hidden md:flex flex-wrap gap-1">
+                            {ns.tags.slice(0, 3).map((tag: string) => (
+                              <span key={`${ns["namespace-id"]}-${tag}`} className="px-2 py-0.5 bg-gray-50 text-gray-700 text-[11px] rounded-full border border-gray-200">
+                                {tag}
+                              </span>
+                            ))}
+                            {ns.tags.length > 3 && (
+                              <span className="px-2 py-0.5 bg-gray-50 text-gray-700 text-[11px] rounded-full border border-gray-200">
+                                +{ns.tags.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="hidden md:flex items-center gap-2 ml-auto">
+                          <span className="px-2 py-0.5 rounded-full bg-gray-50 border border-gray-200 text-[11px] text-gray-700">
+                            Accounts {namespaceDetailsMap[ns["namespace-id"]]?.accounts?.length ?? '—'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-gray-50 border border-gray-200 text-[11px] text-gray-700">
+                            Methods {namespaceDetailsMap[ns["namespace-id"]]?.methods?.length ?? '—'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditingNamespace(ns); setShowNamespaceModal(true); }}
+                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Edit"
+                    >
+                      <Edit size={14} />
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDelete('namespace', ns["namespace-id"]); }}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </React.Fragment>
-            ))}
+            );
+            })}
           </div>
           {/* Expanded details below the grid */}
           {expandedNamespaceId && (
-            <div className="w-full bg-gray-50 rounded-lg p-3 mt-4 mb-2 shadow-lg border border-blue-100">
+            <div className="w-full bg-white/60 backdrop-blur-sm rounded-xl p-4 mt-4 mb-2 shadow-sm border border-gray-200">
                     {/* Accounts */}
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><Users size={14}/> Accounts</span>
-                        <button className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded-full bg-blue-50" onClick={() => { setEditingAccount(null); setAccountForm({ "namespace-account-name": '', "namespace-account-url-override": '', tags: [], "namespace-account-header": [], variables: [] }); setShowAccountModal(true); }}>Add Account</button>
+                    <div className="mb-4 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100"><Users size={14} className="text-blue-600"/></span>Accounts</span>
+                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => { setEditingAccount(null); setAccountForm({ "namespace-account-name": '', "namespace-account-url-override": '', tags: [], "namespace-account-header": [], variables: [] }); setShowAccountModal(true); }}><Plus size={12} /> Add Account</button>
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
-                        <div className="text-gray-400 text-xs">Loading accounts...</div>
+                        <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg"><div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/> Loading accounts...</div>
                 ) : (!namespaceDetailsMap[expandedNamespaceId]?.accounts || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.accounts) || namespaceDetailsMap[expandedNamespaceId]?.accounts.length === 0 ? (
-                        <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No accounts found.</div>
+                        <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No accounts found.</div>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {namespaceDetailsMap[expandedNamespaceId]?.accounts?.map(account => (
-                            <div key={account["namespace-account-id"]} className="bg-blue-50 rounded-full px-4 py-2 flex items-center gap-2 shadow-sm">
-                              <span className="font-medium text-blue-700 text-sm">{account["namespace-account-name"]}</span>
-                              {account["namespace-account-url-override"] && <span className="text-xs text-gray-500">{account["namespace-account-url-override"]}</span>}
-                              {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.map((tag: string) => (
-                                <span key={`${account["namespace-account-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
-                              ))}
-                              <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
-                              <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
-                              <button className="p-1 text-gray-400 hover:text-red-600" onClick={() => handleDeleteAccount(account)}><Trash2 size={12} /></button>
+                            <div key={account["namespace-account-id"]} className="group rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-3 flex items-center gap-3 hover:shadow-md transition">
+                              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/70 border border-blue-100"><User size={14} className="text-blue-600"/></div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 text-sm truncate">{account["namespace-account-name"]}</div>
+                                {account["namespace-account-url-override"] && <div className="text-xs text-gray-500 truncate">{account["namespace-account-url-override"]}</div>}
+                              </div>
+                              <div className="ml-auto flex items-center gap-1">
+                                {account.tags && Array.isArray(account.tags) && account.tags.length > 0 && account.tags.slice(0,2).map((tag: string) => (
+                                  <span key={`${account["namespace-account-id"]}-${tag}`} className="px-2 py-0.5 bg-white/80 border border-blue-100 text-blue-700 text-[10px] rounded-full">{tag}</span>
+                                ))}
+                                {account.tags && account.tags.length > 2 && (
+                                  <span className="px-2 py-0.5 bg-white/80 border border-blue-100 text-blue-700 text-[10px] rounded-full">+{account.tags.length - 2}</span>
+                                )}
+                                <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white/70 rounded-md transition" onClick={() => handlePreviewAccount(account)}><Eye size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={() => handleEditAccount(account)}><Edit size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={() => handleDeleteAccount(account)}><Trash2 size={12} /></button>
+                              </div>
                             </div>
                           ))}
                         </div>
                       ))}
                     </div>
                     {/* Methods */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><Terminal size={14}/> Methods</span>
-                        <button className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1 rounded-full bg-blue-50" onClick={() => { setEditingMethod(null); setMethodForm({ "namespace-method-name": '', "namespace-method-type": 'GET', "namespace-method-url-override": '', tags: [], "namespace-method-queryParams": [], "namespace-method-header": [], "save-data": false, "isInitialized": false, "sample-request": '', "sample-response": '', "request-schema": '', "response-schema": '' }); setShowMethodModal(true); }}>Add Method</button>
+                    <div className="mt-4 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-sky-50 to-cyan-50 border border-sky-100"><Terminal size={14} className="text-sky-600"/></span>Methods</span>
+                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => { setEditingMethod(null); setMethodForm({ "namespace-method-name": '', "namespace-method-type": 'GET', "namespace-method-url-override": '', tags: [], "namespace-method-queryParams": [], "namespace-method-header": [], "save-data": false, "isInitialized": false, "sample-request": '', "sample-response": '', "request-schema": '', "response-schema": '' }); setShowMethodModal(true); }}><Plus size={12} /> Add Method</button>
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
-                        <div className="text-gray-400 text-xs">Loading methods...</div>
+                        <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg"><div className="w-3 h-3 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"/> Loading methods...</div>
                 ) : (!namespaceDetailsMap[expandedNamespaceId]?.methods || !Array.isArray(namespaceDetailsMap[expandedNamespaceId]?.methods) || namespaceDetailsMap[expandedNamespaceId]?.methods.length === 0 ? (
-                        <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No methods found.</div>
+                        <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No methods found.</div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {namespaceDetailsMap[expandedNamespaceId]?.methods?.map((method, index) => (
-                            <div key={method["namespace-method-id"] || `method-${expandedNamespaceId}-${index}`} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 shadow-sm">
-                              <span className="font-medium text-gray-800">{method["namespace-method-name"]}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${method["namespace-method-type"] === 'GET' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{method["namespace-method-type"]}</span>
-                              {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.map((tag: string) => (
-                                <span key={`${method["namespace-method-id"]}-${tag}`} className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">{tag}</span>
-                              ))}
-                        <button className="p-1 text-gray-400 hover:text-blue-600 ml-auto" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
-                              <button className="p-1 text-gray-400 hover:text-blue-600" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
-                              <button className="p-1 text-gray-400 hover:text-red-600" onClick={() => handleDeleteMethod(method)}><Trash2 size={12} /></button>
+                            <div key={method["namespace-method-id"] || `method-${expandedNamespaceId}-${index}`} className="group rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3 flex items-center gap-3 hover:shadow-md transition">
+                              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-200"><Terminal size={14} className="text-gray-700"/></div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 text-sm truncate">{method["namespace-method-name"]}</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full border ${method["namespace-method-type"] === 'GET' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{method["namespace-method-type"]}</span>
+                                  {method.tags && Array.isArray(method.tags) && method.tags.length > 0 && method.tags.slice(0,2).map((tag: string) => (
+                                    <span key={`${method["namespace-method-id"]}-${tag}`} className="px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-[10px] rounded-full">{tag}</span>
+                                  ))}
+                                  {method.tags && method.tags.length > 2 && (
+                                    <span className="px-2 py-0.5 bg-white border border-gray-200 text-gray-700 text-[10px] rounded-full">+{method.tags.length - 2}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="ml-auto flex items-center gap-1">
+                                <button className="p-1.5 text-gray-400 hover:text-sky-600 hover:bg-white/70 rounded-md transition" onClick={() => handlePreviewMethod({ ...method, "namespace-name": method["namespace-name"], "namespace-account-name": (namespaceDetailsMap[expandedNamespaceId]?.accounts?.[0]?.["namespace-account-name"] || '') })}><Eye size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-white/70 rounded-md transition" onClick={() => handleEditMethod(method)}><Edit size={12} /></button>
+                                <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white/70 rounded-md transition" onClick={() => handleDeleteMethod(method)}><Trash2 size={12} /></button>
+                              </div>
                             </div>
                           ))}
                         </div>
                       ))}
                     </div>
               {/* Schemas for selected namespace */}
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-gray-700 text-sm flex items-center gap-1"><FileCode size={14}/> Schemas</span>
+              <div className="mt-4 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100"><FileCode size={14} className="text-purple-600"/></span>Schemas</span>
                   <button
-                    className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 rounded-full bg-purple-50 font-semibold"
+                    className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow hover:shadow-md active:scale-[0.98]"
                     onClick={() => { 
                       const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
                       setSchemaModalNamespace(currentNamespace); 
                       setShowUnifiedSchemaModal(true); 
                     }}
                   >
-                    + Create Schema
+                    <Plus size={12}/> Create Schema
                   </button>
                 </div>
                 {
@@ -1013,15 +1115,18 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     if (!Array.isArray(nsSchemaIds)) return null;
                     const nsSchemas = schemas.filter(s => nsSchemaIds.includes(s.id));
                     if (nsSchemas.length === 0) {
-                      return <div className="text-gray-400 text-xs flex items-center gap-2"><Info size={12}/> No schemas found.</div>;
+                      return <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 px-4 py-3 rounded-lg"><Info size={12}/> No schemas found.</div>;
                     }
               return (
-                      <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
                         {nsSchemas.map(schema => (
-                          <div key={schema.id} className="bg-purple-50 rounded-lg px-4 py-2 flex flex-col shadow-sm min-w-[180px] max-w-xs">
-                            <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
-                            <span className="text-xs text-gray-500">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
-                  </div>
+                          <div key={schema.id} className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 p-3 hover:shadow-md transition">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-8 h-8 rounded-lg bg-white/70 border border-purple-100 flex items-center justify-center"><FileCode size={14} className="text-purple-600"/></div>
+                              <span className="font-semibold text-purple-700 text-sm truncate">{schema.schemaName}</span>
+                            </div>
+                            <span className="text-xs text-gray-600">{schema.originalType}{schema.isArray ? ' (Array)' : ''}</span>
+                          </div>
                         ))}
                 </div>
               );
@@ -1153,125 +1258,12 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
       )}
 
       {/* Modals */}
-      {showModal.type === 'namespace' && (
-        <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 overflow-y-auto"
-          onClick={() => setShowModal({ type: null, data: null })}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-xl w-full max-w-lg transform transition-all animate-in fade-in duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  {showModal.data ? 'Edit Namespace' : 'Create New Namespace'}
-                </h2>
-                <button
-                  onClick={() => setShowModal({ type: null, data: null })}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-            {/* Modal Body */}
-            <div className="p-6 space-y-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Namespace Name <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={namespaceForm["namespace-name"]}
-                    onChange={e => setNamespaceForm(f => ({ ...f, "namespace-name": e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                    placeholder="Enter namespace name"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Namespace URL <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={namespaceForm["namespace-url"]}
-                    onChange={e => setNamespaceForm(f => ({ ...f, "namespace-url": e.target.value }))}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                    placeholder="https://api.example.com"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Tags</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={namespaceForm.tags.join(', ')}
-                    onChange={e => setNamespaceForm(f => ({ ...f, tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean) }))}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                    placeholder="Enter tags (comma-separated)"
-                  />
-                </div>
-                {namespaceForm.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {namespaceForm.tags.map((tag, index) => (
-                      <span
-                        key={`modal-${index}-${tag}`}
-                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 group hover:bg-blue-100 transition-colors"
-                      >
-                        {tag}
-                        <button
-                          onClick={() => {
-                            const newTags = [...namespaceForm.tags];
-                            newTags.splice(index, 1);
-                            setNamespaceForm(f => ({ ...f, tags: newTags }));
-                          }}
-                          className="ml-1.5 hover:text-blue-800"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {showModal.data && showModal.data.schemaId && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Schema ID</label>
-                  <input
-                    type="text"
-                    value={showModal.data.schemaId}
-                    readOnly
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-100 text-gray-700 text-sm"
-                  />
-                </div>
-              )}
-            </div>
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50 rounded-b-2xl">
-              <button
-                onClick={() => setShowModal({ type: null, data: null })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleNamespaceSave}
-                disabled={!namespaceForm["namespace-name"] || !namespaceForm["namespace-url"]}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors shadow-sm hover:shadow-md"
-              >
-                {showModal.data ? 'Update Namespace' : 'Create Namespace'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NamespaceModal
+        isOpen={showNamespaceModal}
+        onClose={() => { setShowNamespaceModal(false); setEditingNamespace(null); }}
+        onSave={handleNamespaceSave}
+        namespace={editingNamespace}
+      />
 
       <UnifiedSchemaModal
         showModal={showUnifiedSchemaModal}

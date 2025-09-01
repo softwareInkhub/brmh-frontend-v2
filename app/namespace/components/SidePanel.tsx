@@ -224,15 +224,35 @@ const SidePanel: React.FC<SidePanelProps> = ({ namespaces, accounts, schemas, me
                       {expandedNs[ns['namespace-id']] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
                     <button
-                      className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-semibold hover:underline cursor-pointer"
+                      className="flex items-center gap-2 px-2 py-1 w-full text-gray-700 hover:bg-gray-50 text-sm font-medium hover:underline cursor-pointer"
                       onClick={e => {
                         e.stopPropagation();
+                        // Open namespace tab
                         onAdd('singleNamespace', ns);
+                        // Ensure dropdown expands (but doesn't collapse if already open)
+                        if (!expandedNs[ns['namespace-id']]) {
+                          toggleNs(ns['namespace-id']);
+                        } else {
+                          // Still prefetch details to keep contents fresh
+                          fetchNamespaceDetails(ns['namespace-id']);
+                        }
                       }}
                       type="button"
                     >
-                      <Folder size={16} className="text-blue-500" />
-                      <span className="font-medium text-sm text-gray-800 group-hover:text-blue-600 truncate">
+                      {ns['icon-url'] ? (
+                        <img 
+                          src={ns['icon-url']} 
+                          alt={`${ns['namespace-name']} icon`}
+                          className="w-4 h-4 rounded object-cover"
+                          onError={(e) => {
+                            // Fallback to folder icon if image fails to load
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <Folder size={16} className={`text-gray-600 ${ns['icon-url'] ? 'hidden' : ''}`} />
+                      <span className="font-medium text-sm text-gray-900 truncate">
                         {ns['namespace-name']}
                       </span>
                     </button>
