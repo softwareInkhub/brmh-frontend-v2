@@ -1,15 +1,79 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User, Hash, Tag, Edit3, CheckCircle, Globe, Key, List, X, Edit2, Trash2, Link as LinkIcon, Database } from 'lucide-react';
 
 type Props = {
   account: any;
   namespace?: any;
+  openEdit?: boolean;
 };
 
-export default function AccountPage({ account, namespace }: Props) {
+export default function AccountPage({ account, namespace, openEdit }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [editAccount, setEditAccount] = useState<any>(account || {});
   const [saveMsg, setSaveMsg] = useState('');
+
+  // Auto-open in edit mode when requested
+  useEffect(() => {
+    if (openEdit) {
+      setEditMode(true);
+    }
+  }, [openEdit]);
+
+  // Editable headers/variables helpers
+  const updateHeaderAtIndex = (index: number, field: 'key' | 'value', value: string) => {
+    setEditAccount((prev: any) => {
+      const headers = Array.isArray(prev['namespace-account-header']) ? [...prev['namespace-account-header']] : [];
+      const row = { ...(headers[index] || { key: '', value: '' }), [field]: value };
+      headers[index] = row;
+      return { ...prev, 'namespace-account-header': headers };
+    });
+  };
+
+  const addHeaderRow = () => {
+    setEditAccount((prev: any) => ({
+      ...prev,
+      'namespace-account-header': [
+        ...(Array.isArray(prev['namespace-account-header']) ? prev['namespace-account-header'] : []),
+        { key: '', value: '' }
+      ]
+    }));
+  };
+
+  const removeHeaderRow = (index: number) => {
+    setEditAccount((prev: any) => {
+      const headers = Array.isArray(prev['namespace-account-header']) ? [...prev['namespace-account-header']] : [];
+      headers.splice(index, 1);
+      return { ...prev, 'namespace-account-header': headers };
+    });
+  };
+
+  const updateVariableAtIndex = (index: number, field: 'key' | 'value', value: string) => {
+    setEditAccount((prev: any) => {
+      const keyName = Array.isArray(prev['variables']) ? 'variables' : 'namespace-account-variables';
+      const list = Array.isArray(prev[keyName]) ? [...prev[keyName]] : [];
+      const row = { ...(list[index] || { key: '', value: '' }), [field]: value };
+      list[index] = row;
+      return { ...prev, [keyName]: list };
+    });
+  };
+
+  const addVariableRow = () => {
+    setEditAccount((prev: any) => {
+      const keyName = Array.isArray(prev['variables']) ? 'variables' : 'namespace-account-variables';
+      const list = Array.isArray(prev[keyName]) ? [...prev[keyName]] : [];
+      list.push({ key: '', value: '' });
+      return { ...prev, [keyName]: list };
+    });
+  };
+
+  const removeVariableRow = (index: number) => {
+    setEditAccount((prev: any) => {
+      const keyName = Array.isArray(prev['variables']) ? 'variables' : 'namespace-account-variables';
+      const list = Array.isArray(prev[keyName]) ? [...prev[keyName]] : [];
+      list.splice(index, 1);
+      return { ...prev, [keyName]: list };
+    });
+  };
 
 
   const handleInput = (field: string, value: any) => {
@@ -340,12 +404,58 @@ export default function AccountPage({ account, namespace }: Props) {
                 </div>
               )}
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Account Headers</label>
-                {renderAccountHeaders(editAccount["namespace-account-header"])}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-700">Account Headers</label>
+                  <button type="button" className="text-xs text-blue-600 hover:underline" onClick={addHeaderRow}>+ Add Header</button>
+                </div>
+                <div className="space-y-2">
+                  {(Array.isArray(editAccount['namespace-account-header']) ? editAccount['namespace-account-header'] : []).map((h: any, idx: number) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Key"
+                        className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-sm"
+                        value={h.key || ''}
+                        onChange={e => updateHeaderAtIndex(idx, 'key', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Value"
+                        className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-sm"
+                        value={h.value || ''}
+                        onChange={e => updateHeaderAtIndex(idx, 'value', e.target.value)}
+                      />
+                      <button type="button" className="text-red-500 px-2" onClick={() => removeHeaderRow(idx)}><X size={16} /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Account Variables</label>
-                {renderAccountVars(editAccount["variables"] || editAccount["namespace-account-variables"])}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-gray-700">Account Variables</label>
+                  <button type="button" className="text-xs text-blue-600 hover:underline" onClick={addVariableRow}>+ Add Variable</button>
+                </div>
+                <div className="space-y-2">
+                  {(Array.isArray(editAccount['variables']) ? editAccount['variables'] : (Array.isArray(editAccount['namespace-account-variables']) ? editAccount['namespace-account-variables'] : [])).map((v: any, idx: number) => (
+                    <div key={idx} className="flex flex-wrap gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Key"
+                        className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-sm"
+                        value={v.key || ''}
+                        onChange={e => updateVariableAtIndex(idx, 'key', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Value"
+                        className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-sm"
+                        value={v.value || ''}
+                        onChange={e => updateVariableAtIndex(idx, 'value', e.target.value)}
+                      />
+                      <button type="button" className="text-red-500 px-2" onClick={() => removeVariableRow(idx)}><X size={16} /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

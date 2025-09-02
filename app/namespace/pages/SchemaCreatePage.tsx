@@ -125,6 +125,16 @@ export default function SchemaCreatePage({ onSchemaNameChange, namespace, initia
   const [mockDataContext, setMockDataContext] = useState('');
   const [autoFillEnabled, setAutoFillEnabled] = useState(false);
 
+  // If query param create=1 is present, ensure we're in create mode (no-op if editing)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('create') === '1') {
+        // No explicit UI needed; page defaults to editor ready for creation
+      }
+    }
+  }, []);
+
   // 2. Fetch accounts for the namespace on mount or when schemaObj changes
   useEffect(() => {
     const nsId = namespace?.['namespace-id'] || schemaObj?.namespaceId;

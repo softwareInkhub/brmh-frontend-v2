@@ -4,7 +4,7 @@ import MethodTestModal from '@/app/components/MethodTestModal';
 import { v4 as uuidv4 } from 'uuid';
 
 type Method = { id: string; name: string };
-type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void };
+type Props = { onSelect?: (m: Method) => void; method?: any; namespace?: any; onTest?: (method: any, namespace: any) => void; openEdit?: boolean };
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 const methods = [
   { id: 'm1', name: 'GET /users' },
@@ -25,7 +25,7 @@ function getPartitionKey(method: any) {
   return '';
 }
 
-export default function MethodPage({ onSelect, method, namespace, onTest }: Props) {
+export default function MethodPage({ onSelect, method, namespace, onTest, openEdit }: Props) {
   const [editMethod, setEditMethod] = useState<any>(method || {});
   const [saveMsg, setSaveMsg] = useState('');
   const [editMode, setEditMode] = useState(false);
@@ -168,6 +168,13 @@ export default function MethodPage({ onSelect, method, namespace, onTest }: Prop
       fetchIndexingConfigs(); // Fetch indexing configurations for this method
     }
   }, [method]);
+
+  // Auto-open in edit mode when requested
+  useEffect(() => {
+    if (openEdit) {
+      setEditMode(true);
+    }
+  }, [openEdit]);
 
   // Update search form data when indexing configs are loaded
   useEffect(() => {
@@ -1840,7 +1847,7 @@ Please select an indexing configuration above.`);
             )}
           </>
         ) : (
-          <form onSubmit={handleSave} className="flex flex-col gap-6 animate-fade-in">
+          <form onSubmit={handleSave} className="flex flex-col gap-6 animate-fade-in p-4 md:p-6">
             <div className="flex items-center gap-3 mb-2">
               <Edit size={24} className="text-blue-500" />
               <h2 className="text-xl font-bold text-blue-700 tracking-tight">Edit Method</h2>

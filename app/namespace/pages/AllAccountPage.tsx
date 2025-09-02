@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Pencil, Trash2, User, Plus, X } from 'lucide-react';
+import { Pencil, Trash2, User, Plus, X } from 'lucide-react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
-function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewAccount?: (account: any, ns?: any) => void }) {
+function AllAccountPage({ namespace, onViewAccount, openCreate = false }: { namespace?: any, onViewAccount?: (account: any, ns?: any) => void, openCreate?: boolean }) {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidePanel, setSidePanel] = useState<'create' | { account: any } | null>(null);
   const [sidePanelWidth, setSidePanelWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [search, setSearch] = useState('');
   const [createData, setCreateData] = useState<any>({
     'namespace-account-name': '',
     'namespace-account-url-override': '',
@@ -47,6 +49,19 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
     };
     fetchAllAccounts();
   }, [namespace]);
+
+  // Auto-open create panel when requested
+  useEffect(() => {
+    if (openCreate) setSidePanel('create');
+  }, [openCreate]);
+
+  // Support query param create=1
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('create') === '1') setSidePanel('create');
+    }
+  }, []);
 
   // Handle mouse events for resizing
   useEffect(() => {
@@ -339,38 +354,109 @@ function AllAccountPage({ namespace, onViewAccount }: { namespace?: any, onViewA
     return null;
   };
 
+  const filtered = accounts.filter(acc => (acc['namespace-account-name'] || '').toLowerCase().includes(search.toLowerCase()));
+
   return (
     <div className="p-8 w-full flex relative">
       <div className="flex-1 pr-0">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">All Accounts</h2>
-          <button
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-            onClick={() => setSidePanel('create')}
-          >
-            <Plus size={18} /> Create Account
-          </button>
-        </div>
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {accounts.map(acc => (
-            <div key={acc['namespace-account-id']} className="border border-gray-200 rounded-md p-2 flex flex-col gap-1 min-w-0 bg-white" style={{ width: '260px', margin: '0' }}>
-              <div className="flex items-center gap-2">
-                <User size={16} className="text-blue-400" />
-                <span className="text-base font-semibold text-gray-900 truncate">{acc['namespace-account-name']}</span>
-              </div>
-              <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
-              <div className="flex gap-2 mt-1">
-                  <button className="text-blue-600 hover:text-blue-800 p-1" title="View" onClick={() => setSidePanel({ account: acc })}><Eye size={16} /></button>
-                <button className="text-green-600 hover:text-green-800 p-1" title="Edit"><Pencil size={16} /></button>
-                <button className="text-red-600 hover:text-red-800 p-1" title="Delete" onClick={() => handleDelete(acc)}><Trash2 size={16} /></button>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search accounts..."
+                className="pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </span>
             </div>
-          ))}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-2 py-1 rounded ${viewMode === 'grid' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+                title="Grid view"
+              >
+                ▦
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-2 py-1 rounded ${viewMode === 'list' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+                title="List view"
+              >
+                ≡
+              </button>
+            </div>
+            <button
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+              onClick={() => setSidePanel('create')}
+            >
+              <Plus size={18} /> Create Account
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Content */}
+        {loading ? (
+          <div>Loading...</div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {filtered.map(acc => (
+              <div
+                key={acc['namespace-account-id']}
+                className="group relative rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm hover:shadow-md transition cursor-pointer"
+                onClick={() => onViewAccount && onViewAccount(acc, acc.namespace)}
+              >
+                {/* actions */}
+                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    className="w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-green-600 bg-transparent"
+                    title="Edit"
+                    onClick={(e) => { e.stopPropagation(); onViewAccount && onViewAccount({ ...acc, __openEdit: true }, acc.namespace); }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    className="w-7 h-7 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-red-600 bg-transparent"
+                    title="Delete"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(acc); }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-3 pr-14">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100"><User size={16} className="text-blue-600" /></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-gray-900 truncate">{acc['namespace-account-name']}</div>
+                    <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="divide-y">
+              {filtered.map(acc => (
+                <div key={acc['namespace-account-id']} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+                  <div className="w-8 h-8 rounded bg-blue-50 flex items-center justify-center border border-blue-100"><User size={16} className="text-blue-600" /></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-gray-900 truncate">{acc['namespace-account-name']}</div>
+                    <div className="text-xs text-gray-500 truncate">Namespace: <span className="font-medium text-gray-700">{acc.namespace?.['namespace-name']}</span></div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button className="text-green-600 hover:text-green-800 p-1" title="Edit" onClick={(e) => { e.stopPropagation(); onViewAccount && onViewAccount({ ...acc, __openEdit: true }, acc.namespace); }}><Pencil size={16} /></button>
+                    <button className="text-red-600 hover:text-red-800 p-1" title="Delete" onClick={() => handleDelete(acc)}><Trash2 size={16} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {/* Side Panel with draggable resizer */}
       <div

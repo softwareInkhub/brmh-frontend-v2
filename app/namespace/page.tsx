@@ -124,12 +124,12 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
   const [showSchemaModal, setShowSchemaModal] = useState(false);
 
   // Add state for all accounts/methods tabs
-  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any }[]>([]);
-  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any }[]>([]);
+  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any; openCreate?: boolean }[]>([]);
+  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any; openCreate?: boolean }[]>([]);
 
   // Add state for account/method tabs
-  const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any }[]>([]);
-  const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
+  const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any; openEdit?: boolean }[]>([]);
+  const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any; openEdit?: boolean }[]>([]);
 
 
 
@@ -244,6 +244,60 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
 
     fetchData();
   }, []);
+
+  // Listen to SingleNamespacePage events to open tabs in-place
+  useEffect(() => {
+    const onOpenAllAccounts = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `allAccounts-${ns['namespace-id']}` : 'allAccounts';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `Accounts: ${ns['namespace-name']}` : 'All Accounts', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllAccountsTabs(prev => {
+        const exists = prev.find(t => t.key === key);
+        if (exists) {
+          return prev.map(t => t.key === key ? { ...t, openCreate: true } : t);
+        }
+        return [...prev, { key, namespace: ns, openCreate: true }];
+      });
+    };
+    const onOpenAllMethods = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `allMethods-${ns['namespace-id']}` : 'allMethods';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `Methods: ${ns['namespace-name']}` : 'All Methods', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllMethodsTabs(prev => {
+        const exists = prev.find(t => t.key === key);
+        if (exists) {
+          return prev.map(t => t.key === key ? { ...t, openCreate: true } : t);
+        }
+        return [...prev, { key, namespace: ns, openCreate: true }];
+      });
+    };
+    const onOpenCreateSchema = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `schema-create-${ns['namespace-id']}` : 'schema';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `New Schema: ${ns['namespace-name']}` : 'New Schema', pinned: false }]);
+      }
+      setActiveTab(key);
+      setSchemaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, mode: 'create', namespace: ns }];
+      });
+    };
+    window.addEventListener('open-all-accounts-tab', onOpenAllAccounts as any);
+    window.addEventListener('open-all-methods-tab', onOpenAllMethods as any);
+    window.addEventListener('open-create-schema-tab', onOpenCreateSchema as any);
+    return () => {
+      window.removeEventListener('open-all-accounts-tab', onOpenAllAccounts as any);
+      window.removeEventListener('open-all-methods-tab', onOpenAllMethods as any);
+      window.removeEventListener('open-create-schema-tab', onOpenCreateSchema as any);
+    };
+  }, [namespaces, tabs]);
 
   // Fetch webhooks for a namespace
   const fetchNamespaceWebhooks = async (namespaceId: string) => {
@@ -1011,7 +1065,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             setActiveTab(tabKey);
                             setAccountPageTabs(prev => {
                               if (prev.find(t => t.key === tabKey)) return prev;
-                              return [...prev, { key: tabKey, account, namespace: ns }];
+                              return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
                             });
                           }}
                           onViewMethod={(method, ns) => {
@@ -1022,7 +1076,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             setActiveTab(tabKey);
                             setMethodPageTabs(prev => {
                               if (prev.find(t => t.key === tabKey)) return prev;
-                              return [...prev, { key: tabKey, method, namespace: ns }];
+                              return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
                             });
                           }}
                           onViewSchema={(schema, ns) => {
@@ -1062,7 +1116,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             setActiveTab(tabKey);
                             setAccountPageTabs(prev => {
                               if (prev.find(t => t.key === tabKey)) return prev;
-                              return [...prev, { key: tabKey, account, namespace: ns }];
+                              return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
                             });
                           }}
                           onViewMethod={(method, ns) => {
@@ -1073,7 +1127,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                             setActiveTab(tabKey);
                             setMethodPageTabs(prev => {
                               if (prev.find(t => t.key === tabKey)) return prev;
-                              return [...prev, { key: tabKey, method, namespace: ns }];
+                              return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
                             });
                           }}
                           onViewSchema={(schema, ns) => {
@@ -1099,13 +1153,14 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                       {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
                         <NewTabContent onOpenTab={handleOpenTab} />
                       )}
-                      {allAccountsTabs.map(({ key, namespace }) => (
+                      {allAccountsTabs.map(({ key, namespace, openCreate }) => (
                         <div
                           key={key}
                           style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
                         >
                           <AllAccountPage
                             namespace={namespace}
+                            openCreate={!!openCreate}
                             onViewAccount={(account, ns) => {
                               const tabKey = `accountPage-${account['namespace-account-id']}`;
                               if (!tabs.find(tab => tab.key === tabKey)) {
@@ -1114,19 +1169,20 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                               setActiveTab(tabKey);
                               setAccountPageTabs(prev => {
                                 if (prev.find(t => t.key === tabKey)) return prev;
-                                return [...prev, { key: tabKey, account, namespace: ns }];
+                                return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
                               });
                             }}
                           />
                         </div>
                       ))}
-                      {allMethodsTabs.map(({ key, namespace }) => (
+                      {allMethodsTabs.map(({ key, namespace, openCreate }) => (
                         <div
                           key={key}
                           style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
                         >
                           <AllMethodPage
                             namespace={namespace}
+                            openCreate={!!openCreate}
                             onViewMethod={(method, ns) => {
                               const tabKey = `methodPage-${method['namespace-method-id']}`;
                               if (!tabs.find(tab => tab.key === tabKey)) {
@@ -1135,21 +1191,21 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                               setActiveTab(tabKey);
                               setMethodPageTabs(prev => {
                                 if (prev.find(t => t.key === tabKey)) return prev;
-                                return [...prev, { key: tabKey, method, namespace: ns }];
+                                return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
                               });
                             }}
                           />
                         </div>
                       ))}
-                      {accountPageTabs.map(({ key, account, namespace }) => (
+                      {accountPageTabs.map(({ key, account, namespace, openEdit }) => (
                         <div
                           key={key}
                           style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
                         >
-                          <AccountPage account={account} namespace={namespace} />
+                          <AccountPage account={account} namespace={namespace} openEdit={openEdit} />
                         </div>
                       ))}
-                      {methodPageTabs.map(({ key, method, namespace }) => (
+                      {methodPageTabs.map(({ key, method, namespace, openEdit }) => (
                         <div
                           key={key}
                           style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
@@ -1157,6 +1213,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                           <MethodPage
                             method={method}
                             namespace={namespace}
+                            openEdit={openEdit}
                             onTest={(m, ns) => {
                               const testKey = `methodTest-${m['namespace-method-id']}`;
                               if (!tabs.find(tab => tab.key === testKey)) {
@@ -1250,7 +1307,7 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                               setActiveTab(tabKey);
                               setMethodPageTabs(prev => {
                                 if (prev.find(t => t.key === tabKey)) return prev;
-                                return [...prev, { key: tabKey, method, namespace: ns || namespace }];
+                                return [...prev, { key: tabKey, method, namespace: ns || namespace, openEdit: !!(method as any).__openEdit }];
                               });
                             }}
                             onTestMethod={(m, ns) => {
@@ -1474,12 +1531,12 @@ function NamespacePage(props: React.PropsWithChildren<{}>) {
                 />
               </div>
             ))}
-            {accountPageTabs.map(({ key, account, namespace }) => (
+            {accountPageTabs.map(({ key, account, namespace, openEdit }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <AccountPage account={account} namespace={namespace} />
+                <AccountPage account={account} namespace={namespace} openEdit={openEdit} />
               </div>
             ))}
             {methodPageTabs.map(({ key, method, namespace }) => (

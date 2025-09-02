@@ -7,7 +7,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:50
 
 
 
-export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?: any, onViewSchema?: (schema: any, ns?: any) => void }) {
+export default function AllSchemaPage({ namespace, onViewSchema, openCreate = false, onCreateNew }: { namespace?: any, onViewSchema?: (schema: any, ns?: any) => void, openCreate?: boolean, onCreateNew?: () => void }) {
   const [schemas, setSchemas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,9 +56,19 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
 
   return (
     <div className="p-8 w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">
-        All Schemas{namespace ? `: ${namespace['namespace-name']}` : ''}
-      </h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">
+          All Schemas{namespace ? `: ${namespace['namespace-name']}` : ''}
+        </h2>
+        <button
+          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow"
+          onClick={() => {
+            if (typeof onCreateNew === 'function') onCreateNew();
+          }}
+        >
+          + Create Schema
+        </button>
+      </div>
       {loading ? (
         <div>Loading...</div>
       ) : (

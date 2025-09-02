@@ -223,10 +223,22 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace, onV
        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 ">
         {/* Accounts Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col shadow-sm h-[66vh]">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-gray-900">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold flex items-center gap-2 text-gray-900">
             <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
             Accounts <span className="text-xs text-gray-500 font-normal">({filteredAccounts.length}/{accounts.length})</span>
-          </h3>
+            </h3>
+            <button
+              onClick={() => {
+                // Ask parent to open All Accounts tab for this namespace
+                // We can't directly open tabs here, but parent passes onViewAccount for items.
+                // We'll dispatch a custom event the parent page listens to.
+                const event = new CustomEvent('open-all-accounts-tab', { detail: { namespaceId } });
+                window.dispatchEvent(event);
+              }}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+            >Add Account</button>
+          </div>
           <div className="mt-1 flex-1 min-h-0 overflow-y-auto pr-1">
             {filteredAccounts.length === 0 ? (
               <div className="text-gray-400">{searchQuery ? 'No accounts match your search.' : 'No accounts found.'}</div>
@@ -275,10 +287,19 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace, onV
         </div>
         {/* Methods Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col shadow-sm h-[66vh]">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-gray-900">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold flex items-center gap-2 text-gray-900">
             <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
             Methods <span className="text-xs text-gray-500 font-normal">({filteredMethods.length}/{methods.length})</span>
-          </h3>
+            </h3>
+            <button
+              onClick={() => {
+                const event = new CustomEvent('open-all-methods-tab', { detail: { namespaceId } });
+                window.dispatchEvent(event);
+              }}
+              className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded"
+            >Add Method</button>
+          </div>
           <div className="mt-1 flex-1 min-h-0 overflow-y-auto pr-1">
             {filteredMethods.length === 0 ? (
               <div className="text-gray-400">{searchQuery ? 'No methods match your search.' : 'No methods found.'}</div>
@@ -341,10 +362,19 @@ export default function SingleNamespacePage({ namespaceId, initialNamespace, onV
         </div>
         {/* Schemas Card */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col shadow-sm h-[66vh]">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-gray-900">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold flex items-center gap-2 text-gray-900">
             <span className="inline-block w-2 h-2 bg-purple-500 rounded-full"></span>
             Schemas <span className="text-xs text-gray-500 font-normal">({filteredSchemas.length}/{schemas.length})</span>
-          </h3>
+            </h3>
+            <button
+              onClick={() => {
+                const event = new CustomEvent('open-create-schema-tab', { detail: { namespaceId } });
+                window.dispatchEvent(event);
+              }}
+              className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded"
+            >Add Schema</button>
+          </div>
           <div className="mt-1 flex-1 min-h-0 overflow-y-auto pr-1">
             {filteredSchemas.length === 0 ? (
               <div className="text-gray-400">{searchQuery ? 'No schemas match your search.' : 'No schemas found.'}</div>
