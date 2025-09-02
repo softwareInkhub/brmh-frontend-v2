@@ -1011,7 +1011,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     <div className="mb-4 rounded-xl">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100"><Users size={14} className="text-blue-600"/></span>Accounts</span>
-                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => { setEditingAccount(null); setAccountForm({ "namespace-account-name": '', "namespace-account-url-override": '', tags: [], "namespace-account-header": [], variables: [] }); setShowAccountModal(true); }}><Plus size={12} /> Add Account</button>
+                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => {
+                          const event = new CustomEvent('open-all-accounts-tab', { detail: { namespaceId: expandedNamespaceId } });
+                          window.dispatchEvent(event);
+                        }}><Plus size={12} /> Add Account</button>
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg"><div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/> Loading accounts...</div>
@@ -1059,7 +1062,10 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                     <div className="mt-4 rounded-xl">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-sky-50 to-cyan-50 border border-sky-100"><Terminal size={14} className="text-sky-600"/></span>Methods</span>
-                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => { setEditingMethod(null); setMethodForm({ "namespace-method-name": '', "namespace-method-type": 'GET', "namespace-method-url-override": '', tags: [], "namespace-method-queryParams": [], "namespace-method-header": [], "save-data": false, "isInitialized": false, "sample-request": '', "sample-response": '', "request-schema": '', "response-schema": '' }); setShowMethodModal(true); }}><Plus size={12} /> Add Method</button>
+                        <button className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow hover:shadow-md active:scale-[0.98]" onClick={() => {
+                          const event = new CustomEvent('open-all-methods-tab', { detail: { namespaceId: expandedNamespaceId } });
+                          window.dispatchEvent(event);
+                        }}><Plus size={12} /> Add Method</button>
                       </div>
                 {loadingDetails && !namespaceDetailsMap[expandedNamespaceId] ? (
                         <div className="text-gray-500 text-xs flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg"><div className="w-3 h-3 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"/> Loading methods...</div>
@@ -1111,10 +1117,9 @@ const UnifiedNamespace: React.FC<UnifiedNamespaceProps> = ({ externalModalTrigge
                   <span className="font-semibold text-gray-800 text-sm flex items-center gap-2"><span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100"><FileCode size={14} className="text-purple-600"/></span>Schemas</span>
                   <button
                     className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow hover:shadow-md active:scale-[0.98]"
-                    onClick={() => { 
-                      const currentNamespace = filteredNamespaces.find(ns => ns["namespace-id"] === expandedNamespaceId);
-                      setSchemaModalNamespace(currentNamespace); 
-                      setShowUnifiedSchemaModal(true); 
+                    onClick={() => {
+                      const event = new CustomEvent('open-create-schema-tab', { detail: { namespaceId: expandedNamespaceId } });
+                      window.dispatchEvent(event);
                     }}
                   >
                     <Plus size={12}/> Create Schema
