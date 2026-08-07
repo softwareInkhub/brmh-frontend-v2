@@ -28,7 +28,7 @@ import {
 
 
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
 
 
@@ -82,12 +82,14 @@ export default function NamespacePage() {
   useEffect(() => {
     async function fetchNamespaces() {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces`);
+        const response = await fetch(`${API_BASE_URL}/unified/namespaces`);
         const data = await response.json();
-        setNamespaces(Array.isArray(data) ? data : []);
-        } catch (error) {
-      setNamespaces([]);
-    }
+        const namespacesArray = Array.isArray(data) ? data : 
+                               (data && Array.isArray(data.body) ? data.body : []);
+        setNamespaces(namespacesArray);
+      } catch (error) {
+        setNamespaces([]);
+      }
     }
     fetchNamespaces();
   }, []);

@@ -23,7 +23,19 @@ const NamespacePreviewModal: React.FC<NamespacePreviewModalProps> = ({
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-            <Folder className="text-blue-600" size={28} />
+            {namespace['icon-url'] ? (
+              <img 
+                src={namespace['icon-url']} 
+                alt={`${namespace['namespace-name']} icon`}
+                className="w-8 h-8 rounded object-cover"
+                onError={(e) => {
+                  // Fallback to folder icon if image fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <Folder className={`text-blue-600 ${namespace['icon-url'] ? 'hidden' : ''}`} size={28} />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-2xl font-bold text-gray-900 truncate">{namespace['namespace-name']}</h2>

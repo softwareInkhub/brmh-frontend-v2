@@ -1,89 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
 
-const schemaApis = [
-  {
-    method: 'POST',
-    path: '/schema/generate',
-    description: 'Generate schema from data',
-    details: 'Request body: { ... }\nResponse: { ... }'
-  },
-  {
-    method: 'POST',
-    path: '/schema/validate',
-    description: 'Validate schema',
-    details: 'Request body: { ... }\nResponse: { ... }'
-  },
-  {
-    method: 'POST',
-    path: '/schema',
-    description: 'Save schema',
-    details: 'Request body: { ... }\nResponse: { ... }'
-  },
-  {
-    method: 'GET',
-    path: '/schema',
-    description: 'List all schemas',
-    details: 'Response: [ { ... }, ... ]'
-  },
-  {
-    method: 'GET',
-    path: '/schema/{schemaId}',
-    description: 'Get schema by ID',
-    details: 'Response: { ... }'
-  },
-];
 
-function ApiAccordion() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  return (
-    <div className="mt-8 border-t pt-4">
-      <h3 className="text-xl font-bold mb-4 text-gray-900">Schema API Endpoints</h3>
-      <div>
-        {schemaApis.map((api, idx) => (
-          <div key={`${api.method}-${api.path}`} className="mb-2 border rounded bg-white shadow-sm">
-            <button
-              className="w-full flex items-center justify-between px-4 py-2 focus:outline-none"
-              onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
-            >
-              <span className="flex items-center gap-3">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-bold ${
-                    api.method === 'GET'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-green-500 text-white'
-                  }`}
-                >
-                  {api.method}
-                </span>
-                <span className="font-mono text-sm text-gray-800">{api.path}</span>
-                <span className="ml-2 text-gray-500 text-xs">{api.description}</span>
-              </span>
-              <span className="text-gray-400">{openIndex === idx ? '▲' : '▼'}</span>
-            </button>
-            {openIndex === idx && (
-              <div className="px-6 py-3 bg-gray-50 border-t text-sm text-gray-700 whitespace-pre-wrap">
-                {api.details}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?: any, onViewSchema?: (schema: any, ns?: any) => void }) {
+
+export default function AllSchemaPage({ namespace, onViewSchema, openCreate = false, onCreateNew }: { namespace?: any, onViewSchema?: (schema: any, ns?: any) => void, openCreate?: boolean, onCreateNew?: () => void }) {
   const [schemas, setSchemas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchSchemas = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/unified/schema`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema`);
       const data = await res.json();
       setSchemas(Array.isArray(data)
         ? (namespace
@@ -125,9 +56,19 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
 
   return (
     <div className="p-8 w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">
-        All Schemas{namespace ? `: ${namespace['namespace-name']}` : ''}
-      </h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">
+          All Schemas{namespace ? `: ${namespace['namespace-name']}` : ''}
+        </h2>
+        <button
+          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow"
+          onClick={() => {
+            if (typeof onCreateNew === 'function') onCreateNew();
+          }}
+        >
+          + Create Schema
+        </button>
+      </div>
       {loading ? (
         <div>Loading...</div>
       ) : (
@@ -160,7 +101,6 @@ export default function AllSchemaPage({ namespace, onViewSchema }: { namespace?:
           ))}
         </div>
       )}
-      <ApiAccordion />
     </div>
   );
 } 

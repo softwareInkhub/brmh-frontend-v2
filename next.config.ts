@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
     // your project has type errors.
     ignoreBuildErrors: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: '/unified/:path*',
+        destination: 'http://localhost:5001/unified/:path*',
+      },
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:5001/api/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;

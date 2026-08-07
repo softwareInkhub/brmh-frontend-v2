@@ -49,7 +49,7 @@ const AwsLayout = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <div className="flex h-screen ml-20">
+    <div className="flex h-screen ">
       {/* AWS SidePanel */}
       <div
         style={{
@@ -65,7 +65,7 @@ const AwsLayout = ({ children }: { children: React.ReactNode }) => {
         <AwsSidePanel onServiceClick={handleServiceClick} />
       </div>
       {/* Main AWS Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto pl-8">
+      <div className="flex-1 min-h-0 overflow-y-auto ">
         {children}
       </div>
     </div>

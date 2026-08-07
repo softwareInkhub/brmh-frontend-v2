@@ -52,4 +52,4 @@ jobs:
           # Verify the service is running
           sudo systemctl status pm2-ubuntu
           # Check PM2 status
-          pm2 status 
+          pm2 status  

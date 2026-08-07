@@ -3,7 +3,7 @@ import { Plus, ChevronDown, ChevronRight, LayoutGrid, List as ListIcon } from 'l
 import SchemaModal from '../Modals/SchemaModal';
 import SchemaPreviewModal from '../Modals/SchemaPreviewModal';
 
-const FIELD_TYPES = ['string', 'number', 'boolean', 'object', 'array', 'enum'];
+const FIELD_TYPES = ['string', 'number', 'boolean', 'object', 'array', 'enum', 'schema'];
 
 type Field = {
   name: string;
@@ -15,9 +15,253 @@ type Field = {
   itemType?: string;
   itemFields?: Field[];
   enumValues?: string[];
+  schemaId?: string; // For schema type fields
+  allowedSchemaType?: string; // Restrict selectable child schemas
 };
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+// Schema Selector Component
+function SchemaSelector({ 
+  value, 
+  onChange, 
+  placeholder = "Select a schema...",
+  allowedType
+}: { 
+  value: string; 
+  onChange: (schemaId: string) => void; 
+  placeholder?: string;
+  allowedType?: string;
+}) {
+  const [schemas, setSchemas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch schemas when component mounts or search term changes
+  useEffect(() => {
+    const fetchSchemas = async () => {
+      setLoading(true);
+      try {
+        setError(null);
+        const params = new URLSearchParams();
+        if (searchTerm) {
+          params.append('search', searchTerm);
+        }
+        params.append('limit', '20');
+        if (allowedType) {
+          params.append('schemaType', allowedType);
+        }
+        
+        const response = await fetch(`${API_URL}/unified/schema/selection?${params}`);
+        if (response.ok) {
+          const data = await response.json();
+          setSchemas(data.schemas || []);
+        } else {
+          setError('Failed to fetch schemas');
+        }
+      } catch (error) {
+        console.error('Error fetching schemas:', error);
+        setError('Failed to fetch schemas');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce search
+    const timeoutId = setTimeout(fetchSchemas, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  const selectedSchema = schemas.find(s => s.id === value);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.schema-selector')) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDropdown]);
+
+  return (
+    <div className="relative schema-selector">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          className="border border-gray-300 p-1 rounded-md text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition outline-none bg-gray-50 placeholder-gray-400 flex-1 min-w-[200px]"
+          placeholder={placeholder}
+          value={selectedSchema ? selectedSchema.description : ''}
+          onFocus={() => setShowDropdown(true)}
+          readOnly
+        />
+        <button
+          type="button"
+          className="text-gray-400 hover:text-gray-700 p-1"
+          onClick={() => setShowDropdown(!showDropdown)}
+        >
+          ▼
+        </button>
+      </div>
+      
+      {showDropdown && (
+        <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+          <div className="p-2 border-b border-gray-200">
+            <input
+              type="text"
+              className="w-full border border-gray-300 p-1 rounded text-xs"
+              placeholder="Search schemas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {allowedType && (
+              <div className="mt-1 text-[11px] text-purple-700">Filtered by type: <span className="font-medium">{allowedType}</span></div>
+            )}
+          </div>
+          
+          <div className="py-1">
+            {loading ? (
+              <div className="px-3 py-2 text-xs text-gray-500">Loading...</div>
+            ) : error ? (
+              <div className="px-3 py-2 text-xs text-red-500">
+                {error}
+              </div>
+            ) : schemas.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-gray-500">
+                {searchTerm ? 'No schemas found' : 'No schemas available'}
+              </div>
+            ) : (
+              schemas.map((schema) => (
+                <button
+                  key={schema.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex flex-col"
+                  onClick={() => {
+                    onChange(schema.id);
+                    setShowDropdown(false);
+                    setSearchTerm('');
+                  }}
+                >
+                  <span className="font-medium">{schema.schemaName}</span>
+                  {schema.methodName && (
+                    <span className="text-gray-500 text-xs">{schema.methodName}</span>
+                  )}
+                  {schema.schemaType && (
+                    <span className="text-gray-400 text-[11px]">type: {schema.schemaType}</span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+
+// Lightweight nested preview for a referenced child schema
+function ChildSchemaPreview({ schemaId }: { schemaId: string }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [schema, setSchema] = useState<any | null>(null);
+
+  const fetchResolved = async () => {
+    if (!schemaId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/unified/schema/${schemaId}/resolved?resolveReferences=true`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to load child schema');
+      }
+      const data = await res.json();
+      setSchema(data.schema ? data.schema : data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load child schema');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open && !schema) {
+      fetchResolved();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, schemaId]);
+
+  const renderTree = (node: any, depth = 0) => {
+    if (!node) return null;
+    if (node.type === 'object' && node.properties) {
+      return (
+        <ul className="pl-3 border-l border-gray-200">
+          {Object.entries(node.properties).map(([key, prop]: any) => (
+            <li key={key} className="py-0.5">
+              <span className="text-[11px] text-gray-700 font-medium">{key}</span>
+              <span className="text-[11px] text-gray-400 ml-1">({Array.isArray(prop.type) ? prop.type.join(' | ') : prop.type || (prop.$ref ? 'schema' : 'unknown')})</span>
+              {prop.$ref ? (
+                <span className="text-[11px] text-purple-600 ml-1">$ref</span>
+              ) : prop.type === 'object' ? (
+                renderTree(prop, depth + 1)
+              ) : prop.type === 'array' ? (
+                <div className="ml-3">
+                  <span className="text-[11px] text-gray-500">items</span>
+                  {prop.items ? renderTree(prop.items, depth + 1) : null}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (node.type === 'array' && node.items) {
+      return (
+        <div className="ml-3">
+          <span className="text-[11px] text-gray-500">items</span>
+          {renderTree(node.items, depth + 1)}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        className={`text-[11px] ${open ? 'text-purple-700' : 'text-blue-600'} hover:underline`}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? 'Hide child schema' : 'Preview child schema'}
+      </button>
+      {open && (
+        <div className="mt-1 p-2 bg-gray-50 border border-gray-200 rounded">
+          {loading ? (
+            <div className="text-[11px] text-gray-500">Loading...</div>
+          ) : error ? (
+            <div className="text-[11px] text-red-600">{error}</div>
+          ) : schema ? (
+            <div>
+              <div className="text-[11px] text-gray-600 mb-1">Resolved child schema</div>
+              {renderTree(schema)}
+            </div>
+          ) : (
+            <div className="text-[11px] text-gray-500">No schema loaded.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Recursive field form
 function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCollapsedNodes, nodePath }: { fields: Field[]; onChange: (fields: Field[]) => void; level?: number; collapsedNodes: Set<string>; setCollapsedNodes: (s: Set<string>) => void; nodePath: string }) {
@@ -146,6 +390,24 @@ function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCo
                   </div>
                 </div>
               )}
+              {field.type === 'schema' && (
+                <div className="flex-1">
+                  <SchemaSelector
+                    value={field.schemaId || ''}
+                    onChange={(schemaId) => updateField(idx, 'schemaId', schemaId)}
+                    placeholder="Select a child schema..."
+                  />
+                  {field.schemaId && (
+                    <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <span>✓</span>
+                      <span>Child schema selected</span>
+                    </div>
+                  )}
+                  {field.schemaId && (
+                    <ChildSchemaPreview schemaId={field.schemaId} />
+                  )}
+                </div>
+              )}
               <label className="flex items-center gap-1 text-xs ml-1 text-gray-700">
               <input
                 type="checkbox"
@@ -207,6 +469,25 @@ function NestedFieldsEditor({ fields, onChange, level = 0, collapsedNodes, setCo
                   />
                 </div>
               )}
+              {field.itemType === 'schema' && (
+                <div className="mt-1 ml-4">
+                  <div className="text-xs font-semibold text-gray-600 mb-1">Child Schema:</div>
+                  <SchemaSelector
+                    value={field.schemaId || ''}
+                    onChange={(schemaId) => updateField(idx, 'schemaId', schemaId)}
+                    placeholder="Select a child schema for array items..."
+                  />
+                  {field.schemaId && (
+                    <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                      <span>✓</span>
+                      <span>Child schema selected</span>
+                    </div>
+                  )}
+                  {field.schemaId && (
+                    <ChildSchemaPreview schemaId={field.schemaId} />
+                  )}
+                </div>
+              )}
             </div>
           )}
           </React.Fragment>
@@ -246,10 +527,26 @@ function fieldsToSchema(fields: Field[]): Record<string, any> {
     } else if (field.type === 'array') {
       if (field.itemType === 'object') {
         property.items = fieldsToSchema(field.itemFields || []);
-    } else {
+      } else if (field.itemType === 'schema') {
+        property.items = { 
+          $ref: `#/components/schemas/${field.schemaId}`,
+          type: field.allowNull ? ['object', 'null'] : 'object'
+        };
+        if (field.allowedSchemaType) {
+          property.items['x-allowedSchemaType'] = field.allowedSchemaType;
+        }
+      } else {
         property.items = { type: field.allowNull ? [field.itemType, 'null'] : field.itemType };
+      }
+    } else if (field.type === 'schema') {
+      property = {
+        $ref: `#/components/schemas/${field.schemaId}`,
+        type: field.allowNull ? ['object', 'null'] : 'object'
+      };
+      if (field.allowedSchemaType) {
+        (property as any)['x-allowedSchemaType'] = field.allowedSchemaType;
+      }
     }
-  }
     
     properties[field.name] = property;
     if (field.required) {
@@ -290,14 +587,29 @@ function schemaToFields(schema: any): Field[] {
       };
     }
     
+    // Handle schema reference type
+    if (prop.$ref) {
+      const schemaId = prop.$ref.split('/').pop(); // Extract schema ID from $ref
+      return {
+        name: name ?? '',
+        type: 'schema',
+        required: (schema.required || []).includes(name),
+        allowNull,
+        schemaId: schemaId,
+        allowedSchemaType: (prop as any)['x-allowedSchemaType']
+      };
+    }
+    
     return {
       name: name ?? '',
       type: type || 'string',
       required: (schema.required || []).includes(name),
       allowNull,
         fields: type === 'object' ? schemaToFields(prop) : [],
-        itemType: type === 'array' ? (Array.isArray(prop.items?.type) ? prop.items.type[0] : prop.items?.type || 'string') : 'string',
+        itemType: type === 'array' ? (prop.items?.$ref ? 'schema' : (Array.isArray(prop.items?.type) ? prop.items.type[0] : prop.items?.type || 'string')) : 'string',
         itemFields: type === 'array' && prop.items?.type === 'object' ? schemaToFields(prop.items) : [],
+        schemaId: type === 'array' && prop.items?.$ref ? prop.items.$ref.split('/').pop() : undefined,
+        allowedSchemaType: type === 'array' ? (prop.items as any)?.['x-allowedSchemaType'] : undefined,
       };
     });
 }
@@ -468,8 +780,12 @@ function DynamicForm({ schema, formData, setFormData, path = '' }: DynamicFormPr
 }
 
 // Add a helper to generate a random id
-function generateRandomId() {
-  return Math.random().toString(36).substring(2, 12);
+function useRandomId() {
+  const [id, setId] = useState('');
+  useEffect(() => {
+    setId(Math.random().toString(36).substring(2, 12));
+  }, []);
+  return id;
 }
 
 const SchemaService = () => {
@@ -816,8 +1132,8 @@ const SchemaService = () => {
                           {schema.schemaName}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-gray-500">{schema.isArray ? 'Array' : schema.originalType}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.createdAt).toLocaleDateString()}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.createdAt).toLocaleDateString('en-GB')}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-400">{new Date(schema.updatedAt).toLocaleDateString('en-GB')}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-right rounded-r-lg">
                           <div className="flex items-center gap-2 justify-end">
                             {!isTableActive && (
@@ -1033,7 +1349,7 @@ const SchemaService = () => {
                 onClick={async () => {
                   const itemToSave = { ...dataForm };
                   if (!itemToSave.id) {
-                    itemToSave.id = generateRandomId();
+                    itemToSave.id = useRandomId();
                   }
                   const res = await fetch(`${API_URL}/schema/data`, {
                     method: 'POST',

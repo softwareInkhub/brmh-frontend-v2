@@ -46,6 +46,7 @@ const methodTypeColor = (type: string) => {
   }
 };
 
+
 const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose, method, onTest, onTable, onEdit, onDelete, onRegisterWebhook }) => {
   const [showWebhookForm, setShowWebhookForm] = useState(false);
   const [webhookRoute, setWebhookRoute] = useState('');
@@ -54,7 +55,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
   const [webhookError, setWebhookError] = useState('');
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [allWebhooks, setAllWebhooks] = useState<any[]>([]);
-  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
   const [showTableModal, setShowTableModal] = useState(false);
   const [tableNameInput, setTableNameInput] = useState('');
 
@@ -282,7 +283,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
                     <div>
                       <p className="text-sm font-medium text-gray-700">{webhook.route}</p>
                       <p className="text-xs text-gray-500">Table: {webhook.tableName}</p>
-                      <p className="text-xs text-gray-400 mt-1">Created: {new Date(webhook.createdAt).toLocaleString()}</p>
+                      <p className="text-xs text-gray-400 mt-1">Created: {new Date(webhook.createdAt).toLocaleString('en-GB')}</p>
                     </div>
                     <button
                       onClick={() => handleDeleteWebhook(webhook.id)}
@@ -360,7 +361,7 @@ const MethodPreviewModal: React.FC<MethodPreviewModalProps> = ({ isOpen, onClose
               if (window.confirm('Are you sure you want to delete this method?')) {
                 try {
                   const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/methods/${currentMethod['namespace-method-id']}`,
+                    `${API_BASE_URL}/unified/methods/${currentMethod['namespace-method-id']}`,
                     { method: 'DELETE' }
                   );
                   if (!response.ok) throw new Error('Failed to delete method');

@@ -4,21 +4,25 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
+  LayoutDashboard, 
   Database,
   Play,
   Cloud,
   FileCode,
   HelpCircle,
+  History,
   Settings,
+  UserPlus,
   Rocket,
   BookOpen,
+  Plus,
 } from 'lucide-react';
 
 const sidebarItems = [
   {
-    name: 'Dashboard ',
+    name: 'Dashboard',
     path: '/',
-    icon: <Rocket size={24} />, // Use your logo or API icon
+    icon: <LayoutDashboard size={24} />, // Use your logo or API icon
   },
   {
     name: 'Namespace',
@@ -36,21 +40,15 @@ const sidebarItems = [
     icon: <Play size={24} />, // Tests icon
   },
   {
-    name: 'AI',
-    path: '/ai',
-    icon: <FileCode size={24} />, // You can use any icon you like
+    name: 'Docs',
+    path: '/docsPage',
+    icon: <BookOpen size={24} />, // Documentation icon
   },
-  {
-    name: 'Share Docs',
-    path: '/docs',
-    icon: <BookOpen size={24} />, // Docs icon
-  },
- 
   {
     name: 'Settings',
     path: '/settings',
     icon: <Settings size={24} />, // Settings icon
-  }
+  },
 
 ];
 
@@ -61,7 +59,9 @@ const Sidebar: React.FC = () => {
     <aside className="fixed top-0 left-0 z-40 h-screen w-20 bg-[#f7f8fa] border-r border-gray-200 flex flex-col items-center py-4">
       {/* Logo */}
       <div className="mb-6 flex flex-col items-center">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-300 flex items-center justify-center mb-1">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-300 flex items-center justify-center mb-1 hover:scale-105 transition-all duration-300 cursor-pointer" onClick={() => {
+          window.location.href = '/landingPage';
+        }}>
           {/* Replace with your logo if needed */}
           <span className="text-white font-bold text-2xl">B</span>
         </div>

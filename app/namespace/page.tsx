@@ -5,9 +5,12 @@ import UnifiedNamespace, { UnifiedNamespaceModalTrigger } from './components/Uni
 import Namespace from './components/Namespace';
 import SchemaService from './components/SchemaService';
 import Tables from './components/Tables';
-import LLMTerminal from './components/LLMTerminal';
-import { schemaToFields } from './components/SchemaService';
-import { User, X, Plus, MoreHorizontal, Menu, Zap, Box, FileText, GitBranch, Database } from 'lucide-react';
+
+import dynamic from 'next/dynamic';
+import { NestedFieldsEditor, schemaToFields } from './components/SchemaService';
+import { User, X, Plus, MoreHorizontal,  Zap, Box, FileText, GitBranch, Database, Sparkles, View, LayoutGrid, LayoutPanelLeft, Pin, PinOff } from 'lucide-react';
+import AccountModal from './Modals/AccountModal';
+import MethodModal from './components/MethodModal';
 import NamespaceModal from './Modals/NamespaceModal';
 import AccountPreviewModal from './Modals/AccountPreviewModal';
 import MethodPreviewModal from './Modals/MethodPreviewModal';
@@ -15,6 +18,7 @@ import MethodTestModal from '../components/MethodTestModal';
 import UnifiedSchemaModal from './Modals/UnifiedSchemaModal';
 import SchemaPreviewModal from './Modals/SchemaPreviewModal';
 import { useSidePanel } from "../components/SidePanelContext";
+import { useNamespaceContext } from "../components/NamespaceContext";
 import SchemaCreatePage from './pages/SchemaCreatePage';
 import AllAccountPage from './pages/AllAccountPage';
 import AllMethodPage from './pages/AllMethodPage';
@@ -23,13 +27,22 @@ import MethodPage from './pages/MethodPage';
 import AllSchemaPage from './pages/AllSchemaPage';
 import SingleNamespacePage from './pages/SingleNamespacePage';
 import MethodTestPage from './pages/MethodTestPage';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import AllWebhookPage from './pages/AllWebhookPage';
+import WebhookPage from './pages/WebhookPage';
+import AllLambdasPage from './pages/AllLambdasPage';
+import LambdaPage from './pages/LambdaPage';
+
+
+
 
 const SIDEBAR_WIDTH = 80; // px, w-20
 const SIDEPANEL_WIDTH = 256; // px, w-64
 
 const initialTabs = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'new', label: 'New Tab', italic: true, bold: true },
+  { key: 'overview', label: 'Overview', pinned: false },
+  { key: 'new', label: 'New Tab', italic: true, bold: true, pinned: false },
 ];
 
 function fieldsToSchema(fields: any[]): Record<string, any> {
@@ -71,16 +84,9 @@ function fieldsToSchema(fields: any[]): Record<string, any> {
   return schema;
 }
 
-// Utility to truncate tab names in JS
-function truncateTabName(name: string, max = 18) {
-  if (!name) return '';
-  // Remove line breaks and extra spaces
-  const clean = name.replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
-  return clean.length > max ? clean.slice(0, max) + '...' : clean;
-}
-
-export default function NamespacePage() {
+function NamespacePage(props: React.PropsWithChildren<{}>) {
   const { isCollapsed } = useSidePanel();
+  const { setCurrentNamespace } = useNamespaceContext();
   const [activeTab, setActiveTab] = useState('overview');
   const [tabs, setTabs] = useState(initialTabs);
 
@@ -106,7 +112,8 @@ export default function NamespacePage() {
   const [previewSchema, setPreviewSchema] = useState(null);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
 
-  // New state for MethodModal
+  // New state for AccountModal and MethodModal
+  const [accountModal, setAccountModal] = useState<{ isOpen: boolean; account: any | null }>({ isOpen: false, account: null });
   const [methodModal, setMethodModal] = useState<{ isOpen: boolean; method: any | null }>({ isOpen: false, method: null });
   const [namespaceModal, setNamespaceModal] = useState<{ isOpen: boolean; namespace: any | null }>({ isOpen: false, namespace: null });
 
@@ -117,20 +124,17 @@ export default function NamespacePage() {
   const [showSchemaModal, setShowSchemaModal] = useState(false);
 
   // Add state for all accounts/methods tabs
-  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any; openForm?: boolean }[]>([]);
-  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any; openForm?: boolean }[]>([]);
+  const [allAccountsTabs, setAllAccountsTabs] = useState<{ key: string; namespace?: any; openCreate?: boolean }[]>([]);
+  const [allMethodsTabs, setAllMethodsTabs] = useState<{ key: string; namespace?: any; openCreate?: boolean }[]>([]);
 
   // Add state for account/method tabs
-  const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any }[]>([]);
-  const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
+  const [accountPageTabs, setAccountPageTabs] = useState<{ key: string; account: any; namespace: any; openEdit?: boolean }[]>([]);
+  const [methodPageTabs, setMethodPageTabs] = useState<{ key: string; method: any; namespace: any; openEdit?: boolean }[]>([]);
 
-  // Add state for LLMTerminal
-  const [llmTerminalOpen, setLlmTerminalOpen] = useState(false);
-  const [llmTerminalPlacement, setLlmTerminalPlacement] = useState<'right'>('right');
-  const [llmTerminalWidth, setLlmTerminalWidth] = useState(500);
+
 
   // Add state for schema page tabs
-  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
+  const [schemaPageTabs, setSchemaPageTabs] = useState<{ key: string; schema?: any; mode: 'create' | 'preview' | 'edit'; initialSchemaName?: string; namespace?: any; methodId?: string }[]>([]);
 
   // Add state for all schemas tabs
   const [allSchemasTabs, setAllSchemasTabs] = useState<{ key: string; namespace?: any }[]>([]);
@@ -140,6 +144,32 @@ export default function NamespacePage() {
 
   // Add state for method test tabs
   const [methodTestTabs, setMethodTestTabs] = useState<{ key: string; method: any; namespace: any }[]>([]);
+
+
+
+  // Add state for AI Agent Workspace
+
+
+  // Add state for tab layout
+  const [tabLayout, setTabLayout] = useState<'horizontal' | 'vertical'>('horizontal');
+
+  // Add state for all webhooks tabs
+  const [allWebhooksTabs, setAllWebhooksTabs] = useState<{ key: string; namespace?: any }[]>([]);
+
+  // Add state for webhooks per namespace
+  const [webhooksMap, setWebhooksMap] = useState<Record<string, any[]>>({});
+
+  // Add state for webhookPage tabs
+  const [webhookPageTabs, setWebhookPageTabs] = useState<{ key: string; webhook: any; namespace: any }[]>([]);
+  
+  // Add state for lambdas per namespace
+  const [lambdasMap, setLambdasMap] = useState<Record<string, any[]>>({});
+  
+  // Add state for all lambdas tabs
+  const [allLambdasTabs, setAllLambdasTabs] = useState<{ key: string; namespace?: any }[]>([]);
+  
+  // Add state for lambdaPage tabs
+  const [lambdaPageTabs, setLambdaPageTabs] = useState<{ key: string; lambda: any; namespace: any }[]>([]);
 
   // Derive accounts and methods from namespaceDetailsMap for SidePanel
   const accounts = Object.fromEntries(
@@ -151,31 +181,163 @@ export default function NamespacePage() {
 
   // Fetch namespaces and schemas for SidePanel
   useEffect(() => {
+    const fetchData = async () => {
+      console.log('Fetching namespaces and schemas...');
+      
+      // Add a small delay to ensure backend is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      try {
     // Fetch namespaces
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces`)
-      .then(res => res.json())
-      .then(data => setNamespaces(Array.isArray(data) ? data : []))
-      .catch(() => setNamespaces([]));
+        const namespacesRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`);
+        console.log('Namespaces response status:', namespacesRes.status);
+        if (!namespacesRes.ok) {
+          throw new Error(`HTTP error! status: ${namespacesRes.status}`);
+        }
+        const namespacesData = await namespacesRes.json();
+        console.log('Namespaces data received:', namespacesData);
+        // Fix: Handle both formats - direct array or wrapped in body
+        const namespacesArray = Array.isArray(namespacesData) ? namespacesData : 
+                               (namespacesData && Array.isArray(namespacesData.body) ? namespacesData.body : []);
+        setNamespaces(namespacesArray);
+      } catch (error) {
+        console.error('Error fetching namespaces:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+          });
+        } else {
+          console.error('Unknown error type:', error);
+        }
+        setNamespaces([]);
+      }
 
+      try {
     // Fetch schemas
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/schema`)
-      .then(res => res.json())
-      .then(data => setSchemas(Array.isArray(data) ? data : []))
-      .catch(() => setSchemas([]));
+        const schemasRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema`);
+        console.log('Schemas response status:', schemasRes.status);
+        if (!schemasRes.ok) {
+          throw new Error(`HTTP error! status: ${schemasRes.status}`);
+        }
+        const schemasData = await schemasRes.json();
+        console.log('Schemas data received:', schemasData);
+        // Fix: Handle both formats - direct array or wrapped in body
+        const schemasArray = Array.isArray(schemasData) ? schemasData : 
+                           (schemasData && Array.isArray(schemasData.body) ? schemasData.body : []);
+        setSchemas(schemasArray);
+      } catch (error) {
+        console.error('Error fetching schemas:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+          });
+        } else {
+          console.error('Unknown error type:', error);
+        }
+        setSchemas([]);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  // Fetch accounts and methods for a namespace
+  // Listen to SingleNamespacePage events to open tabs in-place
+  useEffect(() => {
+    const onOpenAllAccounts = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `allAccounts-${ns['namespace-id']}` : 'allAccounts';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `Accounts: ${ns['namespace-name']}` : 'All Accounts', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllAccountsTabs(prev => {
+        const exists = prev.find(t => t.key === key);
+        if (exists) {
+          return prev.map(t => t.key === key ? { ...t, openCreate: true } : t);
+        }
+        return [...prev, { key, namespace: ns, openCreate: true }];
+      });
+    };
+    const onOpenAllMethods = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `allMethods-${ns['namespace-id']}` : 'allMethods';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `Methods: ${ns['namespace-name']}` : 'All Methods', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllMethodsTabs(prev => {
+        const exists = prev.find(t => t.key === key);
+        if (exists) {
+          return prev.map(t => t.key === key ? { ...t, openCreate: true } : t);
+        }
+        return [...prev, { key, namespace: ns, openCreate: true }];
+      });
+    };
+    const onOpenCreateSchema = (e: any) => {
+      const ns = namespaces.find(n => n['namespace-id'] === (e?.detail?.namespaceId || ''));
+      const key = ns ? `schema-create-${ns['namespace-id']}` : 'schema';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs(prev => [...prev, { key, label: ns ? `New Schema: ${ns['namespace-name']}` : 'New Schema', pinned: false }]);
+      }
+      setActiveTab(key);
+      setSchemaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, mode: 'create', namespace: ns }];
+      });
+    };
+    window.addEventListener('open-all-accounts-tab', onOpenAllAccounts as any);
+    window.addEventListener('open-all-methods-tab', onOpenAllMethods as any);
+    window.addEventListener('open-create-schema-tab', onOpenCreateSchema as any);
+    return () => {
+      window.removeEventListener('open-all-accounts-tab', onOpenAllAccounts as any);
+      window.removeEventListener('open-all-methods-tab', onOpenAllMethods as any);
+      window.removeEventListener('open-create-schema-tab', onOpenCreateSchema as any);
+    };
+  }, [namespaces, tabs]);
+
+  // Fetch webhooks for a namespace
+  const fetchNamespaceWebhooks = async (namespaceId: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/webhooks/namespace/${namespaceId}`);
+      if (!res.ok) throw new Error('Failed to fetch webhooks');
+      const data = await res.json();
+      setWebhooksMap(prev => ({ ...prev, [namespaceId]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      setWebhooksMap(prev => ({ ...prev, [namespaceId]: [] }));
+    }
+  };
+
+  // Fetch lambdas for a namespace
+  const fetchNamespaceLambdas = async (namespaceId: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/workspace/lambdas/${namespaceId}`);
+      if (!res.ok) throw new Error('Failed to fetch lambdas');
+      const data = await res.json();
+      setLambdasMap(prev => ({ ...prev, [namespaceId]: Array.isArray(data.lambdas) ? data.lambdas : [] }));
+    } catch (err) {
+      setLambdasMap(prev => ({ ...prev, [namespaceId]: [] }));
+    }
+  };
+
+  // Update fetchNamespaceDetails to also fetch webhooks and lambdas
   const fetchNamespaceDetails = async (namespaceId: string) => {
     try {
       const [accountsRes, methodsRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces/${namespaceId}/accounts`),
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000'}/unified/namespaces/${namespaceId}/methods`)
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/accounts`),
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceId}/methods`)
       ]);
       const [accounts, methods] = await Promise.all([
         accountsRes.json(),
         methodsRes.json()
       ]);
       setNamespaceDetailsMap(prev => ({ ...prev, [namespaceId]: { accounts, methods } }));
+      // Fetch webhooks and lambdas for this namespace
+      fetchNamespaceWebhooks(namespaceId);
+      fetchNamespaceLambdas(namespaceId);
     } catch (err) {
       // handle error
     }
@@ -191,7 +353,7 @@ export default function NamespacePage() {
       // Open a tab for the method, do not open a modal
       const key = `methodPage-${data['namespace-method-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: `Method: ${data['namespace-method-name']}` }]);
+        setTabs([...tabs, { key, label: `Method: ${data['namespace-method-name']}`, pinned: false }]);
       }
       setActiveTab(key);
       setMethodPageTabs(prev => {
@@ -202,7 +364,7 @@ export default function NamespacePage() {
     } else if (type === 'schema') {
       const key = `schema-preview-${data.id}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: data.schemaName || 'Schema Preview' }]);
+        setTabs([...tabs, { key, label: data.schemaName || 'Schema Preview', pinned: false }]);
       }
       setActiveTab(key);
       setSchemaPageTabs(prev => {
@@ -213,11 +375,11 @@ export default function NamespacePage() {
       return;
     }
   };
-  const handleSidePanelAdd = (type: string, parentData?: any, options?: { openForm?: boolean }) => {
+  const handleSidePanelAdd = (type: string, parentData?: any) => {
     if (type === 'namespace') {
       setNamespaceModal({ isOpen: true, namespace: null });
     } else if (type === 'account') {
-      setMethodModal({ isOpen: true, method: null });
+      setAccountModal({ isOpen: true, account: null });
     } else if (type === 'method') {
       setMethodModal({ isOpen: true, method: null });
     } else if (type === 'schema') {
@@ -226,7 +388,7 @@ export default function NamespacePage() {
       const nsName = ns?.['namespace-name'] || '';
       const key = `schema-create-${nsId}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: nsName ? `New Schema: ${nsName}` : 'New Schema' }]);
+        setTabs([...tabs, { key, label: nsName ? `New Schema: ${nsName}` : 'New Schema', pinned: false }]);
       }
       setActiveTab(key);
       setSchemaPageTabs(prev => {
@@ -237,29 +399,29 @@ export default function NamespacePage() {
     } else if (type === 'allAccounts') {
       const key = parentData ? `allAccounts-${parentData['namespace-id']}` : 'allAccounts';
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: parentData ? `Accounts: ${parentData['namespace-name']}` : 'All Accounts' }]);
+        setTabs([...tabs, { key, label: parentData ? `Accounts: ${parentData['namespace-name']}` : 'All Accounts', pinned: false }]);
       }
       setActiveTab(key);
       setAllAccountsTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
-        return [...prev, { key, namespace: parentData, openForm: options?.openForm }];
+        return [...prev, { key, namespace: parentData }];
       });
       return;
     } else if (type === 'allMethods') {
       const key = parentData ? `allMethods-${parentData['namespace-id']}` : 'allMethods';
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: parentData ? `Methods: ${parentData['namespace-name']}` : 'All Methods' }]);
+        setTabs([...tabs, { key, label: parentData ? `Methods: ${parentData['namespace-name']}` : 'All Methods', pinned: false }]);
       }
       setActiveTab(key);
       setAllMethodsTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
-        return [...prev, { key, namespace: parentData, openForm: options?.openForm }];
+        return [...prev, { key, namespace: parentData }];
       });
       return;
     } else if (type === 'accountPage' && parentData?.account) {
       const key = `accountPage-${parentData.account['namespace-account-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: `Account: ${parentData.account['namespace-account-name']}` }]);
+        setTabs([...tabs, { key, label: `Account: ${parentData.account['namespace-account-name']}`, pinned: false }]);
       }
       setActiveTab(key);
       setAccountPageTabs(prev => {
@@ -270,7 +432,7 @@ export default function NamespacePage() {
     } else if (type === 'methodPage' && parentData?.method) {
       const key = `methodPage-${parentData.method['namespace-method-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: `Method: ${parentData.method['namespace-method-name']}` }]);
+        setTabs([...tabs, { key, label: `Method: ${parentData.method['namespace-method-name']}`, pinned: false }]);
       }
       setActiveTab(key);
       setMethodPageTabs(prev => {
@@ -281,7 +443,7 @@ export default function NamespacePage() {
     } else if (type === 'allSchemas') {
       const key = parentData ? `allSchemas-${parentData['namespace-id']}` : 'allSchemas';
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: parentData ? `Schemas: ${parentData['namespace-name']}` : 'All Schemas' }]);
+        setTabs([...tabs, { key, label: parentData ? `Schemas: ${parentData['namespace-name']}` : 'All Schemas', pinned: false }]);
       }
       setActiveTab(key);
       setAllSchemasTabs(prev => {
@@ -290,14 +452,62 @@ export default function NamespacePage() {
       });
       return;
     } else if (type === 'singleNamespace') {
+      console.log('Opening single namespace:', parentData);
       const key = `singleNamespace-${parentData['namespace-id']}`;
       if (!tabs.find(tab => tab.key === key)) {
-        setTabs([...tabs, { key, label: parentData['namespace-name'] }]);
+        setTabs([...tabs, { key, label: parentData['namespace-name'], pinned: false }]);
       }
       setActiveTab(key);
       setSingleNamespaceTabs(prev => {
         if (prev.find(t => t.key === key)) return prev;
         return [...prev, { key, namespace: parentData }];
+      });
+      // Set current namespace context
+      console.log('Setting current namespace context:', parentData);
+      setCurrentNamespace(parentData);
+      return;
+    } else if (type === 'allWebhooks') {
+      const key = parentData ? `allWebhooks-${parentData['namespace-id']}` : 'allWebhooks';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Webhooks: ${parentData['namespace-name']}` : 'All Webhooks', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllWebhooksTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'webhookPage' && parentData?.webhook) {
+      const key = `webhookPage-${parentData.webhook['webhook-id']}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Webhook: ${parentData.webhook['webhook-name']}`, pinned: false }]);
+      }
+      setActiveTab(key);
+      setWebhookPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, webhook: parentData.webhook, namespace: parentData.namespace }];
+      });
+      return;
+    } else if (type === 'allLambdas') {
+      const key = parentData ? `allLambdas-${parentData['namespace-id']}` : 'allLambdas';
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: parentData ? `Lambdas: ${parentData['namespace-name']}` : 'All Lambdas', pinned: false }]);
+      }
+      setActiveTab(key);
+      setAllLambdasTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, namespace: parentData }];
+      });
+      return;
+    } else if (type === 'lambdaPage' && parentData?.lambda) {
+      const key = `lambdaPage-${parentData.lambda.id}`;
+      if (!tabs.find(tab => tab.key === key)) {
+        setTabs([...tabs, { key, label: `Lambda: ${parentData.lambda.functionName}`, pinned: false }]);
+      }
+      setActiveTab(key);
+      setLambdaPageTabs(prev => {
+        if (prev.find(t => t.key === key)) return prev;
+        return [...prev, { key, lambda: parentData.lambda, namespace: parentData.namespace }];
       });
       return;
     }
@@ -405,82 +615,82 @@ export default function NamespacePage() {
   // On mount, update from localStorage if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const lastTab = localStorage.getItem('brhm-last-tab');
-      if (lastTab && lastTab !== activeTab) {
-        setActiveTab(lastTab);
-      }
-    }
-    // eslint-disable-next-line
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
       localStorage.setItem('brhm-last-tab', activeTab);
     }
   }, [activeTab]);
 
-  const handleSchemaModalSave = (schemaName: string, jsonSchema: string) => {
-    handleSave([], jsonSchema); // You may want to adapt this to use fields if needed
-  };
+ 
 
-  const handleSaveAccount = async (account: any) => {
+  const handleSaveNamespace = async (namespaceData: any) => {
     try {
-      const response = await fetch('/api/namespace/account', {
-        method: account["namespace-account-id"] ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...account,
-          "namespace-id": namespaces[0]?.["namespace-id"],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save account');
-      }
-
-      const savedAccount = await response.json();
-      setNamespaceDetailsMap(prev => ({
-        ...prev,
-        [namespaces[0]?.["namespace-id"]]: {
-          accounts: [
-            ...(prev[namespaces[0]?.["namespace-id"]]?.accounts || []).filter((a: any) => a["namespace-account-id"] !== savedAccount["namespace-account-id"]),
-            savedAccount,
-          ],
-          methods: prev[namespaces[0]?.["namespace-id"]]?.methods || [],
-        },
-      }));
-    } catch (error) {
-      console.error('Error saving account:', error);
-      throw error;
-    }
-  };
-
-  const handleSaveNamespace = async (namespace: any) => {
-    try {
-      const isEdit = !!namespace["namespace-id"];
+      const isEdit = !!namespaceData["namespace-id"];
       const url = isEdit
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespaceData["namespace-id"]}`
         : `${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces`;
       const method = isEdit ? 'PUT' : 'POST';
+      
+      // Check if it's FormData (has icon) or regular object
+      const isFormData = namespaceData instanceof FormData;
+      
+      const headers: Record<string, string> = {};
+      let body: string | FormData;
+      
+      if (isFormData) {
+        // Handle FormData for file upload
+        body = namespaceData;
+        // Don't set Content-Type header for FormData, let browser set it with boundary
+        
+        // Log FormData contents
+        console.log('=== NAMESPACE CREATE/UPDATE REQUEST ===');
+        console.log('URL:', url);
+        console.log('Method:', method);
+        console.log('Content-Type: multipart/form-data (auto-set by browser)');
+        console.log('FormData contents:');
+        for (let [key, value] of namespaceData.entries()) {
+          if (key === 'icon') {
+            console.log(`${key}:`, value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value);
+          } else {
+            console.log(`${key}:`, value);
+          }
+        }
+      } else {
+        // Handle regular JSON data
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({
+          "namespace-name": namespaceData["namespace-name"],
+          "namespace-url": namespaceData["namespace-url"],
+          "tags": namespaceData.tags || []
+        });
+        
+        // Log JSON request
+        console.log('=== NAMESPACE CREATE/UPDATE REQUEST ===');
+        console.log('URL:', url);
+        console.log('Method:', method);
+        console.log('Headers:', headers);
+        console.log('Body:', body);
+      }
+
+      console.log('Sending request...');
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          "namespace-name": namespace["namespace-name"],
-          "namespace-url": namespace["namespace-url"],
-          "tags": namespace.tags || []
-        }),
+        headers,
+        body,
       });
 
+      console.log('=== NAMESPACE CREATE/UPDATE RESPONSE ===');
+      console.log('Status:', response.status);
+      console.log('Status Text:', response.statusText);
+      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('Failed to save namespace');
+        const errorText = await response.text();
+        console.error('Error Response Body:', errorText);
+        throw new Error(`Failed to save namespace: ${response.status} ${response.statusText}`);
       }
 
       const savedNamespace = await response.json();
+      console.log('Success Response Body:', savedNamespace);
+      
       if (isEdit) {
         setNamespaces(prev => prev.map(ns => ns["namespace-id"] === savedNamespace["namespace-id"] ? savedNamespace : ns));
       } else {
@@ -497,7 +707,7 @@ export default function NamespacePage() {
     if (!namespace || !namespace["namespace-id"]) return;
     if (!window.confirm('Are you sure you want to delete this namespace?')) return;
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`, {
+              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/namespaces/${namespace["namespace-id"]}`, {
         method: 'DELETE',
       });
       if (!response.ok && response.status !== 204) {
@@ -517,11 +727,13 @@ export default function NamespacePage() {
 
   const handleAddTab = () => {
     const newKey = `tab-${tabs.length + 1}`;
-    setTabs([...tabs, { key: newKey, label: 'New Tab', italic: true, bold: true }]);
+    setTabs([...tabs, { key: newKey, label: 'New Tab', italic: true, bold: true, pinned: false }]);
     setActiveTab(newKey);
   };
 
   const handleCloseTab = (key: string) => {
+    const tab = tabs.find(t => t.key === key);
+    if (tab && tab.pinned) return; // Prevent closing pinned tabs
     const filteredTabs = tabs.filter(tab => tab.key !== key);
     setTabs(filteredTabs);
     if (activeTab === key) {
@@ -549,13 +761,13 @@ export default function NamespacePage() {
       if (activeTab === 'new' || activeTab.startsWith('tab-')) {
         setTabs(prevTabs => prevTabs.map(tab =>
           tab.key === activeTab
-            ? { key, label: 'New Schema' }
+            ? { key, label: 'New Schema', pinned: false }
             : tab
         ));
         setActiveTab(key);
         return;
       }
-      setTabs([...tabs, { key, label: 'New Schema' }]);
+      setTabs([...tabs, { key, label: 'New Schema', pinned: false }]);
       setActiveTab(key);
       return;
     }
@@ -572,7 +784,7 @@ export default function NamespacePage() {
       // Otherwise, replace the placeholder tab
       setTabs(prevTabs => prevTabs.map(tab =>
         tab.key === activeTab
-          ? { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}` }
+          ? { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`, pinned: false }
           : tab
       ));
       setActiveTab(key);
@@ -584,7 +796,7 @@ export default function NamespacePage() {
       setActiveTab(key);
       return;
     }
-    setTabs([...tabs, { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}` }]);
+    setTabs([...tabs, { key, label: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`, pinned: false }]);
     setActiveTab(key);
   }
 
@@ -612,6 +824,20 @@ export default function NamespacePage() {
             <Zap size={40} className="text-blue-300 mb-4" />
             <div className="font-semibold text-gray-800">New Request</div>
           </div>
+          <div 
+            className="flex flex-col items-center bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl shadow p-8 w-56 hover:shadow-lg transition cursor-pointer text-white" 
+            onClick={() => {
+              const key = 'ai-agent';
+              if (!tabs.find(tab => tab.key === key)) {
+                setTabs([...tabs, { key, label: 'AI Agent', pinned: false }]);
+              }
+              setActiveTab(key);
+      
+            }}
+          >
+    
+
+          </div>
         </div>
         <div className="mb-4">
           <button className="text-gray-600 text-sm font-medium px-4 py-2 rounded hover:bg-gray-100 transition flex items-center gap-1">
@@ -630,7 +856,7 @@ export default function NamespacePage() {
   const handleOpenSchemaTabFromTest = (schema: any, schemaName: any, namespace: any, methodId?: string) => {
     const key = `schema-create-from-test-${schemaName}`;
     if (!tabs.find(tab => tab.key === key)) {
-      setTabs([...tabs, { key, label: `Create Schema: ${schemaName}` }]);
+      setTabs([...tabs, { key, label: `Create Schema: ${schemaName}`, pinned: false }]);
     }
     setActiveTab(key);
     setSchemaPageTabs(prev => {
@@ -639,9 +865,15 @@ export default function NamespacePage() {
     });
   };
 
+
+
   return (
+    <div className="relative h-full w-full">
+
+      <DndProvider backend={HTML5Backend}>
+        <div className="flex flex-col h-full w-full">
     <div className="bg-[#f7f8fa] min-h-screen">
-      <div className="flex h-screen ml-20">
+            <div className="flex h-screen">
         {/* SidePanel (always visible) */}
         <div
           style={{
@@ -662,6 +894,8 @@ export default function NamespacePage() {
               accounts={accounts}
               schemas={schemas}
               methods={methods}
+              webhooks={webhooksMap}
+              lambdas={lambdasMap}
               onItemClick={handleSidePanelClick}
               onAdd={handleSidePanelAdd}
               fetchNamespaceDetails={fetchNamespaceDetails}
@@ -674,7 +908,7 @@ export default function NamespacePage() {
               onDeleteSchema={async (schema) => {
                 if (confirm('Are you sure you want to delete this schema?')) {
                   try {
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
+                          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                       method: 'DELETE',
                     });
                     if (!response.ok) throw new Error('Failed to delete schema');
@@ -687,22 +921,31 @@ export default function NamespacePage() {
                   }
                 }
               }}
-              onDeleteNamespace={handleDeleteNamespace}
-            />
+                            onDeleteNamespace={handleDeleteNamespace}
+          />
           )}
         </div>
         {/* Main Content */}
         <div 
-          className="flex-1 min-h-0 overflow-y-auto transition-all duration-200"
-          style={llmTerminalOpen ? { marginRight: llmTerminalWidth } : {}}
+          className="flex-1 min-h-0  overflow-y-auto transition-all duration-200"
         >
-          {/* Tab Section (always flush left) */}
-          <div className="flex items-center border-b bg-white px-4 py-2">
-            <div
-              className="flex items-center gap-1 flex-nowrap overflow-x-auto whitespace-nowrap scrollbar-thin tab-scrollbar"
-              style={{ maxWidth: '100vw', minWidth: 0 }}
-            >
-              {tabs.map(tab => (
+               
+                
+                {/* Tab Layout: Horizontal or Vertical */}
+                {tabLayout === 'horizontal' ? (
+                  <>
+                    <div className="border-b bg-white px-4 py-2 overflow-x-auto whitespace-nowrap relative scrollbar-thin-x">
+                      <div className="flex items-center gap-1" style={{ minWidth: 'fit-content', width: 'fit-content', display: 'inline-flex' }}>
+                        {/* Sticky container for view button and Overview tab */}
+                        <div className="sticky left-0 z-10 bg-white flex items-center pr-2" style={{ boxShadow: '2px 0 4px -2px rgba(0,0,0,0.04)' }}>
+                          <button
+                            className="px-2 py-2 rounded-full transition-colors text-gray-500 hover:bg-gray-100"
+                            title={`Switch to ${tabLayout === 'horizontal' ? 'Vertical' : 'Horizontal'} Tabs View`}
+                            onClick={() => setTabLayout(tabLayout === 'horizontal' ? 'vertical' : 'horizontal')}
+                          >
+                            {tabLayout === 'horizontal' ? <LayoutPanelLeft size={18} /> : <LayoutGrid size={18} />}
+                          </button>
+                          {tabs.filter(tab => tab.key === 'overview').map(tab => (
                 <div key={tab.key} className="flex items-center group">
                   <button
                     className={`px-4 py-2 text-sm rounded-t-lg transition
@@ -710,20 +953,82 @@ export default function NamespacePage() {
                       ${tab.bold ? 'font-bold' : ''}
                       ${tab.italic ? 'italic' : ''}
                     `}
-                    onClick={() => setActiveTab(tab.key)}
-                    style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}
+                                onClick={() => {
+                                  setActiveTab(tab.key);
+                                  // Clear namespace context if switching to overview or non-namespace tabs
+                                  if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                    setCurrentNamespace(null);
+                                  }
+                                }}
                   >
-                    {truncateTabName(tab.label)}
+                                {tab.label}
                   </button>
-                  {tab.key !== 'overview' && (
+                            </div>
+                          ))}
+                          {/* Pinned tabs (sticky) */}
+                          {tabs.filter(tab => tab.pinned && tab.key !== 'overview').map(tab => (
+                            <div key={tab.key} className="flex items-center group">
+                              <button
+                                className={`px-4 py-2 text-sm rounded-t-lg transition
+                                  ${activeTab === tab.key ? 'font-medium text-blue-700 border-b-2 border-blue-600 bg-white' : 'text-gray-700 hover:bg-gray-100'}
+                                  ${tab.bold ? 'font-bold' : ''}
+                                  ${tab.italic ? 'italic' : ''}
+                                `}
+                                onClick={() => {
+                                  setActiveTab(tab.key);
+                                  // Clear namespace context if switching to overview or non-namespace tabs
+                                  if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                    setCurrentNamespace(null);
+                                  }
+                                }}
+                              >
+                                {tab.label}
+                              </button>
+                              <button
+                                className="ml-1 text-yellow-500 hover:text-yellow-700 text-xs px-1 focus:outline-none"
+                                onClick={() => setTabs(tabs => tabs.map(t => t.key === tab.key ? { ...t, pinned: false } : t))}
+                                title="Unpin tab"
+                              >
+                                <Pin size={16} fill="currentColor" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Scrollable tabs except Overview and pinned */}
+                        {tabs.filter(tab => !tab.pinned && tab.key !== 'overview').map(tab => (
+                          <div key={tab.key} className="flex items-center group">
+                            <button
+                              className={`px-4 py-2 text-sm rounded-t-lg transition
+                                ${activeTab === tab.key ? 'font-medium text-gray-700 border-b-2 border-blue-600 bg-white' : 'text-gray-700 hover:bg-gray-100'}
+                                ${tab.bold ? 'font-bold' : ''}
+                                ${tab.italic ? 'italic' : ''}
+                              `}
+                              onClick={() => {
+                                setActiveTab(tab.key);
+                                // Clear namespace context if switching to overview or non-namespace tabs
+                                if (tab.key === 'overview' || tab.key === 'namespace' || tab.key === 'schemaService' || tab.key === 'tables' || tab.key === 'unifiedNamespace') {
+                                  setCurrentNamespace(null);
+                                }
+                              }}
+                            >
+                              {tab.label}
+                            </button>
+                            <button
+                              className="ml-1 text-gray-400 hover:text-yellow-500 text-xs px-1 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                              onClick={() => setTabs(tabs => tabs.map(t => t.key === tab.key ? { ...t, pinned: true } : t))}
+                              title="Pin tab"
+                            >
+                              <PinOff size={16} />
+                            </button>
                     <button
                       className="ml-1 text-gray-400 hover:text-red-500 text-xs px-1 focus:outline-none"
                       onClick={() => handleCloseTab(tab.key)}
                       title="Close tab"
+                              disabled={tab.pinned}
+                              style={tab.pinned ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
                     >
                       ×
                     </button>
-                  )}
                 </div>
               ))}
               <button
@@ -736,17 +1041,411 @@ export default function NamespacePage() {
                 <MoreHorizontal size={16} />
               </button>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button className="px-3 py-1 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg">
-                Testing Env <span className="ml-1">&#9660;</span>
+                    </div>
+                    {/* Main Tab Content with conditional left padding */}
+                    <div className={`${isCollapsed ? 'pl-0' : 'pl-8'} pr-8 w-full pt-4 transition-all duration-200`}>
+                      {activeTab === 'overview' && (
+                        <UnifiedNamespace
+                          externalModalTrigger={sidePanelModal}
+                          onModalClose={() => setSidePanelModal(null)}
+                          fetchNamespaceDetails={fetchNamespaceDetails}
+                          namespaceDetailsMap={namespaceDetailsMap}
+                          setNamespaceDetailsMap={setNamespaceDetailsMap}
+                          refreshData={() => {
+                            // re-fetch all data
+                            setNamespaceDetailsMap({});
+                            // trigger fetchData in useEffect
+                            setNamespaces([]);
+                          }}
+                          onViewAccount={(account, ns) => {
+                            const tabKey = `accountPage-${account['namespace-account-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setAccountPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
+                            });
+                          }}
+                          onViewMethod={(method, ns) => {
+                            const tabKey = `methodPage-${method['namespace-method-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setMethodPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
+                            });
+                          }}
+                          onViewSchema={(schema, ns) => {
+                            const tabKey = `schemaPage-${schema.id}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Schema: ${schema.schemaName}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setSchemaPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, schema, mode: 'edit', initialSchemaName: schema.schemaName, namespace: ns }];
+                            });
+                          }}
+                        />
+                      )}
+                      {activeTab === 'namespace' && <Namespace />}
+                      {activeTab === 'schemaService' && <SchemaService />}
+                      {activeTab === 'tables' && <Tables />}
+                      {activeTab === 'unifiedNamespace' && (
+                        <UnifiedNamespace
+                          externalModalTrigger={sidePanelModal}
+                          onModalClose={() => setSidePanelModal(null)}
+                          fetchNamespaceDetails={fetchNamespaceDetails}
+                          namespaceDetailsMap={namespaceDetailsMap}
+                          setNamespaceDetailsMap={setNamespaceDetailsMap}
+                          refreshData={() => {
+                            // re-fetch all data
+                            setNamespaceDetailsMap({});
+                            // trigger fetchData in useEffect
+                            setNamespaces([]);
+                          }}
+                          onViewAccount={(account, ns) => {
+                            const tabKey = `accountPage-${account['namespace-account-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setAccountPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
+                            });
+                          }}
+                          onViewMethod={(method, ns) => {
+                            const tabKey = `methodPage-${method['namespace-method-id']}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setMethodPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
+                            });
+                          }}
+                          onViewSchema={(schema, ns) => {
+                            const tabKey = `schemaPage-${schema.id}`;
+                            if (!tabs.find(tab => tab.key === tabKey)) {
+                              setTabs([...tabs, { key: tabKey, label: `Schema: ${schema.schemaName}`, pinned: false }]);
+                            }
+                            setActiveTab(tabKey);
+                            setSchemaPageTabs(prev => {
+                              if (prev.find(t => t.key === tabKey)) return prev;
+                              return [...prev, { key: tabKey, schema, mode: 'edit', initialSchemaName: schema.schemaName, namespace: ns }];
+                            });
+                          }}
+                        />
+                      )}
+                      {activeTab === 'schema' && <SchemaCreatePage onSchemaNameChange={name => {
+                        setTabs(tabs => tabs.map(tab =>
+                          tab.key === 'schema'
+                            ? { ...tab, label: name.trim() ? name : 'New Schema', pinned: false }
+                            : tab
+                        ));
+                      }} />}
+                      {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
+                        <NewTabContent onOpenTab={handleOpenTab} />
+                      )}
+                      {allAccountsTabs.map(({ key, namespace, openCreate }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllAccountPage
+                            namespace={namespace}
+                            openCreate={!!openCreate}
+                            onViewAccount={(account, ns) => {
+                              const tabKey = `accountPage-${account['namespace-account-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setAccountPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, account, namespace: ns, openEdit: !!(account as any).__openEdit }];
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {allMethodsTabs.map(({ key, namespace, openCreate }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllMethodPage
+                            namespace={namespace}
+                            openCreate={!!openCreate}
+                            onViewMethod={(method, ns) => {
+                              const tabKey = `methodPage-${method['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setMethodPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, method, namespace: ns, openEdit: !!(method as any).__openEdit }];
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {accountPageTabs.map(({ key, account, namespace, openEdit }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AccountPage account={account} namespace={namespace} openEdit={openEdit} />
+                        </div>
+                      ))}
+                      {methodPageTabs.map(({ key, method, namespace, openEdit }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <MethodPage
+                            method={method}
+                            namespace={namespace}
+                            openEdit={openEdit}
+                            onTest={(m, ns) => {
+                              const testKey = `methodTest-${m['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === testKey)) {
+                                setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(testKey);
+                              setMethodTestTabs(prev => {
+                                if (prev.find(t => t.key === testKey)) return prev;
+                                return [...prev, { key: testKey, method: m, namespace: ns }];
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {methodTestTabs.map(({ key, method, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <MethodTestPage
+                            method={method}
+                            namespace={namespace}
+                            onOpenSchemaTab={(schema, schemaName) => handleOpenSchemaTabFromTest(schema, schemaName, namespace, method['namespace-method-id'])}
+                          />
+                        </div>
+                      ))}
+                      {schemaPageTabs.map(({ key, schema, mode, initialSchemaName, namespace, methodId }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <SchemaCreatePage
+                            initialSchema={schema}
+                            initialSchemaName={initialSchemaName}
+                            namespace={namespace}
+                            mode={mode === 'create' ? 'create' : 'edit'}
+                            methodId={methodId}
+                            onSuccess={() => {
+                              if (mode === 'create' && namespace?.['namespace-id']) {
+                                fetchNamespaceDetails(namespace['namespace-id']);
+                              }
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {allSchemasTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllSchemaPage
+                            namespace={namespace}
+                            onViewSchema={(schema, ns) => {
+                              const tabKey = `schema-preview-${schema.id}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview', pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setSchemaPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns }];
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {singleNamespaceTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <SingleNamespacePage 
+                            namespaceId={namespace['namespace-id']} 
+                            initialNamespace={namespace}
+                            onViewAccount={(account, ns) => {
+                              const tabKey = `accountPage-${account['namespace-account-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setAccountPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, account, namespace: ns || namespace }];
+                              });
+                            }}
+                            onViewMethod={(method, ns) => {
+                              const tabKey = `methodPage-${method['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setMethodPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, method, namespace: ns || namespace, openEdit: !!(method as any).__openEdit }];
+                              });
+                            }}
+                            onTestMethod={(m, ns) => {
+                              const testKey = `methodTest-${m['namespace-method-id']}`;
+                              if (!tabs.find(tab => tab.key === testKey)) {
+                                setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}`, pinned: false }]);
+                              }
+                              setActiveTab(testKey);
+                              setMethodTestTabs(prev => {
+                                if (prev.find(t => t.key === testKey)) return prev;
+                                return [...prev, { key: testKey, method: m, namespace: ns || namespace }];
+                              });
+                            }}
+                            onViewSchema={(schema, ns) => {
+                              const tabKey = `schema-preview-${schema.id}`;
+                              if (!tabs.find(tab => tab.key === tabKey)) {
+                                setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview', pinned: false }]);
+                              }
+                              setActiveTab(tabKey);
+                              setSchemaPageTabs(prev => {
+                                if (prev.find(t => t.key === tabKey)) return prev;
+                                return [...prev, { key: tabKey, schema: schema.schema, mode: 'preview', initialSchemaName: schema.schemaName, namespace: ns || namespace }];
+                              });
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {allWebhooksTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllWebhookPage
+                            namespace={namespace}
+                            onViewWebhook={(webhook, ns) => {
+                              // (Optional) Open single webhook tab here
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {webhookPageTabs.map(({ key, webhook, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <WebhookPage webhook={webhook} namespace={namespace} />
+                        </div>
+                      ))}
+                      {allLambdasTabs.map(({ key, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <AllLambdasPage
+                            namespace={namespace}
+                            onViewLambda={(lambda, ns) => {
+                              // (Optional) Open single lambda tab here
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {lambdaPageTabs.map(({ key, lambda, namespace }) => (
+                        <div
+                          key={key}
+                          style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+                        >
+                          <LambdaPage lambda={lambda} namespace={namespace} />
+                        </div>
+                      ))}
+
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex w-full h-full">
+                    {/* Vertical Tabs */}
+                    <div className="flex flex-col border-r bg-white py-2 px-1 min-w-[160px] max-w-[220px] w-[18vw] overflow-y-auto scrollbar-thin-x max-h-[90vh]">
+                      <button
+                        className="mb-2 px-2 py-2 rounded-full bg-blue-100 text-blue-700 transition-colors"
+                        title="Switch to Horizontal Tabs View"
+                        onClick={() => setTabLayout('horizontal')}
+                      >
+                        <LayoutGrid size={18} />
               </button>
-              <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
-                <Menu size={18} />
+                      {tabs.map(tab => (
+                        <div key={tab.key} className="flex items-center group mb-1">
+                          <button
+                            className={`w-full text-left px-3 py-2 text-sm rounded-lg transition
+                              ${activeTab === tab.key ? 'font-medium text-blue-700 bg-blue-50' : 'text-gray-700 hover:bg-gray-100'}
+                              ${tab.bold ? 'font-bold' : ''}
+                              ${tab.italic ? 'italic' : ''}
+                            `}
+                            onClick={() => {
+                              setActiveTab(tab.key);
+                            }}
+                          >
+                            {tab.label}
               </button>
+                          {/* Pin/unpin logic for vertical view */}
+                          {tab.key !== 'overview' && !tab.pinned && (
+                            <button
+                              className="ml-1 text-gray-400 hover:text-yellow-500 text-xs px-1 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                              onClick={() => setTabs(tabs => tabs.map(t => t.key === tab.key ? { ...t, pinned: true } : t))}
+                              title="Pin tab"
+                            >
+                              <PinOff size={16} />
+                            </button>
+                          )}
+                          {tab.key !== 'overview' && tab.pinned && (
+                            <button
+                              className="ml-1 text-yellow-500 hover:text-yellow-700 text-xs px-1 focus:outline-none"
+                              onClick={() => setTabs(tabs => tabs.map(t => t.key === tab.key ? { ...t, pinned: false } : t))}
+                              title="Unpin tab"
+                            >
+                              <Pin size={16} fill="currentColor" />
+                            </button>
+                          )}
+                          {tab.key !== 'overview' && (
+                            <button
+                              className="ml-1 text-gray-400 hover:text-red-500 text-xs px-1 focus:outline-none"
+                              onClick={() => handleCloseTab(tab.key)}
+                              title="Close tab"
+                              disabled={tab.pinned}
+                              style={tab.pinned ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                            >
+                              ×
+                            </button>
+                          )}
             </div>
+                      ))}
+                      <button
+                        className="mt-2 px-2 py-2 text-gray-500 hover:bg-gray-100 rounded-full"
+                        onClick={handleAddTab}
+                      >
+                        <Plus size={16} />
+                      </button>
           </div>
-          {/* Main Tab Content with conditional left padding */}
-          <div className={`${isCollapsed ? 'pl-0' : 'pl-8'} pr-8 w-full pt-4 transition-all duration-200`}>
+                    {/* Tab Content */}
+                    <div className="flex-1 min-h-0 overflow-y-auto transition-all duration-200 pl-4 pr-8 pt-4">
             {activeTab === 'overview' && (
               <UnifiedNamespace
                 externalModalTrigger={sidePanelModal}
@@ -783,25 +1482,24 @@ export default function NamespacePage() {
             {activeTab === 'schema' && <SchemaCreatePage onSchemaNameChange={name => {
               setTabs(tabs => tabs.map(tab =>
                 tab.key === 'schema'
-                  ? { ...tab, label: name.trim() ? name : 'New Schema' }
+                            ? { ...tab, label: name.trim() ? name : 'New Schema', pinned: false }
                   : tab
               ));
             }} />}
             {(activeTab === 'new' || activeTab.startsWith('tab-')) && (
               <NewTabContent onOpenTab={handleOpenTab} />
             )}
-            {allAccountsTabs.map(({ key, namespace, openForm }) => (
+                      {allAccountsTabs.map(({ key, namespace }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <AllAccountPage
                   namespace={namespace}
-                  openForm={openForm}
                   onViewAccount={(account, ns) => {
                     const tabKey = `accountPage-${account['namespace-account-id']}`;
                     if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}` }]);
+                                setTabs([...tabs, { key: tabKey, label: `Account: ${account['namespace-account-name']}`, pinned: false }]);
                     }
                     setActiveTab(tabKey);
                     setAccountPageTabs(prev => {
@@ -812,18 +1510,17 @@ export default function NamespacePage() {
                 />
               </div>
             ))}
-            {allMethodsTabs.map(({ key, namespace, openForm }) => (
+                      {allMethodsTabs.map(({ key, namespace }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
                 <AllMethodPage
                   namespace={namespace}
-                  openForm={openForm}
                   onViewMethod={(method, ns) => {
                     const tabKey = `methodPage-${method['namespace-method-id']}`;
                     if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}` }]);
+                                setTabs([...tabs, { key: tabKey, label: `Method: ${method['namespace-method-name']}`, pinned: false }]);
                     }
                     setActiveTab(tabKey);
                     setMethodPageTabs(prev => {
@@ -834,12 +1531,12 @@ export default function NamespacePage() {
                 />
               </div>
             ))}
-            {accountPageTabs.map(({ key, account, namespace }) => (
+            {accountPageTabs.map(({ key, account, namespace, openEdit }) => (
               <div
                 key={key}
                 style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
               >
-                <AccountPage account={account} namespace={namespace} />
+                <AccountPage account={account} namespace={namespace} openEdit={openEdit} />
               </div>
             ))}
             {methodPageTabs.map(({ key, method, namespace }) => (
@@ -853,7 +1550,7 @@ export default function NamespacePage() {
                   onTest={(m, ns) => {
                     const testKey = `methodTest-${m['namespace-method-id']}`;
                     if (!tabs.find(tab => tab.key === testKey)) {
-                      setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}` }]);
+                                setTabs([...tabs, { key: testKey, label: `Test: ${m['namespace-method-name']}`, pinned: false }]);
                     }
                     setActiveTab(testKey);
                     setMethodTestTabs(prev => {
@@ -905,7 +1602,7 @@ export default function NamespacePage() {
                   onViewSchema={(schema, ns) => {
                     const tabKey = `schema-preview-${schema.id}`;
                     if (!tabs.find(tab => tab.key === tabKey)) {
-                      setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview' }]);
+                                setTabs([...tabs, { key: tabKey, label: schema.schemaName || 'Schema Preview', pinned: false }]);
                     }
                     setActiveTab(tabKey);
                     setSchemaPageTabs(prev => {
@@ -924,6 +1621,48 @@ export default function NamespacePage() {
                 <SingleNamespacePage namespaceId={namespace['namespace-id']} initialNamespace={namespace} />
               </div>
             ))}
+            {allWebhooksTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllWebhookPage
+                  namespace={namespace}
+                  onViewWebhook={(webhook, ns) => {
+                    // (Optional) Open single webhook tab here
+                  }}
+                />
+              </div>
+            ))}
+            {webhookPageTabs.map(({ key, webhook, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <WebhookPage webhook={webhook} namespace={namespace} />
+              </div>
+            ))}
+            {allLambdasTabs.map(({ key, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <AllLambdasPage
+                  namespace={namespace}
+                  onViewLambda={(lambda, ns) => {
+                    // (Optional) Open single lambda tab here
+                  }}
+                />
+              </div>
+            ))}
+            {lambdaPageTabs.map(({ key, lambda, namespace }) => (
+              <div
+                key={key}
+                style={{ display: activeTab === key ? 'block' : 'none', width: '100%', height: '100%' }}
+              >
+                <LambdaPage lambda={lambda} namespace={namespace} />
+              </div>
+            ))}
             {activeTab !== 'overview' &&
               activeTab !== 'namespace' &&
               activeTab !== 'schemaService' &&
@@ -933,16 +1672,11 @@ export default function NamespacePage() {
               !activeTab.startsWith('tab-') && (
                 <div className="text-gray-400 text-center py-20 text-lg">This is the <span className="font-semibold">{tabs.find(t => t.key === activeTab)?.label}</span> tab.</div>
             )}
-          </div>
-          <LLMTerminal 
-            open={llmTerminalOpen}
-            setOpen={setLlmTerminalOpen}
-            placement={llmTerminalPlacement}
-            setPlacement={setLlmTerminalPlacement}
-            width={llmTerminalWidth}
-            setWidth={setLlmTerminalWidth}
-            openSchemaModal={openSchemaModal}
-          />
+
+                    </div>
+                  </div>
+                )}
+
           <SchemaPreviewModal
             open={!!previewSchema}
             onClose={() => setPreviewSchema(null)}
@@ -954,7 +1688,7 @@ export default function NamespacePage() {
             onDelete={async (schema) => {
               if (confirm('Are you sure you want to delete this schema?')) {
                 try {
-                  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                     method: 'DELETE',
                   });
                   if (!response.ok) throw new Error('Failed to delete schema');
@@ -1016,9 +1750,25 @@ export default function NamespacePage() {
               </div>
             </div>
           )}
+              </div>
         </div>
       </div>
 
+          <AccountModal
+            isOpen={accountModal.isOpen}
+            onClose={() => setAccountModal({ isOpen: false, account: null })}
+            account={accountModal.account}
+            namespaceId={namespaces[0]?.["namespace-id"] || ''}
+            refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
+          />
+
+          <MethodModal
+            isOpen={methodModal.isOpen}
+            onClose={() => setMethodModal({ isOpen: false, method: null })}
+            method={methodModal.method}
+            namespaceId={namespaces[0]?.["namespace-id"]}
+            refreshNamespaceDetails={() => fetchNamespaceDetails(namespaces[0]?.["namespace-id"])}
+          />
      
       <NamespaceModal
         isOpen={namespaceModal.isOpen}
@@ -1032,13 +1782,13 @@ export default function NamespacePage() {
         onClose={() => setPreviewAccount(null)}
         account={previewAccount}
         onEdit={account => {
-          setMethodModal({ isOpen: true, method: null });
+              setAccountModal({ isOpen: true, account });
           setPreviewAccount(null);
         }}
         onDelete={async (account) => {
           if (confirm('Are you sure you want to delete this account?')) {
             try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/accounts/${account["namespace-account-id"]}`, {
+                  const response = await fetch(`/unified/accounts/${account["namespace-account-id"]}`, {
                 method: 'DELETE',
               });
               if (!response.ok) throw new Error('Failed to delete account');
@@ -1080,7 +1830,7 @@ export default function NamespacePage() {
         onDelete={async (schema) => {
           if (confirm('Are you sure you want to delete this schema?')) {
             try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
+                  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/unified/schema/${schema.id}`, {
                 method: 'DELETE',
               });
               if (!response.ok) throw new Error('Failed to delete schema');
@@ -1093,6 +1843,25 @@ export default function NamespacePage() {
           }
         }}
       />
+        </div>
+      </DndProvider>
     </div>
   );
 }
+
+export default NamespacePage;
+
+/* Add this to the bottom of the file or in a global CSS file if not already present */
+/* Custom scrollbar for tab bar */
+<style jsx global>{`
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 2px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+`}</style>

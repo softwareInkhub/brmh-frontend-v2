@@ -989,7 +989,7 @@ export default function UserDetailsPage() {
             <p className="text-sm text-slate-300 font-mono">{userDetails.Arn}</p>
             <div className="flex items-center gap-2 mt-2">
               <Badge variant="secondary" className="bg-white/10 border-0 text-white">
-                Created: {new Date(userDetails.CreateDate).toLocaleDateString()}
+                Created: {new Date(userDetails.CreateDate).toLocaleDateString('en-GB')}
               </Badge>
               <Badge variant="secondary" className="bg-blue-500/20 border-0 text-blue-100">
                 IAM User
@@ -1319,7 +1319,7 @@ export default function UserDetailsPage() {
                         <div>
                           <Badge className="bg-orange-100 text-orange-700">Enabled</Badge>
                           <p className="mt-1 text-xs text-gray-500">
-                            Enabled on: {new Date(device.EnableDate).toLocaleDateString()}
+                            Enabled on: {new Date(device.EnableDate).toLocaleDateString('en-GB')}
                           </p>
                         </div>
                         <Button
@@ -1392,7 +1392,7 @@ export default function UserDetailsPage() {
                         <div>
                           <p className="font-mono text-sm">{key.AccessKeyId}</p>
                           <p className="mt-1 text-xs text-gray-500">
-                            Created: {new Date(key.CreateDate).toLocaleDateString()}
+                            Created: {new Date(key.CreateDate).toLocaleDateString('en-GB')}
                           </p>
                           <Badge className={`mt-2 ${key.Status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                             {key.Status}
@@ -1573,7 +1573,7 @@ export default function UserDetailsPage() {
                         <TableCell>
                           {service.LastAccessed ? (
                             <div className="text-sm">
-                              {new Date(service.LastAccessed).toLocaleString()}
+                              {new Date(service.LastAccessed).toLocaleString('en-GB')}
                             </div>
                           ) : (
                             <Badge variant="secondary" className="bg-gray-100 text-gray-600">
@@ -1924,7 +1924,7 @@ export default function UserDetailsPage() {
                             {group.GroupName}
                           </h4>
                           <p className="text-xs text-gray-500">
-                            Created: {new Date(group.CreateDate).toLocaleDateString()}
+                            Created: {new Date(group.CreateDate).toLocaleDateString('en-GB')}
                           </p>
                         </div>
                         {isCurrentMember ? (
@@ -2259,7 +2259,7 @@ export default function UserDetailsPage() {
                     <p className="text-sm text-gray-500">Last Accessed</p>
                     <p className="text-sm font-medium text-gray-900">
                       {selectedService?.LastAccessed 
-                        ? new Date(selectedService.LastAccessed).toLocaleString()
+                        ? new Date(selectedService.LastAccessed).toLocaleString('en-GB')
                         : 'Never accessed'}
                     </p>
                   </div>
@@ -2273,7 +2273,7 @@ export default function UserDetailsPage() {
                     <p className="text-sm text-gray-500">Last Authenticated</p>
                     <p className="text-sm font-medium text-gray-900">
                       {selectedService?.LastAuthenticated 
-                        ? new Date(selectedService.LastAuthenticated).toLocaleString()
+                        ? new Date(selectedService.LastAuthenticated).toLocaleString('en-GB')
                         : 'Never authenticated'}
                     </p>
                   </div>

@@ -9,6 +9,26 @@ interface NavbarProps {
 }
 
 const Navbar = ({ onMenuClick }: NavbarProps) => {
+  const handleLogout = async () => {
+    const api = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
+    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+    try {
+      await fetch(`${api}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+    } catch {}
+    try {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('id_token');
+      localStorage.removeItem('refresh_token');
+      sessionStorage.removeItem('oauth_state');
+      sessionStorage.removeItem('phone_signup_username');
+    } catch {}
+    window.location.href = `${api}/auth/logout-redirect`;
+  };
+
   return (
     <nav className="sticky top-0 z-30 w-full bg-white border-b border-gray-100">
       <div className="px-4 md:px-6">
@@ -64,6 +84,7 @@ const Navbar = ({ onMenuClick }: NavbarProps) => {
                 <div className="h-px bg-gray-200 my-2"></div>
                 <button 
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  onClick={handleLogout}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

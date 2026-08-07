@@ -14,7 +14,7 @@ const awsServices = [
 
 export default function AwsPage() {
   return (
-    <div className="pt-8">
+    <div className="pt-8 w-[70%]">
       <h1 className="text-2xl font-bold mb-2">Services Overview</h1>
       <p className="text-gray-500 mb-8">Monitor all your AWS services from one central dashboard</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

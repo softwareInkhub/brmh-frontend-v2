@@ -15,6 +15,8 @@ export interface NamespaceMethod {
   tags: string[];
 }
 
+///htis is commntbjsdhj
+
 export interface NamespaceAccount {
   'namespace-id': string;
   'namespace-account-id': string;
@@ -92,3 +94,4 @@ export interface ExecutionLog {
     'is-last'?: boolean;
   };
 } 
+

@@ -22,7 +22,7 @@ const Tables = () => {
   const [tables, setTables] = useState<TableMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5001';
   const router = useRouter();
 
   const fetchTables = async () => {
@@ -166,8 +166,8 @@ const Tables = () => {
                       {table.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{new Date(table.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(table.updatedAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(table.createdAt).toLocaleDateString('en-GB')}</TableCell>
+                  <TableCell>{new Date(table.updatedAt).toLocaleDateString('en-GB')}</TableCell>
                   <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-end gap-2">
                       <Button
